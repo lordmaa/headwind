@@ -155,6 +155,18 @@ def migrate_db():
     ''')
 
     db.execute('''
+        CREATE TABLE IF NOT EXISTS Athlete (
+            id           INTEGER PRIMARY KEY,
+            firstname    TEXT,
+            lastname     TEXT,
+            profile      TEXT,
+            accessToken  TEXT,
+            refreshToken TEXT,
+            expiresAt    INTEGER
+        )
+    ''')
+
+    db.execute('''
         CREATE TABLE IF NOT EXISTS BestEffort (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
             activityId   TEXT NOT NULL,

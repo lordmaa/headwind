@@ -86,18 +86,12 @@ def _group_activities(activities):
 
 @bp.route('/')
 def index():
-    athlete = query_db('SELECT * FROM Athlete LIMIT 1', one=True)
-    if athlete:
-        return redirect('/dashboard')
-    error = request.args.get('error')
-    return render_template('index.html', error=error)
+    return redirect('/dashboard')
 
 
 @bp.route('/dashboard')
 def dashboard():
     athlete = query_db('SELECT * FROM Athlete LIMIT 1', one=True)
-    if not athlete:
-        return redirect('/')
 
     all_riders = query_db('SELECT * FROM Rider ORDER BY isDefault DESC, name')
     owner      = next((r for r in all_riders if r['isDefault']), all_riders[0] if all_riders else None)
