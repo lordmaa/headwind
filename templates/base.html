@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}{% endblock %} — BikeTracker</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="app-name">BikeTracker</div>
+      <div class="person-name">Strava Connected</div>
+    </div>
+    <div class="sidebar-nav">
+      <a href="{{ url_for('dashboard.dashboard') }}"
+         class="nav-item {% if request.endpoint == 'dashboard.dashboard' %}active{% endif %}">
+        Dashboard
+      </a>
+      <a href="{{ url_for('import_rides.index') }}"
+         class="nav-item {% if request.blueprint == 'import_rides' %}active{% endif %}">
+        Import
+      </a>
+      <a href="{{ url_for('data.index') }}"
+         class="nav-item {% if request.blueprint == 'data' %}active{% endif %}">
+        Data
+      </a>
+      <a href="{{ url_for('segments.index') }}"
+         class="nav-item {% if request.blueprint == 'segments' %}active{% endif %}">
+        Segments
+      </a>
+      <a href="{{ url_for('heatmap.index') }}"
+         class="nav-item {% if request.blueprint == 'heatmap' %}active{% endif %}">
+        Heatmap
+      </a>
+      <a href="{{ url_for('riders.index') }}"
+         class="nav-item {% if request.blueprint == 'riders' %}active{% endif %}">
+        Riders
+      </a>
+      <a href="{{ url_for('ai_page.index') }}"
+         class="nav-item {% if request.blueprint == 'ai_page' %}active{% endif %}">
+        AI Coach
+      </a>
+      <a href="{{ url_for('garmin_page.index') }}"
+         class="nav-item {% if request.blueprint == 'garmin_page' %}active{% endif %}">
+        Recovery
+      </a>
+      <a href="{{ url_for('about.index') }}"
+         class="nav-item {% if request.blueprint == 'about' %}active{% endif %}">
+        About
+      </a>
+      <div class="nav-divider"></div>
+      <a href="{{ url_for('settings.index') }}"
+         class="nav-item {% if request.blueprint == 'settings' %}active{% endif %}">
+        Settings
+      </a>
+      <a href="{{ url_for('login.logout') }}" class="nav-item" style="color:var(--text-muted);">
+        Logout
+      </a>
+    </div>
+  </nav>
+
+  <main class="main">
+    <div class="topbar">
+      <button class="menu-toggle" id="menuToggle" aria-label="Menu">
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+      </button>
+      <h1>{% block page_title %}{% endblock %}</h1>
+      <div class="topbar-actions">{% block topbar_actions %}{% endblock %}</div>
+    </div>
+    <div class="content">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+          <div class="flash flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  <script>
+  // Global UK date helpers — available to all templates
+  var _MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  function fmtDate(iso) {
+    // "2024-03-15" → "15 Mar 2024"
+    var p = iso.split('-');
+    return parseInt(p[2]) + ' ' + _MONTHS[parseInt(p[1])-1] + ' ' + p[0];
+  }
+  function fmtMonth(ym) {
+    // "2024-03" → "Mar 2024"
+    var p = ym.split('-');
+    return _MONTHS[parseInt(p[1])-1] + ' ' + p[0];
+  }
+  </script>
+  {% block scripts %}{% endblock %}
+  <script>
+  (function () {
+    var tip = document.createElement('div');
+    tip.style.cssText = 'position:fixed;z-index:9999;pointer-events:none;display:none;'
+      + 'border-radius:50%;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.6);'
+      + 'border:2px solid var(--border);width:96px;height:96px;';
+    var tipImg = document.createElement('img');
+    tipImg.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
+    tip.appendChild(tipImg);
+    document.body.appendChild(tip);
+
+    document.addEventListener('mouseover', function (e) {
+      var img = e.target;
+      if (img.tagName !== 'IMG' || !img.src.includes('/avatars/')) return;
+      tipImg.src = img.src;
+      tip.style.display = 'block';
+    });
+    document.addEventListener('mousemove', function (e) {
+      if (tip.style.display === 'none') return;
+      var x = e.clientX, y = e.clientY;
+      var left = x + 14;
+      var top  = y - 48;
+      if (left + 100 > window.innerWidth)  left = x - 110;
+      if (top  < 8)                         top  = 8;
+      if (top  + 100 > window.innerHeight)  top  = window.innerHeight - 104;
+      tip.style.left = left + 'px';
+      tip.style.top  = top  + 'px';
+    });
+    document.addEventListener('mouseout', function (e) {
+      var img = e.target;
+      if (img.tagName === 'IMG' && img.src.includes('/avatars/')) tip.style.display = 'none';
+    });
+    document.addEventListener('click', function (e) {
+      var img = e.target;
+      if (img.tagName !== 'IMG' || !img.src.includes('/avatars/')) return;
+      var rid = img.getAttribute('data-rider-id');
+      if (rid) window.location = '/riders/' + rid;
+    });
+  })();
+  </script>
+  <script>
+    (function () {
+      var toggle  = document.getElementById('menuToggle');
+      var sidebar = document.getElementById('sidebar');
+      var overlay = document.getElementById('sidebarOverlay');
+      function openSidebar()  { sidebar.classList.add('open'); overlay.classList.add('open'); }
+      function closeSidebar() { sidebar.classList.remove('open'); overlay.classList.remove('open'); }
+      if (window.innerWidth >= 768) openSidebar();
+      toggle.addEventListener('click', function () {
+        sidebar.classList.contains('open') ? closeSidebar() : openSidebar();
+      });
+      overlay.addEventListener('click', closeSidebar);
+      sidebar.querySelectorAll('.nav-item').forEach(function (a) {
+        a.addEventListener('click', function () {
+          if (window.innerWidth < 768) closeSidebar();
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

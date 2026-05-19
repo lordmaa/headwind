@@ -1,0 +1,312 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ seg.name }}{% endblock %}
+{% block page_title %}🏁 {{ seg.name }}{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{{ url_for('segments.index') }}" class="btn btn-secondary">← Segments</a>
+  <form method="POST" action="{{ url_for('segments.delete', sid=seg.id) }}" style="display:inline;"
+        onsubmit="return confirm('Delete this segment and all its efforts?')">
+    <button class="btn" style="background:var(--danger,#ef4444);color:#fff;border:none;">Delete</button>
+  </form>
+{% endblock %}
+
+{% block head %}
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{% endblock %}
+
+{% block content %}
+
+<!-- Stats strip -->
+{% set pr = efforts | selectattr('isPR', 'equalto', 1) | list | first %}
+<div class="stats-grid" style="margin-bottom:1.5rem;">
+  {% if seg.distanceM %}
+  <div class="stat-card">
+    <div class="stat-value">{{ (seg.distanceM / 1609.344) | round(2) }} mi</div>
+    <div class="stat-label">Distance</div>
+  </div>
+  {% endif %}
+  {% if seg.elevationGainM %}
+  <div class="stat-card">
+    <div class="stat-value">{{ (seg.elevationGainM * 3.28084) | round | int }} ft</div>
+    <div class="stat-label">Elevation Gain</div>
+  </div>
+  {% endif %}
+  {% if seg.elevationGainM and seg.distanceM %}
+  <div class="stat-card">
+    <div class="stat-value">{{ ((seg.elevationGainM / seg.distanceM) * 100) | round(1) }}%</div>
+    <div class="stat-label">Avg Gradient</div>
+  </div>
+  {% endif %}
+  <div class="stat-card">
+    <div class="stat-value" style="color:var(--accent);">
+      {% if pr %}{{ pr.elapsedSecs | fmt_duration }}{% else %}—{% endif %}
+    </div>
+    <div class="stat-label">PR Time</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">
+      {% if pr and pr.avgSpeedMps %}{{ (pr.avgSpeedMps * 2.23694) | round(1) }} mph{% else %}—{% endif %}
+    </div>
+    <div class="stat-label">PR Speed</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">
+      {% if stats.avgSecs %}{{ stats.avgSecs | int | fmt_duration }}{% else %}—{% endif %}
+    </div>
+    <div class="stat-label">Avg Time</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">
+      {% if stats.avgSpeedMps %}{{ (stats.avgSpeedMps * 2.23694) | round(1) }} mph{% else %}—{% endif %}
+    </div>
+    <div class="stat-label">Avg Speed</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ stats.total or 0 }}</div>
+    <div class="stat-label">Efforts</div>
+  </div>
+  {% if diff_label %}
+  <div class="stat-card" {% if sub_segs %}title="Includes: {{ sub_segs | map(attribute=0) | join(', ') }}"{% endif %}>
+    <div class="stat-value" style="color:{{ diff_colour }};">{{ diff_label }}</div>
+    <div class="stat-label">Difficulty{% if sub_segs %} ★{% endif %}</div>
+  </div>
+  {% endif %}
+</div>
+
+{% if sub_segs %}
+<div style="margin:-0.75rem 0 1.5rem; padding:0.6rem 1rem; background:rgba(139,92,246,0.08); border:1px solid rgba(139,92,246,0.2); border-radius:8px; font-size:0.8125rem; color:var(--text-muted);">
+  Rating boosted — contains:
+  {% for name, label, colour in sub_segs %}
+  <span style="color:{{ colour }}; font-weight:500;">{{ name }}</span> <span style="opacity:0.6;">({{ label }})</span>{% if not loop.last %}, {% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- Map + trend chart -->
+<div class="map-charts-grid {% if trend | length > 1 %}has-both{% endif %}">
+
+  <div class="card map-card">
+    <div id="segMap" style="height:520px;"></div>
+  </div>
+
+  {% if trend | length > 1 %}
+  <div class="charts-col">
+    <div class="card">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.75rem; flex-wrap:wrap; gap:0.5rem;">
+        <div class="card-title" style="margin:0;">Time Trend</div>
+        <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
+          <div style="display:flex; gap:1rem; font-size:0.75rem; color:var(--text-muted);">
+            <span><span style="display:inline-block;width:12px;height:2px;background:#fc4c02;vertical-align:middle;margin-right:4px;"></span>Each effort</span>
+            <span><span style="display:inline-block;width:12px;height:2px;background:#4d7d95;vertical-align:middle;margin-right:4px;border-top:2px dashed #4d7d95;"></span>3-effort avg</span>
+          </div>
+          <select id="trendYear" onchange="filterTrend()" style="background:var(--surface2,#0d2135); color:var(--text); border:1px solid #1e4060; border-radius:6px; padding:0.3rem 0.6rem; font-size:0.875rem; cursor:pointer;">
+            <option value="all">All Time</option>
+            {% set trend_years = trend | map(attribute='activityDate') | map('truncate', 4, False, '') | unique | sort | reverse | list %}
+            {% for y in trend_years %}
+            <option value="{{ y }}">{{ y }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <canvas id="trendChart"></canvas>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+<!-- Efforts leaderboard -->
+{% if efforts %}
+<div class="card" style="padding:0; overflow:hidden;">
+  <div style="padding:1rem 1.25rem; border-bottom:1px solid #1e4060; display:flex; align-items:center; justify-content:space-between; gap:1rem;">
+    <div class="card-title" style="margin:0;">All Efforts</div>
+    <select id="yearFilter" onchange="filterEfforts()" style="background:var(--surface2,#0d2135); color:var(--text); border:1px solid #1e4060; border-radius:6px; padding:0.3rem 0.6rem; font-size:0.875rem; cursor:pointer;">
+      <option value="all">All Time</option>
+      {% set years = efforts | map(attribute='activityDate') | map('truncate', 4, False, '') | unique | sort | reverse | list %}
+      {% for y in years %}
+      <option value="{{ y }}">{{ y }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <table style="width:100%; border-collapse:collapse;">
+    <thead>
+      <tr style="border-bottom:1px solid #1e4060;">
+        <th style="padding:0.75rem 1.25rem; text-align:left; font-size:0.75rem; color:var(--text-muted); font-weight:600;">#</th>
+        <th style="padding:0.75rem 0.5rem; text-align:left; font-size:0.75rem; color:var(--text-muted); font-weight:600;">Rider</th>
+        <th style="padding:0.75rem 1rem; text-align:left; font-size:0.75rem; color:var(--text-muted); font-weight:600;">Date</th>
+        <th style="padding:0.75rem 1rem; text-align:left; font-size:0.75rem; color:var(--text-muted); font-weight:600;">Ride</th>
+        <th style="padding:0.75rem 1rem; text-align:right; font-size:0.75rem; color:var(--text-muted); font-weight:600;">Time</th>
+        <th style="padding:0.75rem 1.25rem; text-align:right; font-size:0.75rem; color:var(--text-muted); font-weight:600;">Avg Speed</th>
+        <th style="padding:0.75rem 1rem;"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in efforts %}
+      <tr data-year="{{ e.activityDate[:4] }}"
+          style="border-bottom:1px solid #1e4060; {% if e.isPR %}background:rgba(252,76,2,0.06);{% endif %}"
+          onmouseover="this.style.background='rgba(255,255,255,0.025)'"
+          onmouseout="this.style.background='{% if e.isPR %}rgba(252,76,2,0.06){% endif %}'">
+        <td class="effort-rank" style="padding:0.875rem 1.25rem; color:var(--text-muted); font-size:0.875rem;">
+          {%- if loop.index == 1 %}🥇{%- elif loop.index == 2 %}🥈{%- elif loop.index == 3 %}🥉{%- else %}{{ loop.index }}{%- endif %}
+        </td>
+        <td style="padding:0.875rem 0.5rem;">
+          {% if e.rider_name %}
+            <span title="{{ e.rider_name }}">
+              {% if e.rider_avatar %}
+                <img src="{{ url_for('static', filename='avatars/' + e.rider_avatar) }}" class="rider-avatar" alt="{{ e.rider_name }}" data-rider-id="{{ e.rider_id }}" style="width:26px;height:26px;cursor:pointer;">
+              {% else %}
+                <span class="rider-initial" style="width:26px;height:26px;font-size:0.75rem;">{{ e.rider_name[0] | upper }}</span>
+              {% endif %}
+            </span>
+          {% endif %}
+        </td>
+        <td style="padding:0.875rem 1rem; color:var(--text-muted); font-size:0.875rem;">{{ e.activityDate | fmt_date }}</td>
+        <td style="padding:0.875rem 1rem;">
+          <a href="{{ url_for('rides.detail', rid=e.ride_id) }}" style="color:var(--text); text-decoration:none; font-size:0.9375rem;">
+            {{ e.ride_name }}
+          </a>
+          {% if e.isPR %}<span style="margin-left:0.5rem; font-size:0.7rem; background:var(--accent); color:#fff; padding:0.1rem 0.4rem; border-radius:4px; vertical-align:middle;">PR</span>{% endif %}
+        </td>
+        <td style="padding:0.875rem 1rem; text-align:right; font-weight:600; font-variant-numeric:tabular-nums;
+                   color:{% if e.isPR %}var(--accent){% else %}var(--text){% endif %};">
+          {{ e.elapsedSecs | fmt_duration }}
+        </td>
+        <td style="padding:0.875rem 1.25rem; text-align:right; color:var(--text-muted); font-size:0.875rem;">
+          {% if e.avgSpeedMps %}{{ (e.avgSpeedMps * 2.23694) | round(1) }} mph{% else %}—{% endif %}
+        </td>
+        <td style="padding:0.875rem 1rem; text-align:right;">
+          <form method="POST" action="{{ url_for('segments.delete_effort', sid=seg.id, eid=e.id) }}"
+                style="display:inline;" onsubmit="return confirm('Remove this effort?')">
+            <button type="submit" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:1rem;padding:0;line-height:1;" title="Remove effort">×</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card" style="text-align:center; padding:2rem; color:var(--text-muted);">
+  No efforts recorded yet — try rescanning rides from the Segments page.
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function rankLabel(n) { return ['🥇','🥈','🥉'][n-1] || String(n); }
+
+function filterEfforts() {
+  var yr = document.getElementById('yearFilter').value;
+  var rows = document.querySelectorAll('tr[data-year]');
+  var rank = 1;
+  rows.forEach(function(row) {
+    var show = yr === 'all' || row.dataset.year === yr;
+    row.style.display = show ? '' : 'none';
+    if (show) {
+      var cell = row.querySelector('.effort-rank');
+      if (cell) cell.textContent = rankLabel(rank++);
+    }
+  });
+}
+
+// ── Mini map ─────────────────────────────────────────────────────
+(function() {
+  const startLat = {{ seg.startLat }}, startLng = {{ seg.startLng }};
+  const endLat   = {{ seg.endLat }},   endLng   = {{ seg.endLng }};
+  const polyline = {{ seg.polyline | safe if seg.polyline else 'null' }};
+
+  const map = L.map('segMap');
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics', maxZoom: 19
+  }).addTo(map);
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 19, opacity: 1
+  }).addTo(map);
+
+  const routeCoords = polyline || [[startLat, startLng], [endLat, endLng]];
+  const line = L.polyline(routeCoords,
+    { color: '#fc4c02', weight: 3, ...(polyline ? {} : { dashArray: '6 4' }) }).addTo(map);
+
+  L.circleMarker([startLat, startLng], { color:'#10b981', fillColor:'#10b981', fillOpacity:1, radius:7 })
+   .addTo(map).bindPopup('Start');
+  L.marker([endLat, endLng], {
+    icon: L.divIcon({ html: '<div style="font-size:20px;line-height:1;">🏁</div>', className: '', iconAnchor: [10, 20] })
+  }).addTo(map).bindPopup('Finish');
+
+  map.fitBounds(line.getBounds(), { padding: [30, 30] });
+})();
+
+// ── Trend chart ───────────────────────────────────────────────────
+{% if trend | length > 1 %}
+(function() {
+  const allDates = {{ trend | map(attribute='activityDate') | list | tojson }};
+  const allSecs  = {{ trend | map(attribute='elapsedSecs')  | list | tojson }};
+
+  function rollingAvg(arr) {
+    return arr.map((_, i) => {
+      const w = arr.slice(Math.max(0, i - 2), i + 1);
+      return Math.round(w.reduce((a, b) => a + b, 0) / w.length);
+    });
+  }
+
+  const chartDatasets = [
+    { borderColor:'#fc4c02', borderWidth:2, pointBackgroundColor:'#fc4c02', pointRadius:4, fill:false, tension:0.2, label:'Effort' },
+    { borderColor:'#4d7d95', borderWidth:2, borderDash:[5,4], pointRadius:0, fill:false, tension:0.3, label:'3-effort avg' },
+  ];
+
+  const trendChart = new Chart(document.getElementById('trendChart'), {
+    type: 'line',
+    data: { labels: [], datasets: chartDatasets.map(d => ({...d, data:[]})) },
+    options: {
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const s = ctx.parsed.y;
+              const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
+              return h ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`
+                       : `${m}:${String(sec).padStart(2,'0')}`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { color:'#4d7d95', font:{size:10}, maxTicksLimit:10 }, grid:{color:'#163352'} },
+        y: {
+          ticks: {
+            color: '#4d7d95', font:{size:10},
+            callback: v => { const m=Math.floor(v/60), s=v%60; return `${m}:${String(s).padStart(2,'0')}`; }
+          },
+          grid: { color:'#163352' },
+          reverse: false,
+        }
+      }
+    }
+  });
+
+  window.filterTrend = function() {
+    var yr = document.getElementById('trendYear').value;
+    var filtered = allDates.map((d, i) => ({ d, s: allSecs[i] }))
+                           .filter(r => yr === 'all' || r.d.startsWith(yr));
+    var labels  = filtered.map(r => fmtDate(r.d));
+    var secs    = filtered.map(r => r.s);
+    var rolling = rollingAvg(secs);
+    trendChart.data.labels        = labels;
+    trendChart.data.datasets[0].data = secs;
+    trendChart.data.datasets[1].data = rolling;
+    trendChart.update();
+  }
+
+  filterTrend(); // initial render
+})();
+{% endif %}
+</script>
+{% endblock %}

@@ -1,0 +1,383 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block topbar_actions %}
+  <button class="btn btn-primary" id="syncBtn" onclick="doSync()">Sync</button>
+{% endblock %}
+
+{% block head %}
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+{% if all_riders | length > 1 %}
+<div style="display:flex; gap:0.5rem; margin-bottom:1.25rem; flex-wrap:wrap;">
+  {% for r in all_riders %}
+  <a href="{{ url_for('dashboard.dashboard', rider=r.id) }}"
+     style="display:inline-flex; align-items:center; gap:0.5rem; padding:0.4rem 0.75rem 0.4rem 0.4rem;
+            border-radius:999px; border:1px solid {% if r.id == active_rider.id %}var(--accent){% else %}var(--border){% endif %};
+            background:{% if r.id == active_rider.id %}rgba(252,76,2,0.12){% else %}var(--card-bg){% endif %};
+            text-decoration:none; color:var(--text); font-size:0.875rem; font-weight:{% if r.id == active_rider.id %}600{% else %}400{% endif %};">
+    {% if r.avatarPath %}
+      <img src="{{ url_for('static', filename='avatars/' + r.avatarPath) }}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;">
+    {% else %}
+      <span class="rider-initial" style="width:28px;height:28px;font-size:0.75rem;flex-shrink:0;">{{ r.name[0] | upper }}</span>
+    {% endif %}
+    {{ r.name }}
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-value">{{ totals.rides or 0 }}</div>
+    <div class="stat-label">Activities</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ (totals.dist or 0) | fmt_dist }}</div>
+    <div class="stat-label">Total Distance</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ (totals.elev or 0) | fmt_elev }}</div>
+    <div class="stat-label">Total Elevation</div>
+  </div>
+  <div class="stat-card">
+    {% set th = ((totals.secs or 0) // 3600) %}
+    {% set tm = (((totals.secs or 0) % 3600) // 60) %}
+    <div class="stat-value">{{ th }}h {{ tm }}m</div>
+    <div class="stat-label">Total Time</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ "%.1f"|format((totals.elev or 0) / 8849) }}×</div>
+    <div class="stat-label">Mt. Everests Climbed</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ "%.2f"|format((totals.dist or 0) / 40075016.7) }}×</div>
+    <div class="stat-label">Laps of Earth</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ "{:,}".format((totals.cals or 0) | int) }}</div>
+    <div class="stat-label">Total Calories</div>
+  </div>
+</div>
+
+{% if recovery and (recovery.bodyBattery or recovery.sleepHours or recovery.hrv or recovery.restingHR) %}
+<div class="card" style="margin-bottom:1rem; padding:0.625rem 1.25rem;">
+  <div style="display:flex; align-items:center; gap:1.75rem; flex-wrap:wrap;">
+    <span style="font-size:0.75rem; color:var(--text-muted); font-weight:500; flex-shrink:0; white-space:nowrap;">
+      Recovery &middot; {{ recovery.date | fmt_date }}
+    </span>
+    {% if recovery.bodyBattery %}
+    <div style="display:flex; flex-direction:column; align-items:center; gap:0.1rem;">
+      <span style="font-size:1rem; font-weight:600; color:{{ '#ef4444' if recovery.bodyBattery < 25 else ('#f59e0b' if recovery.bodyBattery < 50 else 'var(--success)') }};">{{ recovery.bodyBattery }}%</span>
+      <span style="font-size:0.7rem; color:var(--text-muted);">Battery</span>
+    </div>
+    {% endif %}
+    {% if recovery.sleepHours %}
+    <div style="display:flex; flex-direction:column; align-items:center; gap:0.1rem;">
+      <span style="font-size:1rem; font-weight:600; color:{{ '#ef4444' if recovery.sleepHours < 6 else ('#f59e0b' if recovery.sleepHours < 7 else '#a855f7') }};">{{ recovery.sleepHours }}h{% if recovery.sleepScore %} &middot; {{ recovery.sleepScore }}{% endif %}</span>
+      <span style="font-size:0.7rem; color:var(--text-muted);">Sleep</span>
+    </div>
+    {% endif %}
+    {% if recovery.hrv %}
+    <div style="display:flex; flex-direction:column; align-items:center; gap:0.1rem;">
+      <span style="font-size:1rem; font-weight:600; color:{{ 'var(--success)' if recovery.hrvBalanced else '#f59e0b' }};">{{ recovery.hrv }}{% if recovery.hrvBalanced %} ✓{% endif %}</span>
+      <span style="font-size:0.7rem; color:var(--text-muted);">HRV</span>
+    </div>
+    {% endif %}
+    {% if recovery.restingHR %}
+    <div style="display:flex; flex-direction:column; align-items:center; gap:0.1rem;">
+      <span style="font-size:1rem; font-weight:600; color:{{ '#ef4444' if recovery.restingHR > 65 else ('#f59e0b' if recovery.restingHR > 58 else 'var(--success)') }};">{{ recovery.restingHR }} bpm</span>
+      <span style="font-size:0.7rem; color:var(--text-muted);">Resting HR</span>
+    </div>
+    {% endif %}
+    {% if recovery.stressScore %}
+    <div style="display:flex; flex-direction:column; align-items:center; gap:0.1rem;">
+      <span style="font-size:1rem; font-weight:600; color:{{ '#ef4444' if recovery.stressScore > 60 else ('#f59e0b' if recovery.stressScore > 35 else 'var(--success)') }};">{{ recovery.stressScore }}</span>
+      <span style="font-size:0.7rem; color:var(--text-muted);">Stress</span>
+    </div>
+    {% endif %}
+    <a href="/recovery" style="margin-left:auto; font-size:0.75rem; color:var(--accent); text-decoration:none; flex-shrink:0;">Recovery →</a>
+  </div>
+</div>
+{% endif %}
+
+<div style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:1rem; margin-bottom:1.5rem; align-items:start;">
+  <div class="card" style="margin:0;">
+    <div class="card-title">Avg Speed — {{ now.year }}</div>
+    {% if year_speed %}
+    <div style="height:120px; position:relative;">
+      <canvas id="yearSpeedChart"></canvas>
+    </div>
+    {% else %}
+    <p style="color:var(--text-muted); font-size:0.875rem;">No rides with speed data this year yet.</p>
+    {% endif %}
+  </div>
+  <div class="card" style="margin:0;">
+    <div class="card-title">Miles — last 12 weeks</div>
+    <div style="height:120px; position:relative;">
+      <canvas id="weeklyChart"></canvas>
+    </div>
+  </div>
+  <div class="card" style="margin:0;">
+    <div class="card-title">Elevation — last 12 weeks</div>
+    <div style="height:120px; position:relative;">
+      <canvas id="weeklyElevChart"></canvas>
+    </div>
+  </div>
+  <div class="card" style="margin:0;">
+    <div class="card-title">Calories — last 12 weeks</div>
+    <div style="height:120px; position:relative;">
+      <canvas id="weeklyCalChart"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- Search / Filter -->
+<form method="GET" action="/dashboard" class="card" style="margin-bottom:1rem; padding:0.875rem 1.25rem;">
+  <div style="display:flex; flex-wrap:wrap; gap:0.6rem; align-items:flex-end;">
+    <div style="flex:2; min-width:140px;">
+      <label style="font-size:0.75rem; color:var(--text-muted); display:block; margin-bottom:0.25rem;">Name</label>
+      <input type="text" name="q" value="{{ q }}" placeholder="Search rides…"
+             style="width:100%; box-sizing:border-box; background:#0f2535; color:var(--text); border:1px solid var(--border); border-radius:5px; padding:0.35rem 0.6rem; font-size:0.875rem;">
+    </div>
+    <div style="flex:1; min-width:110px;">
+      <label style="font-size:0.75rem; color:var(--text-muted); display:block; margin-bottom:0.25rem;">From</label>
+      <input type="date" name="from" value="{{ date_from }}"
+             style="width:100%; box-sizing:border-box; background:#0f2535; color:var(--text); border:1px solid var(--border); border-radius:5px; padding:0.35rem 0.6rem; font-size:0.875rem;">
+    </div>
+    <div style="flex:1; min-width:110px;">
+      <label style="font-size:0.75rem; color:var(--text-muted); display:block; margin-bottom:0.25rem;">To</label>
+      <input type="date" name="to" value="{{ date_to }}"
+             style="width:100%; box-sizing:border-box; background:#0f2535; color:var(--text); border:1px solid var(--border); border-radius:5px; padding:0.35rem 0.6rem; font-size:0.875rem;">
+    </div>
+    <div style="flex:1; min-width:80px;">
+      <label style="font-size:0.75rem; color:var(--text-muted); display:block; margin-bottom:0.25rem;">Min mi</label>
+      <input type="number" name="min_mi" value="{{ min_mi }}" placeholder="0" min="0" step="1"
+             style="width:100%; box-sizing:border-box; background:#0f2535; color:var(--text); border:1px solid var(--border); border-radius:5px; padding:0.35rem 0.6rem; font-size:0.875rem;">
+    </div>
+    <div style="flex:1; min-width:80px;">
+      <label style="font-size:0.75rem; color:var(--text-muted); display:block; margin-bottom:0.25rem;">Max mi</label>
+      <input type="number" name="max_mi" value="{{ max_mi }}" placeholder="∞" min="0" step="1"
+             style="width:100%; box-sizing:border-box; background:#0f2535; color:var(--text); border:1px solid var(--border); border-radius:5px; padding:0.35rem 0.6rem; font-size:0.875rem;">
+    </div>
+    <div style="flex:1; min-width:110px;">
+      <label style="font-size:0.75rem; color:var(--text-muted); display:block; margin-bottom:0.25rem;">Sport</label>
+      <select name="sport" style="width:100%; box-sizing:border-box; background:#0f2535; color:var(--text); border:1px solid var(--border); border-radius:5px; padding:0.35rem 0.6rem; font-size:0.875rem;">
+        <option value="">All</option>
+        {% for st in sport_types %}
+        <option value="{{ st.sportType }}" {% if sport == st.sportType %}selected{% endif %}>{{ st.sportType }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div style="display:flex; gap:0.4rem; padding-bottom:0.05rem;">
+      <button type="submit" class="btn btn-primary" style="padding:0.35rem 0.9rem; font-size:0.875rem;">Search</button>
+      {% if is_filtered %}
+      <a href="/dashboard" class="btn btn-secondary" style="padding:0.35rem 0.75rem; font-size:0.875rem;">✕ Clear</a>
+      {% endif %}
+    </div>
+  </div>
+</form>
+
+<div class="card">
+  <div class="card-title">
+    Activities
+    {% if is_filtered %}<span style="font-size:0.8125rem; font-weight:400; color:var(--text-muted); margin-left:0.5rem;">{{ search_results | length }} result{{ 's' if search_results | length != 1 }}</span>{% endif %}
+  </div>
+
+  {% if is_filtered %}
+  {% if search_results %}
+  <table style="width:100%; border-collapse:collapse; font-size:0.875rem;">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border);">
+        <th style="padding:0.4rem 0.5rem; text-align:left; color:var(--text-muted); font-weight:500;">Date</th>
+        <th style="padding:0.4rem 0.5rem; text-align:left; color:var(--text-muted); font-weight:500;">Name</th>
+        <th style="padding:0.4rem 0.5rem; text-align:right; color:var(--text-muted); font-weight:500;">Dist</th>
+        <th style="padding:0.4rem 0.5rem; text-align:right; color:var(--text-muted); font-weight:500;">Time</th>
+        <th style="padding:0.4rem 0.5rem; text-align:right; color:var(--text-muted); font-weight:500;">Speed</th>
+        <th style="padding:0.4rem 0.5rem; text-align:right; color:var(--text-muted); font-weight:500;">Elev</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in search_results %}
+      <tr style="border-bottom:1px solid rgba(22,51,82,0.5);" onclick="location.href='/rides/{{ a.id }}'" class="clickable-row">
+        <td style="padding:0.45rem 0.5rem; color:var(--text-muted); white-space:nowrap;">{{ a.startDateLocal | fmt_date }}</td>
+        <td style="padding:0.45rem 0.5rem; color:var(--text);">
+          {{ a.sportType | sport_icon }} {{ a.name }}
+          {% if a.aiKudos %}<span style="font-size:0.7rem; color:var(--accent); margin-left:0.3rem;">AI</span>{% endif %}
+        </td>
+        <td style="padding:0.45rem 0.5rem; text-align:right; color:var(--text); white-space:nowrap;">{{ a.distance | fmt_dist }}</td>
+        <td style="padding:0.45rem 0.5rem; text-align:right; color:var(--text-muted); white-space:nowrap;">{{ a.movingTime | fmt_duration }}</td>
+        <td style="padding:0.45rem 0.5rem; text-align:right; color:var(--text-muted); white-space:nowrap;">{{ a.averageSpeed | fmt_speed }}</td>
+        <td style="padding:0.45rem 0.5rem; text-align:right; color:var(--text-muted); white-space:nowrap;">{{ a.totalElevationGain | fmt_elev }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:var(--text-muted); font-size:0.875rem; margin:0.5rem 0;">No activities match your filters.</p>
+  {% endif %}
+
+  {% else %}
+  {% if grouped %}
+    {% for yr in grouped %}
+    <details class="tree-year" {% if yr.is_current %}open{% endif %}>
+      <summary class="tree-year-summary">
+        <span class="tree-year-label">{{ yr.year }}</span>
+        <span class="tree-meta">{{ yr.count }} activities &middot; {{ yr.dist | fmt_dist }} &middot; {{ yr.elev | fmt_elev }}</span>
+      </summary>
+
+      {% for mo in yr.months %}
+      <details class="tree-month" {% if mo.is_current %}open{% endif %}>
+        <summary class="tree-month-summary">
+          <span class="tree-month-label">{{ mo.name }}</span>
+          <span class="tree-meta">{{ mo.count }} activities &middot; {{ mo.dist | fmt_dist }}</span>
+        </summary>
+
+        {% for day in mo.days %}
+        <div class="tree-day">
+          <div class="tree-day-header">
+            <span>{{ day.label }}</span>
+            <span class="tree-meta">{{ day.count }} activit{% if day.count != 1 %}ies{% else %}y{% endif %} &middot; {{ day.dist | fmt_dist }}</span>
+          </div>
+          <table style="table-layout:fixed;">
+            <colgroup>
+              <col>
+              <col style="width:90px;">
+              <col style="width:80px;">
+              <col style="width:90px;">
+              <col style="width:90px;">
+              <col style="width:32px;">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>Ride</th>
+                <th style="text-align:right;">Distance</th>
+                <th style="text-align:right;">Time</th>
+                <th style="text-align:right;">Speed</th>
+                <th style="text-align:right;">Elevation</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for a in day.activities %}
+              <tr class="ride-row" onclick="location.href='/rides/{{ a.id }}'">
+                <td style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                  <span style="margin-right:0.4rem;">{{ a.sportType | sport_icon }}</span>{{ a.name }}
+                </td>
+                <td style="text-align:right; font-variant-numeric:tabular-nums;">{{ a.distance | fmt_dist }}</td>
+                <td style="text-align:right; font-variant-numeric:tabular-nums; color:var(--text-muted);">{{ a.movingTime | fmt_duration }}</td>
+                <td style="text-align:right; font-variant-numeric:tabular-nums; color:var(--text-muted);">{{ a.averageSpeed | fmt_speed }}</td>
+                <td style="text-align:right; font-variant-numeric:tabular-nums; color:var(--text-muted);">{{ a.totalElevationGain | fmt_elev }}</td>
+                <td style="text-align:right;">
+                  {% if a.riderName %}
+                    {% if a.riderAvatar %}
+                      <img src="{{ url_for('static', filename='avatars/' + a.riderAvatar) }}" class="rider-avatar" alt="{{ a.riderName }}" title="{{ a.riderName }}" data-rider-id="{{ a.riderId }}" style="width:22px;height:22px;cursor:pointer;">
+                    {% else %}
+                      <span class="rider-initial" title="{{ a.riderName }}" style="width:22px;height:22px;font-size:0.6875rem;">{{ a.riderName[0] | upper }}</span>
+                    {% endif %}
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endfor %}
+
+      </details>
+      {% endfor %}
+    </details>
+    {% endfor %}
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon">🚴</div>
+    <p>No activities yet. Sync from Strava or <a href="/import" style="color:var(--accent);">import files</a>.</p>
+  </div>
+  {% endif %}
+  {% endif %}{# end is_filtered #}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+{% if year_speed %}
+const yearSpeedData = {{ year_speed | tojson }};
+new Chart(document.getElementById('yearSpeedChart'), {
+  type: 'line',
+  data: {
+    labels: yearSpeedData.map(r => fmtDate(r.d)),
+    datasets: [{
+      data: yearSpeedData.map(r => r.mph),
+      borderColor: '#fc4c02',
+      backgroundColor: 'rgba(252,76,2,0.08)',
+      borderWidth: 2,
+      pointRadius: 4,
+      pointHoverRadius: 6,
+      pointBackgroundColor: '#fc4c02',
+      fill: true,
+      tension: 0.3,
+    }]
+  },
+  options: {
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          title: ctx => yearSpeedData[ctx[0].dataIndex].name,
+          label: ctx => ctx.raw.toFixed(1) + ' mph',
+        }
+      }
+    },
+    scales: {
+      x: { ticks: { color: '#4d7d95', font: { size: 11 }, maxTicksLimit: 12 }, grid: { display: false } },
+      y: {
+        ticks: { color: '#4d7d95', font: { size: 11 }, callback: v => v + ' mph' },
+        grid: { color: '#163352' },
+      }
+    }
+  }
+});
+{% endif %}
+
+const weeklyData = {{ weekly | tojson }};
+const lineOpts = (unit) => ({
+  maintainAspectRatio: false,
+  plugins: { legend: { display: false }, tooltip: {
+    callbacks: { label: ctx => ctx.raw.toFixed(1) + ' ' + unit }
+  }},
+  scales: {
+    x: { ticks: { color: '#4d7d95', font: { size: 11 } }, grid: { display: false } },
+    y: { ticks: { color: '#4d7d95', font: { size: 11 } }, grid: { color: '#163352' }, beginAtZero: true }
+  }
+});
+
+const lineDataset = (data, color) => ({
+  data, borderColor: color, borderWidth: 2,
+  backgroundColor: color.replace(')', ', 0.08)').replace('rgb', 'rgba'),
+  pointRadius: 3, pointHoverRadius: 5, pointBackgroundColor: color,
+  fill: true, tension: 0.3,
+});
+
+new Chart(document.getElementById('weeklyChart'), {
+  type: 'line',
+  data: { labels: weeklyData.map(w => w.label), datasets: [lineDataset(weeklyData.map(w => w.mi), 'rgb(252,76,2)')] },
+  options: lineOpts('mi'),
+});
+
+new Chart(document.getElementById('weeklyElevChart'), {
+  type: 'line',
+  data: { labels: weeklyData.map(w => w.label), datasets: [lineDataset(weeklyData.map(w => w.ft), 'rgb(16,185,129)')] },
+  options: lineOpts('ft'),
+});
+
+new Chart(document.getElementById('weeklyCalChart'), {
+  type: 'line',
+  data: { labels: weeklyData.map(w => w.label), datasets: [lineDataset(weeklyData.map(w => w.cals), 'rgb(168,85,247)')] },
+  options: lineOpts('kcal'),
+});
+</script>
+{% endblock %}

@@ -1,0 +1,17 @@
+services:
+  app:
+    build: .
+    ports:
+      - "5001:5001"
+    volumes:
+      - db_data:/data
+      - garmin_tokens:/app/.garmin_tokens
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=/data/bike.db
+    restart: unless-stopped
+
+volumes:
+  db_data:
+  garmin_tokens:

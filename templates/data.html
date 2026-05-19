@@ -1,0 +1,813 @@
+{% extends 'base.html' %}
+
+{% block title %}Ride Data{% endblock %}
+{% block page_title %}Ride Data{% endblock %}
+
+{% block head %}
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    .chart-grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    @media (max-width: 900px) {
+      .chart-grid-2 { grid-template-columns: 1fr; }
+    }
+    .heatmap-wrap { overflow-x: auto; padding-bottom: 0.5rem; }
+    .heatmap-grid { display: flex; gap: 3px; align-items: flex-start; }
+    .heatmap-col  { display: flex; flex-direction: column; gap: 3px; }
+    .heatmap-cell {
+      width: 12px; height: 12px; border-radius: 2px;
+      flex-shrink: 0; cursor: default;
+    }
+    .heatmap-day-labels {
+      display: flex; flex-direction: column; gap: 3px;
+      margin-right: 4px; padding-top: 20px;
+    }
+    .heatmap-day-label {
+      height: 12px; font-size: 9px; color: #4d7d95;
+      line-height: 12px; white-space: nowrap; width: 20px;
+    }
+    .heatmap-month-row {
+      display: flex; gap: 3px; margin-left: 24px; margin-bottom: 4px;
+      height: 16px; position: relative;
+    }
+    .heatmap-month-label {
+      font-size: 10px; color: #4d7d95; position: absolute;
+    }
+    .legend-row {
+      display: flex; align-items: center; gap: 6px;
+      margin-top: 0.75rem; font-size: 0.75rem; color: #4d7d95;
+    }
+    .legend-cell {
+      width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0;
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+
+{% if all_riders | length > 1 %}
+<div style="display:flex; gap:0.5rem; margin-bottom:1.25rem; flex-wrap:wrap;">
+  {% for r in all_riders %}
+  <a href="{{ url_for('data.index', rider=r.id) }}"
+     style="display:inline-flex; align-items:center; gap:0.5rem; padding:0.4rem 0.75rem 0.4rem 0.4rem;
+            border-radius:999px; border:1px solid {% if r.id == active_rider.id %}var(--accent){% else %}var(--border){% endif %};
+            background:{% if r.id == active_rider.id %}rgba(252,76,2,0.12){% else %}var(--card-bg){% endif %};
+            text-decoration:none; color:var(--text); font-size:0.875rem; font-weight:{% if r.id == active_rider.id %}600{% else %}400{% endif %};">
+    {% if r.avatarPath %}
+      <img src="{{ url_for('static', filename='avatars/' + r.avatarPath) }}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;">
+    {% else %}
+      <span class="rider-initial" style="width:28px;height:28px;font-size:0.75rem;flex-shrink:0;">{{ r.name[0] | upper }}</span>
+    {% endif %}
+    {{ r.name }}
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- Achievements -->
+<div class="card" style="margin-bottom:1.5rem; padding:0; overflow:hidden;">
+  <div style="padding:1rem 1.25rem; border-bottom:1px solid #1e4060; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.75rem;">
+    <div class="card-title" style="margin:0;">Achievements</div>
+    <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+      <select id="recYear" onchange="renderRecords()" style="background:var(--surface2,#0d2135);color:var(--text);border:1px solid #1e4060;border-radius:6px;padding:0.3rem 0.6rem;font-size:0.875rem;cursor:pointer;">
+        {% for yr in records_by_year | sort(reverse=true) %}
+        <option value="{{ yr }}">{{ yr }}</option>
+        {% endfor %}
+      </select>
+      <select id="recMonth" onchange="renderRecords()" style="background:var(--surface2,#0d2135);color:var(--text);border:1px solid #1e4060;border-radius:6px;padding:0.3rem 0.6rem;font-size:0.875rem;cursor:pointer;">
+        <option value="all">All months</option>
+      </select>
+      {% if not has_efforts %}
+      <button class="btn btn-secondary" style="font-size:0.8125rem;" id="effortsBtn" onclick="computeEfforts()">Compute Achievements</button>
+      {% endif %}
+    </div>
+  </div>
+  {% if has_efforts %}
+  <table style="width:100%; border-collapse:collapse;" id="recTable">
+    <thead>
+      <tr style="border-bottom:1px solid #1e4060;">
+        <th style="padding:0.75rem 1.25rem; text-align:left; font-size:0.75rem; color:var(--text-muted); font-weight:600;">Distance</th>
+        <th style="padding:0.75rem 1rem; text-align:right; font-size:0.75rem; color:var(--text-muted); font-weight:600;">Best Time</th>
+        <th style="padding:0.75rem 1rem; text-align:right; font-size:0.75rem; color:var(--text-muted); font-weight:600;">Avg Speed</th>
+        <th style="padding:0.75rem 1rem; text-align:left; font-size:0.75rem; color:var(--text-muted); font-weight:600;">Ride</th>
+        <th style="padding:0.75rem 1.25rem; text-align:right; font-size:0.75rem; color:var(--text-muted); font-weight:600;">Date</th>
+      </tr>
+    </thead>
+    <tbody id="recBody">
+      {% for d in effort_brackets %}
+      <tr data-dist="{{ d }}" style="border-bottom:1px solid #163352;">
+        <td style="padding:0.875rem 1.25rem; font-weight:600; color:var(--text);">{{ d }} mi</td>
+        <td class="rec-time"  style="padding:0.875rem 1rem; text-align:right; font-variant-numeric:tabular-nums; color:var(--accent); font-weight:600;">—</td>
+        <td class="rec-speed" style="padding:0.875rem 1rem; text-align:right; color:var(--text-muted); font-size:0.875rem;">—</td>
+        <td class="rec-ride"  style="padding:0.875rem 1rem; font-size:0.875rem;">—</td>
+        <td class="rec-date"  style="padding:0.875rem 1.25rem; text-align:right; color:var(--text-muted); font-size:0.875rem;">—</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div id="recEmpty" style="display:none; padding:1.5rem 1.25rem; color:var(--text-muted); font-size:0.875rem;">No records for this period.</div>
+  {% else %}
+  <div style="padding:1.5rem 1.25rem; color:var(--text-muted); font-size:0.875rem;">
+    Click <strong style="color:var(--text);">Compute Achievements</strong> to scan your rides for best efforts.
+  </div>
+  {% endif %}
+  <div id="effortsStatus" style="padding:0.75rem 1.25rem; font-size:0.8125rem; color:var(--text-muted); display:none;"></div>
+</div>
+
+<!-- Climbing Records -->
+{% if climbing_by_year %}
+<div class="card" style="margin-bottom:1.5rem; padding:0; overflow:hidden;">
+  <div style="padding:1rem 1.25rem; border-bottom:1px solid #1e4060; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.75rem;">
+    <div class="card-title" style="margin:0;">Climbing Records</div>
+    <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+      <select id="climbYear" onchange="renderClimbing()" style="background:var(--surface2,#0d2135);color:var(--text);border:1px solid #1e4060;border-radius:6px;padding:0.3rem 0.6rem;font-size:0.875rem;cursor:pointer;">
+        {% for yr in climbing_by_year | sort(reverse=true) %}
+        <option value="{{ yr }}">{{ yr }}</option>
+        {% endfor %}
+      </select>
+      <select id="climbMonth" onchange="renderClimbing()" style="background:var(--surface2,#0d2135);color:var(--text);border:1px solid #1e4060;border-radius:6px;padding:0.3rem 0.6rem;font-size:0.875rem;cursor:pointer;">
+        <option value="all">All months</option>
+      </select>
+    </div>
+  </div>
+  <table style="width:100%; border-collapse:collapse;" id="climbTable">
+    <thead>
+      <tr style="border-bottom:1px solid #1e4060;">
+        <th style="padding:0.75rem 1.25rem; text-align:left; font-size:0.75rem; color:var(--text-muted); font-weight:600;">Threshold</th>
+        <th style="padding:0.75rem 1rem; text-align:right; font-size:0.75rem; color:var(--text-muted); font-weight:600;">Best Elevation</th>
+        <th style="padding:0.75rem 1rem; text-align:left; font-size:0.75rem; color:var(--text-muted); font-weight:600;">Ride</th>
+        <th style="padding:0.75rem 1.25rem; text-align:right; font-size:0.75rem; color:var(--text-muted); font-weight:600;">Date</th>
+      </tr>
+    </thead>
+    <tbody id="climbBody">
+      {% for b in climbing_brackets %}
+      <tr data-bracket="{{ b }}" style="border-bottom:1px solid #163352;">
+        <td style="padding:0.875rem 1.25rem; font-weight:600; color:var(--text);">{{ '{:,}'.format(b) }} ft</td>
+        <td class="climb-ft"   style="padding:0.875rem 1rem; text-align:right; color:var(--accent); font-weight:600;">—</td>
+        <td class="climb-ride" style="padding:0.875rem 1rem; font-size:0.875rem;">—</td>
+        <td class="climb-date" style="padding:0.875rem 1.25rem; text-align:right; color:var(--text-muted); font-size:0.875rem;">—</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div id="climbEmpty" style="display:none; padding:1.5rem 1.25rem; color:var(--text-muted); font-size:0.875rem;">No climbing records for this period.</div>
+</div>
+{% endif %}
+
+<!-- Speed over time -->
+<div class="card" style="margin-bottom:1.5rem;">
+  <div class="card-title">Avg Speed Per Ride (mph)</div>
+  <canvas id="speedChart" height="90"></canvas>
+</div>
+
+<!-- Calendar Heatmap -->
+<div class="card" style="margin-bottom:1.5rem;">
+  <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.75rem; margin-bottom:1rem;">
+    <div class="card-title" style="margin:0;">Activity Heatmap</div>
+    <div style="display:flex; align-items:center; gap:0.5rem; font-size:0.875rem; color:var(--text-muted);">
+      <select id="heatFrom" onchange="renderHeatmap()" style="background:var(--surface);color:var(--text);border:1px solid var(--border,#1e4060);border-radius:6px;padding:0.25rem 0.5rem;font-size:0.8125rem;"></select>
+      <span>→</span>
+      <select id="heatTo" onchange="renderHeatmap()" style="background:var(--surface);color:var(--text);border:1px solid var(--border,#1e4060);border-radius:6px;padding:0.25rem 0.5rem;font-size:0.8125rem;"></select>
+    </div>
+  </div>
+  <div id="heatmapContainer"></div>
+  <div class="legend-row">
+    Less
+    <div class="legend-cell" style="background:#1a2d3d;"></div>
+    <div class="legend-cell" style="background:#4a2c15;"></div>
+    <div class="legend-cell" style="background:#8c4a1e;"></div>
+    <div class="legend-cell" style="background:#c4621f;"></div>
+    <div class="legend-cell" style="background:#fc4c02;"></div>
+    More
+  </div>
+</div>
+
+<!-- Monthly + Year-on-Year -->
+<div class="chart-grid-2">
+  <div class="card">
+    <div class="card-title">Monthly Distance (mi)</div>
+    <canvas id="monthlyChart" height="160"></canvas>
+  </div>
+  <div class="card">
+    <div class="card-title">Year on Year</div>
+    <canvas id="yoyChart" height="160"></canvas>
+  </div>
+</div>
+
+<!-- Calories over time -->
+<div class="card" style="margin-bottom:1.5rem;">
+  <div class="card-title">Calories Burned Per Ride</div>
+  <canvas id="calChart" height="80"></canvas>
+</div>
+
+<!-- Histogram + Day of week -->
+<div class="chart-grid-2">
+  <div class="card">
+    <div class="card-title">Ride Length Distribution</div>
+    <canvas id="histChart" height="160"></canvas>
+  </div>
+  <div class="card">
+    <div class="card-title">Rides by Day of Week</div>
+    <canvas id="dowChart" height="160"></canvas>
+  </div>
+</div>
+
+{% if wx_temp_x %}
+<!-- Weather & Performance -->
+<div class="card-title" style="margin-bottom:1rem; font-size:1rem;">Weather &amp; Performance</div>
+
+<div class="chart-grid-2" style="margin-bottom:1.5rem;">
+  <div class="card">
+    <div class="card-title">Speed vs Temperature (mph / °C)</div>
+    <canvas id="wxTempChart" height="200"></canvas>
+  </div>
+  <div class="card">
+    <div class="card-title">Speed vs Wind Speed (mph / kph)</div>
+    <canvas id="wxWindChart" height="200"></canvas>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:1.5rem;">
+  <div class="card-title">Avg Speed by Weather Condition</div>
+  <canvas id="wxCondChart" height="80"></canvas>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Records ───────────────────────────────────────────────────────
+(function() {
+  const byYear  = {{ records_by_year  | tojson }};
+  const byMonth = {{ records_by_month | tojson }};
+
+  // Populate month dropdown when year changes
+  const recYear  = document.getElementById('recYear');
+  const recMonth = document.getElementById('recMonth');
+  if (!recYear) return;  // table not rendered (no efforts yet)
+
+  function populateMonths() {
+    const yr = recYear.value;
+    recMonth.innerHTML = '<option value="all">All months</option>';
+    const mths = Object.keys(byMonth).filter(ym => ym.startsWith(yr)).sort().reverse();
+    mths.forEach(ym => {
+      const [y, m] = ym.split('-');
+      const label = fmtMonth(ym);
+      recMonth.add(new Option(label, ym));
+    });
+  }
+
+  window.renderRecords = function() {
+    const yr  = recYear.value;
+    const mth = recMonth.value;
+    const src = mth === 'all' ? (byYear[yr] || {}) : (byMonth[mth] || {});
+    const rows = document.querySelectorAll('#recBody tr[data-dist]');
+    let anyData = false;
+    rows.forEach(row => {
+      const d   = row.dataset.dist;
+      const rec = src[d];
+      if (rec) {
+        anyData = true;
+        const s = rec.secs;
+        const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+        const t = h ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`
+                    : `${m}:${String(sec).padStart(2,'0')}`;
+        row.querySelector('.rec-time').textContent  = t;
+        row.querySelector('.rec-speed').textContent = rec.mph + ' mph';
+        row.querySelector('.rec-ride').innerHTML    =
+          `<a href="/rides/${rec.rideId}" style="color:var(--text);text-decoration:none;">${rec.ride}</a>`;
+        row.querySelector('.rec-date').textContent  = fmtDate(rec.date);
+        row.style.display = '';
+      } else {
+        row.style.display = 'none';
+      }
+    });
+    document.getElementById('recEmpty').style.display = anyData ? 'none' : '';
+    document.getElementById('recTable') && (document.getElementById('recTable').style.display = anyData ? '' : 'none');
+  };
+
+  recYear.addEventListener('change', function() { populateMonths(); renderRecords(); });
+  populateMonths();
+  renderRecords();
+})();
+
+// ── Climbing Records ──────────────────────────────────────────────
+(function() {
+  const byYear  = {{ climbing_by_year  | tojson }};
+  const byMonth = {{ climbing_by_month | tojson }};
+  const climbYear  = document.getElementById('climbYear');
+  const climbMonth = document.getElementById('climbMonth');
+  if (!climbYear) return;
+
+  function populateClimbMonths() {
+    const yr = climbYear.value;
+    climbMonth.innerHTML = '<option value="all">All months</option>';
+    Object.keys(byMonth).filter(ym => ym.startsWith(yr)).sort().reverse().forEach(ym => {
+      climbMonth.add(new Option(fmtMonth(ym), ym));
+    });
+  }
+
+  window.renderClimbing = function() {
+    const yr  = climbYear.value;
+    const mth = climbMonth.value;
+    const src = mth === 'all' ? (byYear[yr] || {}) : (byMonth[mth] || {});
+    const rows = document.querySelectorAll('#climbBody tr[data-bracket]');
+    let anyData = false;
+    rows.forEach(row => {
+      const b   = row.dataset.bracket;
+      const rec = src[b];
+      if (rec) {
+        anyData = true;
+        row.querySelector('.climb-ft').textContent   = rec.ft.toLocaleString() + ' ft';
+        row.querySelector('.climb-ride').innerHTML   =
+          `<a href="/rides/${rec.rideId}" style="color:var(--text);text-decoration:none;">${rec.ride}</a>`;
+        row.querySelector('.climb-date').textContent = fmtDate(rec.date);
+        row.style.display = '';
+      } else {
+        row.style.display = 'none';
+      }
+    });
+    document.getElementById('climbEmpty').style.display = anyData ? 'none' : '';
+    document.getElementById('climbTable') && (document.getElementById('climbTable').style.display = anyData ? '' : 'none');
+  };
+
+  climbYear.addEventListener('change', function() { populateClimbMonths(); renderClimbing(); });
+  populateClimbMonths();
+  renderClimbing();
+})();
+
+function computeEfforts() {
+  const btn = document.getElementById('effortsBtn');
+  const st  = document.getElementById('effortsStatus');
+  if (btn) btn.disabled = true;
+  st.style.display = 'block';
+  st.textContent = 'Scanning rides… this may take a moment.';
+  fetch('/data/scan-efforts', { method: 'POST' })
+    .then(r => r.json())
+    .then(d => { st.textContent = `✓ Scanned ${d.scanned} rides — reload to see records.`; })
+    .catch(() => { st.textContent = 'Scan failed.'; });
+}
+
+// ── Global defaults ──────────────────────────────────────────────
+Chart.defaults.color          = '#4d7d95';
+Chart.defaults.borderColor    = '#163352';
+Chart.defaults.font.family    = 'inherit';
+
+const GRID_COLOR  = '#163352';
+const TICK_COLOR  = '#4d7d95';
+const ORANGE      = '#fc4c02';
+const BLUE        = '#0ea5e9';
+const GREEN       = '#10b981';
+const PURPLE      = '#a855f7';
+const YELLOW      = '#f59e0b';
+const RED         = '#ef4444';
+const TEAL        = '#06b6d4';
+
+function scalesXY(yLabel) {
+  return {
+    x: { ticks: { color: TICK_COLOR, font: { size: 10 }, maxTicksLimit: 12 }, grid: { color: GRID_COLOR } },
+    y: { ticks: { color: TICK_COLOR, font: { size: 10 } }, grid: { color: GRID_COLOR },
+         title: { display: !!yLabel, text: yLabel || '', color: TICK_COLOR, font: { size: 10 } } }
+  };
+}
+
+function noLegend() { return { legend: { display: false } }; }
+
+// ── Speed scatter ────────────────────────────────────────────────
+new Chart(document.getElementById('speedChart'), {
+  type: 'line',
+  data: {
+    labels: {{ speed_labels | tojson }}.map(fmtDate),
+    datasets: [
+      {
+        label: 'Ride speed',
+        data:  {{ speed_values | tojson }},
+        borderColor: 'transparent',
+        pointBackgroundColor: 'rgba(14,165,233,0.45)',
+        pointBorderColor: 'transparent',
+        pointRadius: 3,
+        pointHoverRadius: 5,
+        fill: false,
+        tension: 0,
+      },
+      {
+        label: '20-ride avg',
+        data:  {{ speed_rolling | tojson }},
+        borderColor: ORANGE,
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: false,
+        tension: 0.4,
+      }
+    ]
+  },
+  options: {
+    animation: false,
+    plugins: {
+      legend: { display: true, labels: { color: TICK_COLOR, boxWidth: 12 } },
+      tooltip: { mode: 'index', intersect: false }
+    },
+    scales: scalesXY('mph')
+  }
+});
+
+// ── Monthly distance ─────────────────────────────────────────────
+new Chart(document.getElementById('monthlyChart'), {
+  type: 'bar',
+  data: {
+    labels: {{ monthly_labels | tojson }}.map(fmtMonth),
+    datasets: [{
+      data: {{ monthly_values | tojson }},
+      backgroundColor: 'rgba(252,76,2,0.7)',
+      borderColor: ORANGE,
+      borderWidth: 1,
+      borderRadius: 3,
+    }]
+  },
+  options: {
+    animation: false,
+    plugins: { ...noLegend(), tooltip: { callbacks: { label: ctx => `${ctx.parsed.y} mi` } } },
+    scales: scalesXY('miles')
+  }
+});
+
+// ── Year on year ─────────────────────────────────────────────────
+(function() {
+  const yoyData   = {{ year_on_year | tojson }};
+  const months    = {{ month_labels | tojson }};
+  const years     = Object.keys(yoyData).sort();
+  const palette   = [ORANGE, BLUE, GREEN, PURPLE, YELLOW, RED, TEAL,
+                     '#f97316','#3b82f6','#14b8a6','#8b5cf6','#ec4899','#22c55e','#eab308','#6366f1'];
+
+  function hexToRgba(hex, a) {
+    const n = parseInt(hex.replace('#',''), 16);
+    return `rgba(${n>>16},${(n>>8)&255},${n&255},${a})`;
+  }
+
+  const datasets = years.map((yr, i) => {
+    const age    = years.length - 1 - i;
+    const recent = age < 3;
+    const color  = palette[i % palette.length];
+    return {
+      label: yr,
+      data:  yoyData[yr],
+      borderColor: hexToRgba(color, recent ? 1 : 0.28),
+      backgroundColor: 'transparent',
+      borderWidth: age === 0 ? 2.5 : (recent ? 1.8 : 1),
+      pointRadius: age === 0 ? 3 : 0,
+      tension: 0.3,
+    };
+  });
+
+  new Chart(document.getElementById('yoyChart'), {
+    type: 'line',
+    data: { labels: months, datasets },
+    options: {
+      animation: false,
+      plugins: {
+        legend: { display: true, labels: { color: TICK_COLOR, boxWidth: 10, font: { size: 10 } } },
+        tooltip: { mode: 'index', intersect: false, callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y} mi` } }
+      },
+      scales: scalesXY('miles')
+    }
+  });
+})();
+
+// ── Calories ─────────────────────────────────────────────────────
+new Chart(document.getElementById('calChart'), {
+  type: 'line',
+  data: {
+    labels: {{ cal_labels | tojson }}.map(fmtDate),
+    datasets: [
+      {
+        label: 'Calories',
+        data: {{ cal_values | tojson }},
+        borderColor: 'transparent',
+        pointBackgroundColor: 'rgba(239,68,68,0.4)',
+        pointBorderColor: 'transparent',
+        pointRadius: 3,
+        fill: false,
+        tension: 0,
+      },
+      {
+        label: '20-ride avg',
+        data: {{ cal_rolling | tojson }},
+        borderColor: RED,
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: false,
+        tension: 0.4,
+      }
+    ]
+  },
+  options: {
+    animation: false,
+    plugins: {
+      legend: { display: true, labels: { color: TICK_COLOR, boxWidth: 12 } },
+      tooltip: { mode: 'index', intersect: false }
+    },
+    scales: scalesXY('kcal')
+  }
+});
+
+// ── Histogram ────────────────────────────────────────────────────
+new Chart(document.getElementById('histChart'), {
+  type: 'bar',
+  data: {
+    labels: {{ hist_labels | tojson }},
+    datasets: [{
+      data: {{ hist_values | tojson }},
+      backgroundColor: 'rgba(14,165,233,0.7)',
+      borderColor: BLUE,
+      borderWidth: 1,
+      borderRadius: 3,
+    }]
+  },
+  options: {
+    animation: false,
+    plugins: { ...noLegend(), tooltip: { callbacks: { label: ctx => `${ctx.parsed.y} rides` } } },
+    scales: scalesXY('rides')
+  }
+});
+
+// ── Day of week ──────────────────────────────────────────────────
+new Chart(document.getElementById('dowChart'), {
+  type: 'bar',
+  data: {
+    labels: {{ dow_labels | tojson }},
+    datasets: [{
+      data: {{ dow_values | tojson }},
+      backgroundColor: 'rgba(168,85,247,0.7)',
+      borderColor: PURPLE,
+      borderWidth: 1,
+      borderRadius: 3,
+    }]
+  },
+  options: {
+    animation: false,
+    plugins: { ...noLegend(), tooltip: { callbacks: { label: ctx => `${ctx.parsed.y} rides` } } },
+    scales: scalesXY('rides')
+  }
+});
+
+// ── Calendar heatmap ─────────────────────────────────────────────
+(function () {
+  const heatmap  = {{ heatmap | tojson }};
+  const MONTHS   = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const DAY_NAMES = ['', 'Mon', '', 'Wed', '', 'Fri', ''];
+  const today    = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  function heatColor(mi) {
+    if (mi <= 0)  return '#1a2d3d';
+    if (mi < 10)  return '#4a2c15';
+    if (mi < 20)  return '#8c4a1e';
+    if (mi < 30)  return '#c4621f';
+    return '#fc4c02';
+  }
+
+  // Derive year range from actual data
+  const dataYears = [...new Set(Object.keys(heatmap).map(d => parseInt(d.slice(0, 4))))].sort();
+  const minYear   = dataYears[0] || today.getFullYear();
+  const maxYear   = today.getFullYear();
+
+  // Populate dropdowns
+  const fromSel = document.getElementById('heatFrom');
+  const toSel   = document.getElementById('heatTo');
+  for (let y = minYear; y <= maxYear; y++) {
+    fromSel.add(new Option(y, y));
+    toSel.add(new Option(y, y));
+  }
+  // Default: last 3 years
+  fromSel.value = Math.max(minYear, maxYear - 2);
+  toSel.value   = maxYear;
+
+  window.renderHeatmap = function () {
+    const fromYear = parseInt(fromSel.value);
+    const toYear   = parseInt(toSel.value);
+    const rangeEnd = new Date(Math.min(new Date(toYear, 11, 31), today));
+
+    // Start on the Sunday on or before Jan 1 of fromYear
+    const jan1  = new Date(fromYear, 0, 1);
+    const start = new Date(jan1);
+    start.setDate(jan1.getDate() - jan1.getDay());  // back to Sunday
+
+    const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+    const weeks     = Math.ceil((rangeEnd - start) / msPerWeek) + 1;
+
+    const container = document.getElementById('heatmapContainer');
+    container.innerHTML = '';
+
+    // Month label row
+    const monthRow = document.createElement('div');
+    monthRow.className = 'heatmap-month-row';
+    monthRow.style.marginLeft = '28px';
+    let lastMonth = -1;
+    for (let w = 0; w < weeks; w++) {
+      const d  = new Date(start);
+      d.setDate(start.getDate() + w * 7);
+      const mo = d.getMonth();
+      if (mo !== lastMonth && d <= rangeEnd) {
+        const lbl = document.createElement('div');
+        lbl.className = 'heatmap-month-label';
+        // Show year when month is January
+        lbl.textContent = mo === 0 ? `${MONTHS[mo]} ${d.getFullYear()}` : MONTHS[mo];
+        lbl.style.left  = (w * 15) + 'px';
+        monthRow.appendChild(lbl);
+        lastMonth = mo;
+      }
+    }
+
+    const wrap = document.createElement('div');
+    wrap.className = 'heatmap-wrap';
+
+    const row = document.createElement('div');
+    row.style.display = 'flex';
+
+    // Day labels
+    const dayCol = document.createElement('div');
+    dayCol.className = 'heatmap-day-labels';
+    DAY_NAMES.forEach(name => {
+      const lbl = document.createElement('div');
+      lbl.className = 'heatmap-day-label';
+      lbl.textContent = name;
+      dayCol.appendChild(lbl);
+    });
+    row.appendChild(dayCol);
+
+    // Grid
+    const grid = document.createElement('div');
+    grid.className = 'heatmap-grid';
+
+    for (let w = 0; w < weeks; w++) {
+      const col = document.createElement('div');
+      col.className = 'heatmap-col';
+      for (let d = 0; d < 7; d++) {
+        const cellDate = new Date(start);
+        cellDate.setDate(start.getDate() + w * 7 + d);
+        const cell = document.createElement('div');
+        cell.className = 'heatmap-cell';
+        if (cellDate > rangeEnd || cellDate > today) {
+          cell.style.background = 'transparent';
+        } else {
+          const ds = cellDate.toISOString().slice(0, 10);
+          const mi = heatmap[ds] || 0;
+          cell.style.background = heatColor(mi);
+          cell.title = mi > 0 ? `${fmtDate(ds)}: ${mi.toFixed(1)} mi` : fmtDate(ds);
+        }
+        col.appendChild(cell);
+      }
+      grid.appendChild(col);
+    }
+
+    row.appendChild(grid);
+    wrap.appendChild(monthRow);
+    wrap.appendChild(row);
+    container.appendChild(wrap);
+  };
+
+  renderHeatmap();
+})();
+
+{% if wx_temp_x %}
+// ── Weather scatter: speed vs temperature ─────────────────────────
+(function() {
+  const tempX    = {{ wx_temp_x | tojson }};
+  const tempY    = {{ wx_temp_y | tojson }};
+  const seasons  = {{ wx_temp_season | tojson }};
+  const tempIds  = {{ wx_temp_ids | tojson }};
+
+  const palette = {
+    Winter: 'rgba(100,181,246,0.55)',
+    Spring: 'rgba(129,199,132,0.55)',
+    Summer: 'rgba(255,183,77,0.55)',
+    Autumn: 'rgba(229,115,115,0.55)',
+  };
+  const datasets = {};
+  for (let i = 0; i < tempX.length; i++) {
+    const s = seasons[i];
+    if (!datasets[s]) datasets[s] = { label: s, data: [], backgroundColor: palette[s], pointRadius: 3, pointHoverRadius: 5 };
+    datasets[s].data.push({ x: tempX[i], y: tempY[i], id: tempIds[i] });
+  }
+
+  new Chart(document.getElementById('wxTempChart'), {
+    type: 'scatter',
+    data: { datasets: Object.values(datasets) },
+    options: {
+      animation: false,
+      onClick(evt, elements) {
+        if (elements.length) {
+          const el = elements[0];
+          const pt = this.data.datasets[el.datasetIndex].data[el.index];
+          if (pt.id) window.location = '/rides/' + pt.id;
+        }
+      },
+      plugins: { legend: { labels: { color: '#8ab4cc', boxWidth: 10, font: { size: 11 } } } },
+      scales: {
+        x: { title: { display: true, text: 'Temperature (°C)', color: '#4d7d95' },
+             ticks: { color: '#4d7d95' }, grid: { color: '#1a3a52' } },
+        y: { title: { display: true, text: 'Avg Speed (mph)', color: '#4d7d95' },
+             ticks: { color: '#4d7d95' }, grid: { color: '#1a3a52' } },
+      }
+    }
+  });
+  document.getElementById('wxTempChart').style.cursor = 'pointer';
+})();
+
+// ── Weather scatter: speed vs wind ────────────────────────────────
+(function() {
+  const windX   = {{ wx_wind_x | tojson }};
+  const windY   = {{ wx_wind_y | tojson }};
+  const rels    = {{ wx_wind_rel | tojson }};
+  const windIds = {{ wx_wind_ids | tojson }};
+
+  const palette = {
+    headwind:   'rgba(239,83,80,0.6)',
+    tailwind:   'rgba(102,187,106,0.6)',
+    crosswind:  'rgba(255,183,77,0.6)',
+    calm:       'rgba(100,181,246,0.6)',
+  };
+  const labels = { headwind: 'Headwind', tailwind: 'Tailwind', crosswind: 'Crosswind', calm: 'Calm' };
+  const datasets = {};
+  for (let i = 0; i < windX.length; i++) {
+    const r = rels[i] || 'calm';
+    if (!datasets[r]) datasets[r] = { label: labels[r] || r, data: [], backgroundColor: palette[r] || 'rgba(150,150,150,0.5)', pointRadius: 3, pointHoverRadius: 5 };
+    datasets[r].data.push({ x: windX[i], y: windY[i], id: windIds[i] });
+  }
+
+  new Chart(document.getElementById('wxWindChart'), {
+    type: 'scatter',
+    data: { datasets: Object.values(datasets) },
+    options: {
+      animation: false,
+      onClick(evt, elements) {
+        if (elements.length) {
+          const el = elements[0];
+          const pt = this.data.datasets[el.datasetIndex].data[el.index];
+          if (pt.id) window.location = '/rides/' + pt.id;
+        }
+      },
+      plugins: { legend: { labels: { color: '#8ab4cc', boxWidth: 10, font: { size: 11 } } } },
+      scales: {
+        x: { title: { display: true, text: 'Wind Speed (kph)', color: '#4d7d95' },
+             ticks: { color: '#4d7d95' }, grid: { color: '#1a3a52' } },
+        y: { title: { display: true, text: 'Avg Speed (mph)', color: '#4d7d95' },
+             ticks: { color: '#4d7d95' }, grid: { color: '#1a3a52' } },
+      }
+    }
+  });
+  document.getElementById('wxWindChart').style.cursor = 'pointer';
+})();
+
+// ── Weather bar: avg speed by condition ───────────────────────────
+(function() {
+  const labels = {{ wx_cond_labels | tojson }};
+  const avgs   = {{ wx_cond_avgs   | tojson }};
+  const counts = {{ wx_cond_counts | tojson }};
+
+  const condColors = {
+    Clear:  'rgba(255,183,77,0.8)',
+    Cloudy: 'rgba(100,181,246,0.8)',
+    Fog:    'rgba(144,164,174,0.8)',
+    Rain:   'rgba(100,181,246,0.55)',
+    Snow:   'rgba(224,247,250,0.8)',
+    Storm:  'rgba(239,83,80,0.8)',
+  };
+
+  new Chart(document.getElementById('wxCondChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Avg Speed (mph)',
+        data: avgs,
+        backgroundColor: labels.map(l => condColors[l] || 'rgba(100,181,246,0.7)'),
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      animation: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            afterLabel: (ctx) => `${counts[ctx.dataIndex]} rides`,
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#8ab4cc' }, grid: { color: '#1a3a52' } },
+        y: { title: { display: true, text: 'Avg Speed (mph)', color: '#4d7d95' },
+             ticks: { color: '#4d7d95' }, grid: { color: '#1a3a52' } },
+      }
+    }
+  });
+})();
+{% endif %}
+</script>
+{% endblock %}

@@ -1,0 +1,226 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ rider.name }}{% endblock %}
+{% block page_title %}{{ rider.name }}{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{{ url_for('riders.index') }}" class="btn btn-secondary">← Riders</a>
+{% endblock %}
+
+{% block content %}
+
+<!-- Profile header -->
+<div class="card" style="margin-bottom:1.5rem;">
+  <div style="display:flex; align-items:center; gap:1.5rem; flex-wrap:wrap;">
+    <div style="position:relative;">
+      {% if rider.avatarPath %}
+        <img src="{{ url_for('static', filename='avatars/' + rider.avatarPath) }}?v={{ rider.id }}"
+             class="rider-avatar" alt="{{ rider.name }}"
+             style="width:160px;height:160px;border-radius:50%;object-fit:cover;border:2px solid var(--border);">
+      {% else %}
+        <span class="rider-initial" style="width:160px;height:160px;font-size:4rem;">{{ rider.name[0] | upper }}</span>
+      {% endif %}
+    </div>
+    <div style="flex:1; min-width:180px;">
+      <div style="font-size:1.5rem; font-weight:700; margin-bottom:0.25rem;">{{ rider.name }}</div>
+      {% if rider.isDefault %}
+      <span style="font-size:0.75rem; background:var(--accent); color:#fff; padding:0.15rem 0.5rem; border-radius:999px;">Owner</span>
+      {% endif %}
+    </div>
+    <div style="display:flex; flex-direction:column; gap:0.75rem; align-items:flex-start;">
+      <!-- Avatar upload -->
+      <form method="POST" action="{{ url_for('riders.upload_avatar', rid=rider.id) }}" enctype="multipart/form-data"
+            style="display:flex; flex-direction:column; gap:0.5rem;">
+        <input type="file" name="avatar" accept="image/*" style="font-size:0.8125rem; color:var(--text-muted);">
+        <button type="submit" class="btn btn-secondary" style="padding:0.4rem 0.75rem;">Upload Photo</button>
+      </form>
+      <!-- Edit name + HA device -->
+      <form method="POST" action="{{ url_for('riders.edit', rid=rider.id) }}"
+            style="display:flex; flex-direction:column; gap:0.5rem;">
+        <div style="display:flex; align-items:center; gap:0.5rem;">
+          <input type="text" name="name" value="{{ rider.name }}" placeholder="Name" style="width:150px; padding:0.4rem 0.6rem;">
+          <button type="submit" class="btn btn-secondary" style="padding:0.4rem 0.75rem;">Save</button>
+        </div>
+        <input type="text" name="haDevice" value="{{ rider.haDevice or '' }}"
+               placeholder="HA device e.g. mobile_app_robs_phone"
+               style="width:280px; padding:0.4rem 0.6rem; font-size:0.8125rem;">
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Stats -->
+<div class="stats-grid" style="margin-bottom:1.5rem;">
+  <div class="stat-card">
+    <div class="stat-value">{{ totals.rides or 0 }}</div>
+    <div class="stat-label">Total Rides</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ (totals.dist or 0) | fmt_dist }}</div>
+    <div class="stat-label">Total Distance</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ (totals.elev or 0) | fmt_elev }}</div>
+    <div class="stat-label">Total Elevation</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ (totals.secs or 0) | fmt_duration }}</div>
+    <div class="stat-label">Total Time</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ "%.1f"|format((totals.elev or 0) / 8849) }}×</div>
+    <div class="stat-label">Mt. Everests Climbed</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ "%.2f"|format((totals.dist or 0) / 40075016.7) }}×</div>
+    <div class="stat-label">Laps of Earth</div>
+  </div>
+  {% if totals.cals %}
+  <div class="stat-card">
+    <div class="stat-value">{{ "{:,}".format((totals.cals or 0) | int) }}</div>
+    <div class="stat-label">Total Calories</div>
+  </div>
+  {% endif %}
+</div>
+
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; margin-bottom:1.5rem;" class="two-col-grid">
+
+  <!-- Segment PRs -->
+  <div class="card">
+    <div class="card-title">Segment PRs</div>
+    {% if seg_prs %}
+    <table style="width:100%;">
+      <tbody>
+        {% for e in seg_prs %}
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:0.6rem 0;">
+            <a href="{{ url_for('segments.detail', sid=e.seg_id) }}" style="color:var(--text); text-decoration:none;">{{ e.seg_name }}</a>
+          </td>
+          <td style="padding:0.6rem 0; text-align:right; font-weight:600; color:var(--accent); font-variant-numeric:tabular-nums;">
+            {{ e.elapsedSecs | fmt_duration }}
+          </td>
+          <td style="padding:0.6rem 0; text-align:right; color:var(--text-muted); font-size:0.8125rem;">
+            {{ e.activityDate | fmt_date }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="color:var(--text-muted); font-size:0.875rem;">No segment efforts yet.</p>
+    {% endif %}
+  </div>
+
+  <!-- Best Efforts -->
+  <div class="card">
+    <div class="card-title">Best Efforts</div>
+    {% if best_by_dist %}
+    <table style="width:100%;">
+      <tbody>
+        {% for dist in brackets %}
+          {% if dist in best_by_dist %}
+          {% set e = best_by_dist[dist] %}
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:0.6rem 0; font-weight:600;">{{ dist }} mi</td>
+            <td style="padding:0.6rem 0; text-align:right; font-weight:600; color:var(--accent); font-variant-numeric:tabular-nums;">
+              {{ e.elapsedSecs | fmt_duration }}
+            </td>
+            <td style="padding:0.6rem 0; text-align:right; color:var(--text-muted); font-size:0.8125rem;">
+              {% if e.avgSpeedMps %}{{ (e.avgSpeedMps * 2.23694) | round(1) }} mph{% endif %}
+            </td>
+          </tr>
+          {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="color:var(--text-muted); font-size:0.875rem;">No best efforts recorded yet.</p>
+    {% endif %}
+  </div>
+
+</div>
+
+<!-- Trophy case -->
+{% set total_earned = namespace(n=0) %}
+{% set total_badges = namespace(n=0) %}
+{% for cat in badges %}
+  {% for b in cat.badges %}
+    {% set total_badges.n = total_badges.n + 1 %}
+    {% if b.earned %}{% set total_earned.n = total_earned.n + 1 %}{% endif %}
+  {% endfor %}
+{% endfor %}
+<div class="card" style="margin-bottom:1.5rem;">
+  <div class="card-title">
+    Trophy Case
+    <span style="font-size:0.8125rem; font-weight:400; color:var(--text-muted); margin-left:0.5rem;">
+      {{ total_earned.n }} / {{ total_badges.n }} earned
+    </span>
+  </div>
+  {% for cat in badges %}
+  <div style="margin-bottom:1.25rem;">
+    <div style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em;
+                color:var(--text-muted); margin-bottom:0.6rem; padding-bottom:0.4rem;
+                border-bottom:1px solid var(--border);">
+      {{ cat.name }}
+      <span style="font-weight:400; margin-left:0.4rem;">
+        {{ cat.badges | selectattr('earned') | list | length }}/{{ cat.badges | length }}
+      </span>
+    </div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:0.6rem;">
+      {% for b in cat.badges %}
+      {% set tag = 'a' if (b.earned and b.ride_id) else 'div' %}
+      <{{ tag }}
+        {% if b.earned and b.ride_id %}href="/rides/{{ b.ride_id }}"{% endif %}
+        style="display:flex; flex-direction:column; align-items:center; gap:0.3rem; padding:0.75rem 0.4rem;
+               border-radius:0.5rem; text-align:center; text-decoration:none;
+               background:{% if b.earned %}rgba(252,76,2,0.08){% else %}transparent{% endif %};
+               border:1px solid {% if b.earned %}rgba(252,76,2,0.3){% else %}var(--border){% endif %};
+               opacity:{% if b.earned %}1{% else %}0.35{% endif %};
+               {% if b.earned and b.ride_id %}cursor:pointer;{% endif %}
+               transition:border-color 0.15s, background 0.15s;">
+        <span style="font-size:1.75rem; line-height:1;">{{ b.icon }}</span>
+        <span style="font-size:0.775rem; font-weight:600; color:{% if b.earned %}var(--text){% else %}var(--text-muted){% endif %}; line-height:1.2;">{{ b.name }}</span>
+        <span style="font-size:0.7rem; color:var(--text-muted); line-height:1.3;">{{ b.desc }}</span>
+        {% if b.earned and b.earned_date %}
+          <span style="font-size:0.7rem; color:var(--accent);">{{ b.earned_date | fmt_date }}</span>
+        {% endif %}
+      </{{ tag }}>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Recent rides -->
+{% if recent %}
+<div class="card">
+  <div class="card-title">Recent Rides</div>
+  <table style="width:100%;">
+    <tbody>
+      {% for a in recent %}
+      <tr class="ride-row" onclick="location.href='/rides/{{ a.id }}'">
+        <td>
+          <span style="margin-right:0.4rem;">{{ a.sportType | sport_icon }}</span>
+          {{ a.name }}
+        </td>
+        <td>{{ a.startDateLocal | fmt_date }}</td>
+        <td>{{ a.distance | fmt_dist }}</td>
+        <td class="text-muted">{{ a.movingTime | fmt_duration }}</td>
+        <td class="text-muted">{{ a.averageSpeed | fmt_speed }}</td>
+        <td class="text-muted">{{ a.totalElevationGain | fmt_elev }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<style>
+@media (max-width: 768px) {
+  .two-col-grid { grid-template-columns: 1fr !important; }
+}
+</style>
+{% endblock %}

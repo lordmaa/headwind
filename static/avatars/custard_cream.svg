@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Background circle -->
+  <circle cx="50" cy="50" r="48" fill="#1a3a2a"/>
+  <!-- Biscuit body -->
+  <rect x="14" y="30" width="72" height="40" rx="5" fill="#d4973a"/>
+  <!-- Highlight on top biscuit face -->
+  <rect x="14" y="30" width="72" height="19" rx="5" fill="#e0a84a"/>
+  <!-- Cream filling stripe -->
+  <rect x="14" y="47" width="72" height="6" fill="#f5e8b0"/>
+  <rect x="14" y="49" width="72" height="2" fill="#fffde0"/>
+  <!-- Top biscuit embossed border -->
+  <rect x="18" y="33" width="64" height="13" rx="3" fill="none" stroke="#b8782a" stroke-width="1" opacity="0.7"/>
+  <!-- Top dot pattern -->
+  <circle cx="30" cy="39.5" r="2" fill="#b8782a" opacity="0.55"/>
+  <circle cx="41" cy="39.5" r="2" fill="#b8782a" opacity="0.55"/>
+  <circle cx="50" cy="39.5" r="2" fill="#b8782a" opacity="0.55"/>
+  <circle cx="59" cy="39.5" r="2" fill="#b8782a" opacity="0.55"/>
+  <circle cx="70" cy="39.5" r="2" fill="#b8782a" opacity="0.55"/>
+  <!-- Bottom biscuit embossed border -->
+  <rect x="18" y="54" width="64" height="13" rx="3" fill="none" stroke="#b8782a" stroke-width="1" opacity="0.7"/>
+  <!-- Bottom dot pattern -->
+  <circle cx="30" cy="60.5" r="2" fill="#b8782a" opacity="0.55"/>
+  <circle cx="41" cy="60.5" r="2" fill="#b8782a" opacity="0.55"/>
+  <circle cx="50" cy="60.5" r="2" fill="#b8782a" opacity="0.55"/>
+  <circle cx="59" cy="60.5" r="2" fill="#b8782a" opacity="0.55"/>
+  <circle cx="70" cy="60.5" r="2" fill="#b8782a" opacity="0.55"/>
+</svg>

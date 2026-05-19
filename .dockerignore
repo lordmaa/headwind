@@ -1,0 +1,29 @@
+# Secrets and local config
+.env
+
+# Database files (fresh DB is created in the /data volume on first run)
+*.db
+*.db-shm
+*.db-wal
+
+# Personal avatar photos
+static/avatars/rider_*.jpg
+
+# Garmin auth tokens (persisted in a named volume, not the image)
+.garmin_tokens/
+
+# Python bytecode
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Git
+.git/
+.gitignore
+
+# Docs / dev tools only
+CLAUDE.md
+AGENTS.md
+backfill_weather.py
+garmin_setup.py

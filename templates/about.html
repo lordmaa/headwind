@@ -1,0 +1,187 @@
+{% extends 'base.html' %}
+{% block title %}About{% endblock %}
+{% block page_title %}About{% endblock %}
+
+{% block content %}
+<div style="max-width:860px;">
+
+  <div class="card" style="margin-bottom:1.5rem;">
+    <div class="card-header">BikeTracker</div>
+    <div class="card-body">
+      <p style="color:var(--text-muted); margin:0 0 0.5rem;">
+        A self-hosted cycling dashboard built with Flask and SQLite.
+        Syncs from Strava, supports manual FIT/GPX imports, and runs on your own hardware.
+      </p>
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(380px,1fr)); gap:1.25rem;">
+
+    <div class="card">
+      <div class="card-header">Ride Tracking</div>
+      <div class="card-body">
+        <ul class="about-list">
+          <li><strong>Strava sync</strong> — full activity history via OAuth, automatic webhook sync when you finish a ride</li>
+          <li><strong>File import</strong> — drag-and-drop <code>.fit</code>, <code>.gpx</code>, or zipped Strava export with live progress</li>
+          <li><strong>GPX export</strong> — download any ride as a GPX file from the ride page</li>
+          <li><strong>Multi-rider</strong> — each rider gets their own profile, stats, segment PRs, best efforts, trophy case, and per-rider dashboard view</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">Ride Detail</div>
+      <div class="card-body">
+        <ul class="about-list">
+          <li><strong>Satellite map</strong> — ESRI World Imagery with roads and place-name overlay</li>
+          <li>Elevation, heart rate, power, cadence, and speed stream charts</li>
+          <li>Wind direction arrows overlaid on the map, colour-coded by strength</li>
+          <li>Segment efforts and PRs for that ride</li>
+          <li>Co-rider badges for others who rode the same day</li>
+          <li>AI coaching analysis — on-demand or auto on webhook sync</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">Trophy Case</div>
+      <div class="card-body">
+        <ul class="about-list">
+          <li>Per-rider badge collection across 8 categories: Ride Count, Distance, Elevation, Epic Rides, Speed, Climbing, Weather, and Segments</li>
+          <li>Milestone badges (1st ride, 1,000th ride, 50K miles, 100 Everests…) link directly to the ride that earned them</li>
+          <li>Weather badges for cold, hot, rain, storms, and headwinds — with count progressions and personal records</li>
+          <li><strong>Record Low / Record Gale</strong> — always link to the coldest and windiest rides in your history</li>
+          <li>Speed and climbing badges calibrated per-rider</li>
+          <li>Earned count shown at the top; unearned badges shown at reduced opacity as goals</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">Analytics</div>
+      <div class="card-body">
+        <ul class="about-list">
+          <li>Speed over time with 20-ride rolling average</li>
+          <li>Monthly distance, year-on-year comparison, activity heatmap</li>
+          <li>Ride length distribution, rides by day of week</li>
+          <li>Calories over time</li>
+          <li><strong>Weather scatter charts</strong> — speed vs temperature, speed vs wind, average speed by condition; each dot links to that ride</li>
+          <li>Per-rider switcher — pill UI to flip between riders without leaving the page</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">Achievements</div>
+      <div class="card-body">
+        <ul class="about-list">
+          <li>Best efforts at 5, 10, 20, 30, 50, and 100 miles — fastest continuous stretch per ride</li>
+          <li>Year and month filter dropdowns</li>
+          <li>AI coaching prompt includes any records set on the current ride</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">Segments</div>
+      <div class="card-body">
+        <ul class="about-list">
+          <li>Define custom GPS segments on any ride map — click start, click end, name it</li>
+          <li>Retroactive scan against all historical rides on creation</li>
+          <li>Per-rider PRs, leaderboard, effort history, difficulty rating (Easy → Brutal)</li>
+          <li>6-month trend charts per segment</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">Weather</div>
+      <div class="card-body">
+        <ul class="about-list">
+          <li>Automatic weather fetch on every sync and file import via Open-Meteo (free, no API key)</li>
+          <li>Temperature, wind speed/direction/gusts, humidity, rain, and WMO condition code</li>
+          <li>Wind relation (headwind/tailwind/crosswind/calm) calculated from GPS route bearing</li>
+          <li>Backfill button in Settings for historical rides</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">AI Coaching</div>
+      <div class="card-body">
+        <ul class="about-list">
+          <li>GPT-4o / GPT-4o-mini or local Ollama model</li>
+          <li>Prompt includes ride stats, weather, segment comparisons, similar-ride history, and Garmin recovery data</li>
+          <li>Deliberately blunt tone — told to say when a ride was poor, not to encourage</li>
+          <li>Auto-generated on new rides via Strava webhook; manually triggered on older rides</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">Recovery (Garmin Connect)</div>
+      <div class="card-body">
+        <ul class="about-list">
+          <li>Pulls resting HR, HRV, sleep score, and body battery from Garmin Connect</li>
+          <li>30/60/90-day charts for each metric</li>
+          <li>Recovery context fed into the AI coaching prompt for the ride's date</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">Home Assistant</div>
+      <div class="card-body">
+        <ul class="about-list">
+          <li><strong>17 MQTT sensors</strong> — total rides, distance, elevation, calories, time, Everests climbed, laps of Earth, last ride details</li>
+          <li><strong>Auto-updates every 20 seconds</strong> via background heartbeat thread</li>
+          <li><strong>Ride notifications</strong> — tappable HA companion app notification fires when a new ride syncs, links directly to the ride page; routed per-rider</li>
+          <li>Manual "Publish to HA" button in Settings</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">GPS Heatmap</div>
+      <div class="card-body">
+        <ul class="about-list">
+          <li>Full-history GPS heatmap with date range filter</li>
+          <li>HD export at 3440×1440 PNG with CARTO dark basemap</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">Stack</div>
+      <div class="card-body">
+        <ul class="about-list">
+          <li><strong>Backend</strong> — Python / Flask, SQLite</li>
+          <li><strong>Frontend</strong> — Vanilla JS, Chart.js 4.4, Leaflet 1.9</li>
+          <li><strong>Data sources</strong> — Strava API, Open-Meteo, Garmin Connect</li>
+          <li><strong>Integrations</strong> — Home Assistant via MQTT, ntfy.sh</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<style>
+.about-list {
+  margin: 0;
+  padding: 0 0 0 1.1rem;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  line-height: 1.7;
+}
+.about-list li { margin-bottom: 0.3rem; }
+.about-list strong { color: var(--text); }
+.about-list code {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 0.3em;
+  font-size: 0.8125rem;
+}
+</style>
+{% endblock %}

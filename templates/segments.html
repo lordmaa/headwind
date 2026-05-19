@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+
+{% block title %}Segments{% endblock %}
+{% block page_title %}Segments{% endblock %}
+
+{% block topbar_actions %}
+  <button class="btn btn-secondary" id="scanBtn" onclick="scanAll()">Rescan All Rides</button>
+{% endblock %}
+
+{% block content %}
+
+{% if not segments %}
+<div class="card" style="max-width:600px; text-align:center; padding:3rem 2rem;">
+  <div style="font-size:2.5rem; margin-bottom:1rem;">🏁</div>
+  <div class="card-title">No segments yet</div>
+  <p style="color:var(--text-muted); font-size:0.9375rem; line-height:1.7; margin-bottom:0;">
+    Open any ride that has a map, then click <strong style="color:var(--text);">Create Segment</strong>
+    to mark a start and end point on your route.
+  </p>
+</div>
+{% else %}
+<div class="card" style="padding:0; overflow:hidden;">
+  <table style="width:100%; border-collapse:collapse;">
+    <thead>
+      <tr style="border-bottom:1px solid #1e4060;">
+        <th style="padding:0.875rem 1.25rem; text-align:left; font-size:0.75rem; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:0.05em;">Segment</th>
+        <th style="padding:0.875rem 0.5rem; text-align:left; font-size:0.75rem; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:0.05em;">KOM</th>
+        <th style="padding:0.875rem 1rem; text-align:right; font-size:0.75rem; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:0.05em;">Best Time</th>
+        <th style="padding:0.875rem 1rem; text-align:right; font-size:0.75rem; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:0.05em;">Efforts</th>
+        <th style="padding:0.875rem 1rem; text-align:right; font-size:0.75rem; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:0.05em;">Distance</th>
+        <th style="padding:0.875rem 1.25rem;"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in segments %}
+      {% set kom = kom_map.get(s.id) %}
+      <tr style="border-bottom:1px solid #1e4060; transition:background 0.15s;"
+          onmouseover="this.style.background='rgba(255,255,255,0.02)'"
+          onmouseout="this.style.background=''">
+        <td style="padding:1rem 1.25rem;">
+          <div style="font-weight:600; color:var(--text);">{{ s.name }}</div>
+          {% if s.pr_date %}
+          <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.2rem;">PR set {{ s.pr_date | fmt_date }}</div>
+          {% endif %}
+        </td>
+        <td style="padding:1rem 0.5rem;">
+          {% set koms = kom_map.get(s.id, []) %}
+          {% if koms %}
+            <div style="display:flex;gap:2px;align-items:center;">
+              {% for k in koms %}
+                {% if k.rider_avatar %}
+                  <img src="{{ url_for('static', filename='avatars/' + k.rider_avatar) }}"
+                       class="rider-avatar" alt="{{ k.rider_name }}" title="{{ k.rider_name }}"
+                       data-rider-id="{{ k.rider_id }}" style="width:26px;height:26px;cursor:pointer;">
+                {% else %}
+                  <span class="rider-initial" title="{{ k.rider_name }}" style="width:26px;height:26px;font-size:0.75rem;">{{ k.rider_name[0] | upper }}</span>
+                {% endif %}
+              {% endfor %}
+            </div>
+          {% else %}—{% endif %}
+        </td>
+        <td style="padding:1rem; text-align:right; font-weight:600; color:var(--accent); font-variant-numeric:tabular-nums;">
+          {% if s.best_secs %}{{ s.best_secs | fmt_duration }}{% else %}—{% endif %}
+        </td>
+        <td style="padding:1rem; text-align:right; color:var(--text-muted);">{{ s.effort_count }}</td>
+        <td style="padding:1rem; text-align:right; color:var(--text-muted);">
+          {% if s.distanceM %}{{ (s.distanceM / 1609.344) | round(1) }} mi{% else %}—{% endif %}
+        </td>
+        <td style="padding:1rem 1.25rem; text-align:right;">
+          <a href="{{ url_for('segments.detail', sid=s.id) }}" class="btn btn-secondary" style="font-size:0.8125rem; padding:0.35rem 0.875rem;">View</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<div id="scanStatus" style="margin-top:1rem; font-size:0.875rem; color:var(--text-muted); display:none;"></div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function scanAll() {
+  const btn = document.getElementById('scanBtn');
+  const status = document.getElementById('scanStatus');
+  btn.disabled = true;
+  btn.textContent = 'Scanning…';
+  status.style.display = 'block';
+  status.textContent = 'Scanning all rides against all segments…';
+  fetch('/segments/scan', { method: 'POST' })
+    .then(r => r.json())
+    .then(d => {
+      status.textContent = `✓ Scanned ${d.scanned} activities — reload to see updated results`;
+      btn.disabled = false;
+      btn.textContent = 'Rescan All Rides';
+    })
+    .catch(() => {
+      status.textContent = 'Scan failed';
+      btn.disabled = false;
+      btn.textContent = 'Rescan All Rides';
+    });
+}
+</script>
+{% endblock %}

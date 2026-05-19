@@ -1,0 +1,348 @@
+{% extends 'base.html' %}
+
+{% block title %}Ride Heatmap{% endblock %}
+{% block page_title %}Ride Heatmap{% endblock %}
+
+{% block head %}
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    #heatMap { height: calc(100vh - 130px); width: 100%; border-radius: 10px; }
+    #mapOverlay {
+      position: absolute; top: 1rem; right: 1rem; z-index: 1000;
+      display: flex; flex-direction: column; gap: 0.5rem;
+      background: rgba(7,20,33,0.88); border: 1px solid #1e4060;
+      border-radius: 8px; padding: 0.65rem 0.85rem;
+      backdrop-filter: blur(6px);
+      min-width: 260px;
+    }
+    .overlay-row {
+      display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+    }
+    .preset-btn {
+      font-size: 0.75rem; padding: 0.2rem 0.55rem;
+      border-radius: 999px; border: 1px solid #1e4060;
+      background: transparent; color: var(--text-muted);
+      cursor: pointer; transition: background 0.12s, color 0.12s, border-color 0.12s;
+      white-space: nowrap;
+    }
+    .preset-btn:hover  { background: #0e2437; color: var(--text); }
+    .preset-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .preset-btn:disabled { opacity: 0.5; cursor: default; }
+    .date-input {
+      background: #071525; color: var(--text);
+      border: 1px solid #1e4060; border-radius: 6px;
+      padding: 0.2rem 0.4rem; font-size: 0.8125rem;
+      flex: 1; min-width: 110px;
+      color-scheme: dark;
+    }
+    .date-input:focus { outline: none; border-color: var(--accent); }
+    #rideCount  { font-size: 0.8125rem; color: var(--text-muted); }
+    #loadingMsg { font-size: 0.8125rem; color: #fc4c02; display: none; }
+    #exportBtn  {
+      margin-left: auto;
+      font-size: 0.75rem; padding: 0.2rem 0.65rem;
+      border-radius: 999px; border: 1px solid #1e4060;
+      background: transparent; color: var(--text-muted);
+      cursor: pointer; transition: background 0.12s, color 0.12s;
+      white-space: nowrap;
+    }
+    #exportBtn:hover:not(:disabled) { background: #0e2437; color: var(--text); }
+    #exportBtn:disabled { opacity: 0.45; cursor: default; }
+  </style>
+{% endblock %}
+
+{% block content %}
+<div style="position:relative;">
+  <div id="mapOverlay">
+    <!-- Presets -->
+    <div class="overlay-row">
+      <button class="preset-btn" onclick="applyPreset(this,'all')">All Time</button>
+      <button class="preset-btn" onclick="applyPreset(this,'year')">This Year</button>
+      <button class="preset-btn" onclick="applyPreset(this,'lastyear')">Last Year</button>
+      <button class="preset-btn" onclick="applyPreset(this,'6m')">6 Months</button>
+      <button class="preset-btn" onclick="applyPreset(this,'30d')">30 Days</button>
+    </div>
+    <!-- Custom range -->
+    <div class="overlay-row">
+      <input type="date" id="fromDate" class="date-input"
+             min="{{ min_date }}" max="{{ max_date }}"
+             onchange="applyCustom()">
+      <span style="color:var(--text-muted); font-size:0.8125rem;">→</span>
+      <input type="date" id="toDate" class="date-input"
+             min="{{ min_date }}" max="{{ max_date }}"
+             onchange="applyCustom()">
+    </div>
+    <!-- Map layer -->
+    <div class="overlay-row">
+      <button class="preset-btn active" id="layer-dark"     onclick="setLayer('dark',     this)">Dark</button>
+      <button class="preset-btn"        id="layer-light"    onclick="setLayer('light',    this)">Light</button>
+      <button class="preset-btn"        id="layer-sat"      onclick="setLayer('sat',      this)">Satellite</button>
+      <button class="preset-btn"        id="layer-satlabel" onclick="setLayer('satlabel', this)">Sat + Labels</button>
+    </div>
+    <!-- Status + export -->
+    <div class="overlay-row">
+      <span id="loadingMsg">Loading…</span>
+      <span id="rideCount"></span>
+      <button id="exportBtn" onclick="exportHD()" disabled>⬇ Export 3440×1440</button>
+    </div>
+  </div>
+  <div id="heatMap"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var map = L.map('heatMap', { zoomControl: true });
+
+var TILE_DEFS = {
+  dark:     [{ url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',   opts: { attribution: '© CARTO', maxZoom: 19, subdomains: 'abcd' } }],
+  light:    [{ url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',  opts: { attribution: '© CARTO', maxZoom: 19, subdomains: 'abcd' } }],
+  sat:      [{ url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', opts: { attribution: '© Esri', maxZoom: 19 } }],
+  satlabel: [
+    { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',                  opts: { maxZoom: 19 } },
+    { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', opts: { maxZoom: 19 } },
+  ],
+};
+var EXPORT_LAYERS = { dark: ['dark'], light: ['light'], sat: ['satellite'], satlabel: ['satellite', 'labels'] };
+
+var activeTileLayers = [];
+var currentLayerKey  = 'dark';
+
+function setLayer(key, btn) {
+  activeTileLayers.forEach(function(l) { map.removeLayer(l); });
+  activeTileLayers = [];
+  (TILE_DEFS[key] || TILE_DEFS.dark).forEach(function(def) {
+    activeTileLayers.push(L.tileLayer(def.url, def.opts).addTo(map));
+  });
+  // Re-add layerGroup so tracks stay on top of base tiles
+  if (typeof layerGroup !== 'undefined') layerGroup.addTo(map);
+  currentLayerKey = key;
+  document.querySelectorAll('[id^="layer-"]').forEach(function(b) { b.classList.remove('active'); });
+  if (btn) btn.classList.add('active');
+}
+
+var layerGroup = L.layerGroup();
+setLayer('dark', document.getElementById('layer-dark'));
+layerGroup.addTo(map);
+var initialLoad = true;
+var currentFrom = '', currentTo = '';
+var currentCount = 0;
+
+function opacityFor(count) {
+  if (count < 30)  return 0.55;
+  if (count < 100) return 0.32;
+  if (count < 300) return 0.20;
+  if (count < 600) return 0.13;
+  return 0.09;
+}
+
+function loadRange(from, to) {
+  document.getElementById('loadingMsg').style.display = 'inline';
+  document.getElementById('rideCount').textContent = '';
+  document.getElementById('exportBtn').disabled = true;
+  currentFrom = from; currentTo = to;
+
+  var params = new URLSearchParams();
+  if (from) params.set('from', from);
+  if (to)   params.set('to', to);
+
+  fetch('/heatmap/data?' + params.toString())
+    .then(r => r.json())
+    .then(function(d) {
+      layerGroup.clearLayers();
+      var opacity = opacityFor(d.count);
+      var bounds  = [];
+
+      d.tracks.forEach(function(pts) {
+        if (!pts || pts.length < 2) return;
+        L.polyline(pts, { color: '#fc4c02', weight: 2, opacity: opacity, interactive: false })
+         .addTo(layerGroup);
+        pts.forEach(function(p) { bounds.push(p); });
+      });
+
+      if (initialLoad && bounds.length) {
+        map.fitBounds(L.latLngBounds(bounds), { padding: [20, 20] });
+        initialLoad = false;
+      }
+
+      currentCount = d.count;
+      document.getElementById('loadingMsg').style.display = 'none';
+      document.getElementById('rideCount').textContent =
+        d.count + ' ride' + (d.count !== 1 ? 's' : '');
+      document.getElementById('exportBtn').disabled = d.count === 0;
+    })
+    .catch(function() {
+      document.getElementById('loadingMsg').style.display = 'none';
+    });
+}
+
+function setActive(btn) {
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+}
+
+function applyPreset(btn, preset) {
+  var today = new Date();
+  var from  = '', to = '';
+  if (preset === 'year') {
+    from = today.getFullYear() + '-01-01';
+    to   = today.toISOString().slice(0, 10);
+  } else if (preset === 'lastyear') {
+    var y = today.getFullYear() - 1;
+    from = y + '-01-01'; to = y + '-12-31';
+  } else if (preset === '6m') {
+    var d = new Date(today); d.setMonth(d.getMonth() - 6);
+    from = d.toISOString().slice(0, 10);
+    to   = today.toISOString().slice(0, 10);
+  } else if (preset === '30d') {
+    var d = new Date(today); d.setDate(d.getDate() - 30);
+    from = d.toISOString().slice(0, 10);
+    to   = today.toISOString().slice(0, 10);
+  }
+  document.getElementById('fromDate').value = from;
+  document.getElementById('toDate').value   = to;
+  setActive(btn);
+  loadRange(from, to);
+}
+
+function applyCustom() {
+  var from = document.getElementById('fromDate').value;
+  var to   = document.getElementById('toDate').value;
+  setActive(null);
+  loadRange(from, to);
+}
+
+// ── HD Canvas Export ─────────────────────────────────────────────
+function exportHD() {
+  var btn = document.getElementById('exportBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Fetching tiles…';
+
+  var W = 3440, H = 1440;
+  var mapSize = map.getSize();
+  var scaleX  = W / mapSize.x;
+  var scaleY  = H / mapSize.y;
+  var zoom    = Math.round(map.getZoom());
+  var TILE    = 256;  // logical tile size (proxy returns @2x 512px for sharpness)
+  var maxT    = Math.pow(2, zoom) - 1;
+
+  // Work out which tiles cover the current viewport (+1 tile bleed each side)
+  var bounds  = map.getBounds();
+  var centerP = map.project(map.getCenter(), zoom);
+
+  function latLngToTileXY(latlng) {
+    var p = map.project(latlng, zoom);
+    return { tx: Math.floor(p.x / TILE), ty: Math.floor(p.y / TILE) };
+  }
+  var nwT = latLngToTileXY(bounds.getNorthWest());
+  var seT = latLngToTileXY(bounds.getSouthEast());
+
+  var tileList = [];
+  for (var ty = Math.max(0, nwT.ty - 1); ty <= Math.min(maxT, seT.ty + 1); ty++) {
+    for (var tx = Math.max(0, nwT.tx - 1); tx <= Math.min(maxT, seT.tx + 1); tx++) {
+      tileList.push({ tx: tx, ty: ty });
+    }
+  }
+
+  // Fetch tile images via server proxy (bypasses CORS) — one set per layer
+  var exportLayerNames = EXPORT_LAYERS[currentLayerKey] || ['dark'];
+  var tileLayerPromises = exportLayerNames.map(function(layerName) {
+    return Promise.all(tileList.map(function(t) {
+      return new Promise(function(resolve) {
+        var img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload  = function() { resolve({ img: img, tx: t.tx, ty: t.ty }); };
+        img.onerror = function() { resolve(null); };
+        img.src = '/heatmap/tile/' + zoom + '/' + t.tx + '/' + t.ty + '?layer=' + layerName;
+      });
+    }));
+  });
+
+  // Fetch HD track data
+  var params = new URLSearchParams();
+  if (currentFrom) params.set('from', currentFrom);
+  if (currentTo)   params.set('to', currentTo);
+  params.set('hd', '1');
+  var trackPromise = fetch('/heatmap/data?' + params.toString()).then(r => r.json());
+
+  Promise.all([trackPromise, Promise.all(tileLayerPromises)])
+    .then(function(results) {
+      var trackData      = results[0];
+      var tileLayerSets  = results[1];
+
+      btn.textContent = '⏳ Rendering…';
+      setTimeout(function() {
+        var canvas = document.createElement('canvas');
+        canvas.width = W; canvas.height = H;
+        var ctx = canvas.getContext('2d');
+
+        // Dark background (shows behind any missing tiles)
+        ctx.fillStyle = '#050d18';
+        ctx.fillRect(0, 0, W, H);
+
+        // Draw map tile layers in order (base first, then overlays)
+        ctx.globalAlpha = 1;
+        tileLayerSets.forEach(function(tileImages) {
+          tileImages.forEach(function(t) {
+            if (!t) return;
+            var cx = (t.tx * TILE - centerP.x + mapSize.x / 2) * scaleX;
+            var cy = (t.ty * TILE - centerP.y + mapSize.y / 2) * scaleY;
+            ctx.drawImage(t.img, cx, cy, TILE * scaleX, TILE * scaleY);
+          });
+        });
+
+        // Draw routes on top — alpha accumulates so busy segments glow
+        if (trackData.tracks.length) {
+          function project(lat, lng) {
+            var pt = map.latLngToContainerPoint(L.latLng(lat, lng));
+            return [pt.x * scaleX, pt.y * scaleY];
+          }
+
+          var alpha = Math.max(0.12, 4.0 / Math.max(trackData.tracks.length, 1));
+          ctx.strokeStyle = '#fc4c02';
+          ctx.lineWidth   = 1.8;
+          ctx.lineCap     = 'round';
+          ctx.lineJoin    = 'round';
+          ctx.globalAlpha = alpha;
+
+          trackData.tracks.forEach(function(pts) {
+            if (pts.length < 2) return;
+            ctx.beginPath();
+            var p0 = project(pts[0][0], pts[0][1]);
+            ctx.moveTo(p0[0], p0[1]);
+            for (var i = 1; i < pts.length; i++) {
+              var p = project(pts[i][0], pts[i][1]);
+              ctx.lineTo(p[0], p[1]);
+            }
+            ctx.stroke();
+          });
+        }
+
+        canvas.toBlob(function(blob) {
+          var url   = URL.createObjectURL(blob);
+          var a     = document.createElement('a');
+          var label = (currentFrom && currentTo)
+            ? currentFrom + '_' + currentTo
+            : (currentFrom || currentTo || 'all-time');
+          a.href     = url;
+          a.download = 'heatmap_' + label + '.png';
+          a.click();
+          setTimeout(function() { URL.revokeObjectURL(url); }, 2000);
+          btn.disabled = false;
+          btn.textContent = '⬇ Export 3440×1440';
+        }, 'image/png');
+
+      }, 30);
+    })
+    .catch(function(e) {
+      console.error('Export failed:', e);
+      btn.disabled = false;
+      btn.textContent = '⬇ Export 3440×1440';
+    });
+}
+
+// Default: this year
+applyPreset(document.querySelector('.preset-btn:nth-child(2)'), 'year');
+</script>
+{% endblock %}

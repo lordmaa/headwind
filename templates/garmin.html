@@ -1,0 +1,389 @@
+{% extends 'base.html' %}
+
+{% block title %}Recovery{% endblock %}
+{% block page_title %}Recovery{% endblock %}
+
+{% block topbar_actions %}
+<div style="display:flex; gap:0.5rem; align-items:center;">
+  {% for d in [30, 60, 90] %}
+  <a href="?days={{ d }}"
+     class="btn {% if days == d %}btn-primary{% else %}btn-secondary{% endif %}"
+     style="padding:0.3rem 0.75rem; font-size:0.8125rem;">{{ d }}d</a>
+  {% endfor %}
+  <button class="btn btn-secondary" id="syncBtn" onclick="doSync()"
+          style="padding:0.3rem 0.75rem; font-size:0.8125rem;">Sync</button>
+  <span id="syncStatus" style="font-size:0.8125rem; color:var(--text-muted);"></span>
+</div>
+{% endblock %}
+
+{% block head %}
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+
+{% if not table_rows %}
+<div class="card" style="color:var(--text-muted);">
+  No Garmin data yet for this period. Hit <strong>Sync</strong> above, or configure credentials in
+  <a href="/settings" style="color:var(--accent);">Settings</a>.
+</div>
+{% else %}
+
+<div style="text-align:right; margin-bottom:0.4rem; font-size:0.75rem; color:var(--text-muted);">
+  <span style="color:rgba(252,76,2,0.9);">&#9650;</span> Rode
+</div>
+
+<div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:1rem; margin-bottom:1rem;">
+
+  <div class="card" style="margin:0;">
+    <div class="card-title">Resting Heart Rate</div>
+    <div style="height:180px; position:relative;">
+      <canvas id="rhrChart"></canvas>
+    </div>
+  </div>
+
+  <div class="card" style="margin:0;">
+    <div class="card-title">Body Battery</div>
+    <div style="height:180px; position:relative;">
+      <canvas id="batteryChart"></canvas>
+    </div>
+  </div>
+
+  <div class="card" style="margin:0;">
+    <div class="card-title">Sleep</div>
+    <div style="height:180px; position:relative;">
+      <canvas id="sleepChart"></canvas>
+    </div>
+  </div>
+
+</div>
+
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1.5rem;">
+
+  <div class="card" style="margin:0;">
+    <div class="card-title">Daily Steps</div>
+    <div style="height:180px; position:relative;">
+      <canvas id="stepsChart"></canvas>
+    </div>
+  </div>
+
+  <div class="card" style="margin:0;">
+    <div class="card-title">Stress Score</div>
+    <div style="height:180px; position:relative;">
+      <canvas id="stressChart"></canvas>
+    </div>
+  </div>
+
+</div>
+
+<div class="card">
+  <div class="card-title">Daily Log</div>
+  <div style="overflow-x:auto;">
+    <table style="width:100%; border-collapse:collapse; font-size:0.875rem;">
+      <thead>
+        <tr style="border-bottom:1px solid var(--border);">
+          <th style="padding:0.5rem 0.75rem; text-align:left; color:var(--text-muted); font-weight:500;">Date</th>
+          <th style="padding:0.5rem 0.75rem; text-align:right; color:var(--text-muted); font-weight:500;">Resting HR</th>
+          <th style="padding:0.5rem 0.75rem; text-align:right; color:var(--text-muted); font-weight:500;">HRV</th>
+          <th style="padding:0.5rem 0.75rem; text-align:right; color:var(--text-muted); font-weight:500;">Sleep</th>
+          <th style="padding:0.5rem 0.75rem; text-align:right; color:var(--text-muted); font-weight:500;">Sleep Score</th>
+          <th style="padding:0.5rem 0.75rem; text-align:right; color:var(--text-muted); font-weight:500;">Body Battery</th>
+          <th style="padding:0.5rem 0.75rem; text-align:right; color:var(--text-muted); font-weight:500;">Steps</th>
+          <th style="padding:0.5rem 0.75rem; text-align:right; color:var(--text-muted); font-weight:500;">Stress</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in table_rows %}
+        <tr style="border-bottom:1px solid rgba(22,51,82,0.5);">
+          <td style="padding:0.5rem 0.75rem; color:var(--text);">{{ r.date | fmt_date }}</td>
+          <td style="padding:0.5rem 0.75rem; text-align:right; color:var(--text);">
+            {% if r.restingHR %}
+              <span style="color:{{ '#ef4444' if r.restingHR > 65 else ('#f59e0b' if r.restingHR > 58 else 'var(--success)') }};">
+                {{ r.restingHR }} bpm
+              </span>
+            {% else %}—{% endif %}
+          </td>
+          <td style="padding:0.5rem 0.75rem; text-align:right; color:var(--text);">
+            {% if r.hrv %}{{ r.hrv }}{% else %}—{% endif %}
+          </td>
+          <td style="padding:0.5rem 0.75rem; text-align:right; color:var(--text);">
+            {% if r.sleepHours %}{{ r.sleepHours }}h{% else %}—{% endif %}
+          </td>
+          <td style="padding:0.5rem 0.75rem; text-align:right; color:var(--text);">
+            {% if r.sleepScore %}{{ r.sleepScore }}{% else %}—{% endif %}
+          </td>
+          <td style="padding:0.5rem 0.75rem; text-align:right;">
+            {% if r.bodyBattery %}
+              <span style="color:{{ '#ef4444' if r.bodyBattery < 25 else ('#f59e0b' if r.bodyBattery < 50 else 'var(--success)') }};">
+                {{ r.bodyBattery }}%
+              </span>
+            {% else %}—{% endif %}
+          </td>
+          <td style="padding:0.5rem 0.75rem; text-align:right; color:var(--text);">
+            {% if r.steps %}{{ '{:,}'.format(r.steps) }}{% else %}—{% endif %}
+          </td>
+          <td style="padding:0.5rem 0.75rem; text-align:right;">
+            {% if r.stressScore %}
+              <span style="color:{{ '#ef4444' if r.stressScore > 60 else ('#f59e0b' if r.stressScore > 35 else 'var(--success)') }};">
+                {{ r.stressScore }}
+              </span>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const labels     = {{ labels | tojson }};
+const rhrData    = {{ rhr | tojson }};
+const batData    = {{ battery | tojson }};
+const sleepData  = {{ sleep | tojson }};
+const stepsData  = {{ steps | tojson }};
+const stressData = {{ stress | tojson }};
+const rideData   = {{ has_ride | tojson }};
+
+const shortLabels = labels.map(d => {
+  const dt = new Date(d + 'T00:00:00');
+  return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+});
+
+const baseOpts = (yLabel, yCallback) => ({
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { display: false },
+    tooltip: { callbacks: { label: ctx => ctx.raw !== null ? yCallback(ctx.raw) : 'no data' } },
+  },
+  scales: {
+    x: {
+      ticks: { color: '#4d7d95', font: { size: 10 }, maxTicksLimit: 10 },
+      grid: { display: false },
+    },
+    y: {
+      ticks: { color: '#4d7d95', font: { size: 11 }, callback: v => yCallback(v) },
+      grid: { color: '#163352' },
+    },
+    yRide: {
+      display: false,
+      min: 0, max: 2,
+    },
+  },
+});
+
+const rideDataset = {
+  data: rideData,
+  type: 'scatter',
+  yAxisID: 'yRide',
+  pointRadius: 5,
+  pointHoverRadius: 6,
+  pointStyle: 'triangle',
+  backgroundColor: 'rgba(252,76,2,0.7)',
+  borderColor: 'rgba(252,76,2,0.9)',
+  label: 'Rode',
+};
+
+// Resting HR
+const rhrEl = document.getElementById('rhrChart');
+if (rhrEl && rhrData.some(v => v !== null)) {
+  new Chart(rhrEl, {
+    type: 'line',
+    data: {
+      labels: shortLabels,
+      datasets: [
+        {
+          data: rhrData,
+          borderColor: '#fc4c02',
+          backgroundColor: 'rgba(252,76,2,0.08)',
+          borderWidth: 2,
+          pointRadius: rhrData.map(v => v !== null ? 4 : 0),
+          pointHoverRadius: 6,
+          pointBackgroundColor: '#fc4c02',
+          fill: true,
+          tension: 0.3,
+          spanGaps: false,
+        },
+        { ...rideDataset },
+      ],
+    },
+    options: {
+      ...baseOpts('bpm', v => v + ' bpm'),
+      scales: {
+        ...baseOpts('bpm', v => v + ' bpm').scales,
+        y: { ...baseOpts('bpm', v => v + ' bpm').scales.y, suggestedMin: 40, suggestedMax: 80 },
+      },
+    },
+  });
+}
+
+// Body Battery
+const batEl = document.getElementById('batteryChart');
+if (batEl && batData.some(v => v !== null)) {
+  new Chart(batEl, {
+    type: 'line',
+    data: {
+      labels: shortLabels,
+      datasets: [
+        {
+          data: batData,
+          borderColor: '#10b981',
+          backgroundColor: 'rgba(16,185,129,0.08)',
+          borderWidth: 2,
+          pointRadius: batData.map(v => v !== null ? 4 : 0),
+          pointHoverRadius: 6,
+          pointBackgroundColor: '#10b981',
+          fill: true,
+          tension: 0.3,
+          spanGaps: false,
+        },
+        { ...rideDataset },
+      ],
+    },
+    options: {
+      ...baseOpts('%', v => v + '%'),
+      scales: {
+        ...baseOpts('%', v => v + '%').scales,
+        y: { ...baseOpts('%', v => v + '%').scales.y, min: 0, max: 100 },
+      },
+    },
+  });
+}
+
+// Sleep
+const sleepEl = document.getElementById('sleepChart');
+if (sleepEl && sleepData.some(v => v !== null)) {
+  new Chart(sleepEl, {
+    type: 'bar',
+    data: {
+      labels: shortLabels,
+      datasets: [
+        {
+          data: sleepData,
+          backgroundColor: sleepData.map(v =>
+            v === null ? 'transparent' :
+            v < 6 ? 'rgba(239,68,68,0.6)' :
+            v < 7 ? 'rgba(245,158,11,0.6)' :
+            'rgba(168,85,247,0.6)'
+          ),
+          borderColor: sleepData.map(v =>
+            v === null ? 'transparent' :
+            v < 6 ? '#ef4444' : v < 7 ? '#f59e0b' : '#a855f7'
+          ),
+          borderWidth: 1,
+          borderRadius: 3,
+        },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ctx.raw !== null ? ctx.raw + 'h' : 'no data' } },
+      },
+      scales: {
+        x: { ticks: { color: '#4d7d95', font: { size: 10 }, maxTicksLimit: 10 }, grid: { display: false } },
+        y: {
+          ticks: { color: '#4d7d95', font: { size: 11 }, callback: v => v + 'h' },
+          grid: { color: '#163352' },
+          beginAtZero: true,
+          suggestedMax: 10,
+        },
+      },
+    },
+  });
+}
+
+// Steps
+const stepsEl = document.getElementById('stepsChart');
+if (stepsEl && stepsData.some(v => v !== null)) {
+  new Chart(stepsEl, {
+    type: 'bar',
+    data: {
+      labels: shortLabels,
+      datasets: [
+        {
+          data: stepsData,
+          backgroundColor: 'rgba(99,102,241,0.5)',
+          borderColor: '#6366f1',
+          borderWidth: 1,
+          borderRadius: 3,
+        },
+        { ...rideDataset },
+      ],
+    },
+    options: {
+      ...baseOpts('steps', v => v.toLocaleString()),
+      scales: {
+        ...baseOpts('steps', v => v.toLocaleString()).scales,
+        y: { ...baseOpts('steps', v => v.toLocaleString()).scales.y, beginAtZero: true },
+      },
+    },
+  });
+}
+
+// Stress
+const stressEl = document.getElementById('stressChart');
+if (stressEl && stressData.some(v => v !== null)) {
+  new Chart(stressEl, {
+    type: 'line',
+    data: {
+      labels: shortLabels,
+      datasets: [
+        {
+          data: stressData,
+          borderColor: '#f59e0b',
+          backgroundColor: 'rgba(245,158,11,0.08)',
+          borderWidth: 2,
+          pointRadius: stressData.map(v => v !== null ? 4 : 0),
+          pointHoverRadius: 6,
+          pointBackgroundColor: stressData.map(v =>
+            v === null ? 'transparent' : v > 60 ? '#ef4444' : v > 35 ? '#f59e0b' : '#10b981'
+          ),
+          fill: true,
+          tension: 0.3,
+          spanGaps: false,
+        },
+        { ...rideDataset },
+      ],
+    },
+    options: {
+      ...baseOpts('stress', v => String(v)),
+      scales: {
+        ...baseOpts('stress', v => String(v)).scales,
+        y: { ...baseOpts('stress', v => String(v)).scales.y, min: 0, max: 100 },
+      },
+    },
+  });
+}
+
+function doSync() {
+  const btn = document.getElementById('syncBtn');
+  const status = document.getElementById('syncStatus');
+  btn.disabled = true;
+  status.textContent = 'Syncing…';
+  fetch('/garmin/sync', { method: 'POST' })
+    .then(r => r.json())
+    .then(d => {
+      if (d.error) {
+        status.textContent = 'Error: ' + d.error;
+        status.style.color = 'var(--danger)';
+        btn.disabled = false;
+      } else {
+        status.textContent = '✓ Done';
+        status.style.color = 'var(--success)';
+        setTimeout(() => location.reload(), 800);
+      }
+    })
+    .catch(() => {
+      status.textContent = 'Failed';
+      status.style.color = 'var(--danger)';
+      btn.disabled = false;
+    });
+}
+</script>
+{% endblock %}

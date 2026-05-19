@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+
+{% block title %}Riders{% endblock %}
+{% block page_title %}Riders{% endblock %}
+
+{% block topbar_actions %}
+  <button class="btn btn-primary" onclick="document.getElementById('addRiderModal').style.display='flex'">+ Add Rider</button>
+{% endblock %}
+
+{% block content %}
+
+<div class="riders-grid">
+  {% for r in riders %}
+  <a href="{{ url_for('riders.detail', rid=r.id) }}" class="rider-card">
+    {% if r.avatarPath %}
+      <img src="{{ url_for('static', filename='avatars/' + r.avatarPath) }}" class="rider-avatar" alt="{{ r.name }}">
+    {% else %}
+      <span class="rider-initial">{{ r.name[0] | upper }}</span>
+    {% endif %}
+    <div style="font-weight:600; font-size:1rem;">{{ r.name }}</div>
+    <div style="font-size:0.8125rem; color:var(--text-muted);">
+      {{ r.ride_count or 0 }} ride{% if r.ride_count != 1 %}s{% endif %}
+      {% if r.total_dist %}&middot; {{ r.total_dist | fmt_dist }}{% endif %}
+    </div>
+    {% if r.isDefault %}
+    <span style="font-size:0.7rem; background:var(--accent); color:#fff; padding:0.15rem 0.5rem; border-radius:999px;">Owner</span>
+    {% endif %}
+  </a>
+  {% endfor %}
+</div>
+
+<!-- Add rider modal -->
+<div id="addRiderModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:300; align-items:center; justify-content:center;">
+  <div class="card" style="width:360px; max-width:90vw;">
+    <div class="card-title">Add Rider</div>
+    <form method="POST" action="{{ url_for('riders.create') }}">
+      <div class="form-group">
+        <label for="newRiderName">Name</label>
+        <input type="text" id="newRiderName" name="name" placeholder="e.g. Smithy" required autofocus>
+      </div>
+      <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
+        <button type="submit" class="btn btn-primary">Create</button>
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('addRiderModal').style.display='none'">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,731 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ activity.name }}{% endblock %}
+{% block page_title %}{{ activity.sportType | sport_icon }} {{ activity.name }}<span style="font-size:0.875rem;font-weight:400;color:var(--text-muted);margin-left:0.6rem;">{{ activity.startDateLocal | fmt_date }}</span>{% endblock %}
+
+{% block topbar_actions %}
+  {% if activity.riderName %}
+    <a href="{{ url_for('riders.detail', rid=activity.riderId) }}" title="{{ activity.riderName }}" style="display:inline-flex;align-items:center;text-decoration:none;">
+      {% if activity.riderAvatar %}
+        <img src="{{ url_for('static', filename='avatars/' + activity.riderAvatar) }}" alt="{{ activity.riderName }}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;border:1px solid var(--border);">
+      {% else %}
+        <span class="rider-initial" style="width:28px;height:28px;font-size:0.75rem;">{{ activity.riderName[0] | upper }}</span>
+      {% endif %}
+    </a>
+  {% endif %}
+  {% for r in co_riders %}
+    <a href="{{ url_for('riders.detail', rid=r.id) }}" title="{{ r.name }}" style="display:inline-flex;align-items:center;text-decoration:none;">
+      {% if r.avatarPath %}
+        <img src="{{ url_for('static', filename='avatars/' + r.avatarPath) }}" alt="{{ r.name }}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;border:1px solid var(--border);">
+      {% else %}
+        <span class="rider-initial" style="width:28px;height:28px;font-size:0.75rem;">{{ r.name[0] | upper }}</span>
+      {% endif %}
+    </a>
+  {% endfor %}
+  {% if prev_ride %}
+    <a href="{{ url_for('rides.detail', rid=prev_ride.id) }}" class="btn btn-secondary" title="{{ prev_ride.name }}">‹ Prev</a>
+  {% else %}
+    <span class="btn btn-secondary" style="opacity:0.3;cursor:default;">‹ Prev</span>
+  {% endif %}
+  {% if next_ride %}
+    <a href="{{ url_for('rides.detail', rid=next_ride.id) }}" class="btn btn-secondary" title="{{ next_ride.name }}">Next ›</a>
+  {% else %}
+    <span class="btn btn-secondary" style="opacity:0.3;cursor:default;">Next ›</span>
+  {% endif %}
+  <a href="{{ url_for('rides.export_gpx', rid=activity.id) }}" class="btn btn-secondary" title="Download GPX">GPX</a>
+  <a href="{{ url_for('dashboard.dashboard') }}" class="btn btn-secondary">← Back</a>
+  <form method="POST" action="{{ url_for('rides.delete', rid=activity.id) }}" style="display:inline;" onsubmit="return confirm('Delete this activity? This cannot be undone.')">
+    <button type="submit" class="btn" style="background:var(--danger,#ef4444);color:#fff;border:none;">Delete</button>
+  </form>
+{% endblock %}
+
+{% block head %}
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  {% if coords %}
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+
+<!-- Stats grid -->
+<div class="stats-grid" style="margin-bottom:1.5rem;">
+
+  <div class="stat-card">
+    <div class="stat-value">{{ activity.distance | fmt_dist }}</div>
+    <div class="stat-label">Distance</div>
+    {% if activity.distance and activity.movingTime %}
+      {% set pace_secs = (activity.movingTime / (activity.distance / 1609.344)) | int %}
+      {% set pace_m = pace_secs // 60 %}
+      {% set pace_s = pace_secs % 60 %}
+      <div class="stat-sub">{{ pace_m }}:{% if pace_s < 10 %}0{% endif %}{{ pace_s }} /mi pace</div>
+    {% endif %}
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-value">{{ activity.movingTime | fmt_duration }}</div>
+    <div class="stat-label">Moving Time</div>
+    {% if activity.elapsedTime and activity.elapsedTime != activity.movingTime %}
+      <div class="stat-sub">{{ activity.elapsedTime | fmt_duration }} elapsed</div>
+    {% endif %}
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-value">{{ activity.averageSpeed | fmt_speed }}</div>
+    <div class="stat-label">Avg Speed</div>
+    {% if activity.maxSpeed %}
+      <div class="stat-sub">{{ activity.maxSpeed | fmt_speed }} max</div>
+    {% endif %}
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-value">{{ activity.totalElevationGain | fmt_elev }}</div>
+    <div class="stat-label">Elevation Gain</div>
+    {% if elev_loss_ft %}
+      <div class="stat-sub">↓ {{ elev_loss_ft | int }} ft loss</div>
+    {% endif %}
+  </div>
+
+  {% if activity.averageHeartrate %}
+  <div class="stat-card">
+    <div class="stat-value">{{ activity.averageHeartrate | int }} bpm</div>
+    <div class="stat-label">Avg Heart Rate</div>
+    {% if activity.maxHeartrate %}
+      <div class="stat-sub">{{ activity.maxHeartrate | int }} bpm max</div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if activity.averageWatts %}
+  <div class="stat-card">
+    <div class="stat-value">{{ activity.averageWatts | int }} W</div>
+    <div class="stat-label">Avg Power</div>
+    {% if activity.maxWatts %}
+      <div class="stat-sub">{{ activity.maxWatts | int }} W max</div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if activity.weightedAvgWatts %}
+  <div class="stat-card">
+    <div class="stat-value">{{ activity.weightedAvgWatts | int }} W</div>
+    <div class="stat-label">Weighted Avg Power</div>
+    {% if activity.kilojoules %}
+      <div class="stat-sub">{{ activity.kilojoules | int }} kJ</div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if activity.averageCadence %}
+  <div class="stat-card">
+    <div class="stat-value">{{ activity.averageCadence | int }} rpm</div>
+    <div class="stat-label">Avg Cadence</div>
+  </div>
+  {% endif %}
+
+  {% if activity.calories %}
+  <div class="stat-card">
+    <div class="stat-value">{{ activity.calories | int }}</div>
+    <div class="stat-label">Calories</div>
+  </div>
+  {% endif %}
+
+
+  {% if mywindsock %}
+  {% if mywindsock.impact %}
+  <div class="stat-card">
+    <div class="stat-value">{{ mywindsock.impact }}</div>
+    <div class="stat-label">Weather Impact</div>
+  </div>
+  {% endif %}
+  {% if mywindsock.headwind %}
+  <div class="stat-card">
+    <div class="stat-value">{{ mywindsock.headwind }}</div>
+    <div class="stat-label">Headwind</div>
+    {% if mywindsock.longest_headwind %}<div class="stat-sub">Longest {{ mywindsock.longest_headwind }}</div>{% endif %}
+  </div>
+  {% endif %}
+  {% if mywindsock.air_speed %}
+  <div class="stat-card">
+    <div class="stat-value">{{ mywindsock.air_speed }}</div>
+    <div class="stat-label">Air Speed</div>
+  </div>
+  {% endif %}
+  {% if mywindsock.temp %}
+  <div class="stat-card">
+    <div class="stat-value">{{ mywindsock.temp }}</div>
+    <div class="stat-label">Temperature</div>
+  </div>
+  {% endif %}
+  {% if mywindsock.precip %}
+  <div class="stat-card">
+    <div class="stat-value">{{ mywindsock.precip }}</div>
+    <div class="stat-label">Precip</div>
+  </div>
+  {% endif %}
+  {% endif %}
+
+</div>
+
+<!-- Weather -->
+{% if activity.weatherSummary %}
+<div class="card" style="margin-bottom:1.5rem; padding:1rem 1.25rem;">
+  <div style="font-size:0.6875rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted); font-weight:600; margin-bottom:0.75rem;">Weather at ride start</div>
+  <div style="display:flex; flex-wrap:wrap; gap:2rem; align-items:flex-start;">
+
+    {% if activity.weatherTempC is not none %}
+    <div>
+      <div style="font-size:1.5rem; font-weight:700; color:var(--text); line-height:1;">{{ activity.weatherTempC | int }}°C</div>
+      {% if activity.weatherCode is not none %}
+      <div style="font-size:0.8125rem; color:var(--text-muted); margin-top:0.25rem;">{{ activity.weatherCode | wmo_label }}</div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if activity.weatherWindKph %}
+    <div>
+      <div style="font-size:1.25rem; font-weight:700; color:var(--text); line-height:1;">
+        {{ activity.weatherWindKph | int }} kph <span id="wdCompass" style="font-size:0.9rem; color:var(--text-muted); font-weight:400;"></span>
+        {% if activity.weatherGustKph and activity.weatherGustKph > activity.weatherWindKph * 1.2 and activity.weatherGustKph > 15 %}
+        <span style="font-size:0.8125rem; color:var(--text-muted); font-weight:400;">· gusts {{ activity.weatherGustKph | int }}</span>
+        {% endif %}
+      </div>
+      <div style="margin-top:0.35rem;">
+        {% if activity.weatherWindRel == 'headwind' %}
+          <span style="font-size:0.75rem; padding:0.15rem 0.45rem; border-radius:3px; font-weight:600; background:#7f1d1d; color:#fca5a5;">Headwind</span>
+        {% elif activity.weatherWindRel == 'tailwind' %}
+          <span style="font-size:0.75rem; padding:0.15rem 0.45rem; border-radius:3px; font-weight:600; background:#14532d; color:#86efac;">Tailwind</span>
+        {% elif activity.weatherWindRel == 'crosswind' %}
+          <span style="font-size:0.75rem; padding:0.15rem 0.45rem; border-radius:3px; font-weight:600; background:#1e3a8a; color:#93c5fd;">Crosswind</span>
+        {% else %}
+          <span style="font-size:0.8125rem; color:var(--text-muted);">Calm</span>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if activity.weatherHumidity is not none %}
+    <div>
+      <div style="font-size:1.25rem; font-weight:700; color:var(--text); line-height:1;">{{ activity.weatherHumidity }}%</div>
+      <div style="font-size:0.8125rem; color:var(--text-muted); margin-top:0.25rem;">Humidity</div>
+    </div>
+    {% endif %}
+
+    {% if activity.weatherRainMm and activity.weatherRainMm > 0.1 %}
+    <div>
+      <div style="font-size:1.25rem; font-weight:700; color:#60a5fa; line-height:1;">{{ activity.weatherRainMm }}mm</div>
+      <div style="font-size:0.8125rem; color:var(--text-muted); margin-top:0.25rem;">Rain</div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endif %}
+
+<!-- Milestone badges earned on this ride -->
+{% if ride_badges %}
+<div class="card" style="margin-bottom:1.5rem; padding:1rem 1.25rem;">
+  <div style="font-size:0.6875rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted); font-weight:600; margin-bottom:0.75rem;">Milestones unlocked</div>
+  <div style="display:flex; flex-wrap:wrap; gap:0.6rem;">
+    {% for b in ride_badges %}
+    <div style="display:flex; align-items:center; gap:0.5rem; padding:0.5rem 0.85rem;
+                border-radius:999px; border:1px solid rgba(252,76,2,0.4);
+                background:rgba(252,76,2,0.08);">
+      <span style="font-size:1.25rem; line-height:1;">{{ b.icon }}</span>
+      <div>
+        <div style="font-size:0.8125rem; font-weight:700; color:var(--text);">{{ b.name }}</div>
+        <div style="font-size:0.7rem; color:var(--text-muted);">{{ b.desc }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Map + Charts -->
+{% set has_charts = charts.elevation or charts.speed or charts.heartrate or charts.power or charts.cadence %}
+{% if coords or has_charts %}
+<div class="map-charts-grid {% if coords and has_charts %}has-both{% endif %}">
+
+  {% if coords %}
+  <div class="card map-card">
+    <div id="map" style="height:520px;"></div>
+  </div>
+  {% endif %}
+
+  {% if has_charts %}
+  <div class="charts-col">
+    {% if charts.elevation %}
+    <div class="card">
+      <div class="card-title">Elevation (ft)</div>
+      <canvas id="elevChart"></canvas>
+    </div>
+    {% endif %}
+    {% if charts.speed %}
+    <div class="card">
+      <div class="card-title">Speed (mph)</div>
+      <canvas id="speedChart"></canvas>
+    </div>
+    {% endif %}
+    {% if charts.heartrate %}
+    <div class="card">
+      <div class="card-title">Heart Rate (bpm)</div>
+      <canvas id="hrChart"></canvas>
+    </div>
+    {% endif %}
+    {% if charts.power %}
+    <div class="card">
+      <div class="card-title">Power (W)</div>
+      <canvas id="powerChart"></canvas>
+    </div>
+    {% endif %}
+    {% if charts.cadence %}
+    <div class="card">
+      <div class="card-title">Cadence (rpm)</div>
+      <canvas id="cadenceChart"></canvas>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+</div>
+{% endif %}
+
+<!-- Segments -->
+
+{% if coords %}
+<div class="card" style="margin-top:1rem;" id="segmentsCard">
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.75rem;">
+    <div class="card-title" style="margin:0;">Segments</div>
+    <div style="display:flex;gap:0.5rem;align-items:center;">
+      <button class="btn btn-secondary" style="font-size:0.8125rem;" onclick="enterSegmentMode()">+ Create Segment</button>
+      <button class="btn btn-secondary" style="font-size:0.8125rem;" id="scanBtn" onclick="scanSegments('{{ activity.id }}')">Scan for segments</button>
+      <span id="scanResult" style="font-size:0.8125rem;color:var(--text-muted);display:none;"></span>
+    </div>
+  </div>
+
+  {% if seg_efforts %}
+  <table style="width:100%; border-collapse:collapse; margin-bottom:0.5rem;">
+    <thead>
+      <tr style="border-bottom:1px solid #1e4060;">
+        <th style="padding:0.5rem 0; text-align:left; font-size:0.75rem; color:var(--text-muted); font-weight:600;">Segment</th>
+        <th style="padding:0.5rem 0; text-align:right; font-size:0.75rem; color:var(--text-muted); font-weight:600;">Time</th>
+        <th style="padding:0.5rem 0; text-align:right; font-size:0.75rem; color:var(--text-muted); font-weight:600;">Speed</th>
+        <th style="padding:0.5rem 0; text-align:right; font-size:0.75rem; color:var(--text-muted); font-weight:600;">Trend</th>
+        <th style="padding:0.5rem 0; text-align:right; font-size:0.75rem; color:var(--text-muted); font-weight:600;"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in seg_efforts %}
+      <tr style="border-bottom:1px solid #163352;">
+        <td style="padding:0.6rem 0;">
+          <a href="{{ url_for('segments.detail', sid=e.seg_id) }}" style="color:var(--text); text-decoration:none; font-size:0.9375rem;">{{ e.seg_name }}</a>
+          {% if e.isPR %}<span style="margin-left:0.4rem; font-size:0.7rem; background:var(--accent); color:#fff; padding:0.1rem 0.35rem; border-radius:4px;">PR</span>{% endif %}
+        </td>
+        <td style="padding:0.6rem 0; text-align:right; vertical-align:middle;">
+          <div style="display:flex; align-items:center; justify-content:flex-end; gap:0.6rem; flex-wrap:wrap;">
+            {# This rider's time #}
+            <span style="display:inline-flex; align-items:center; gap:0.3rem;">
+              {% if activity.riderAvatar %}
+                <img src="{{ url_for('static', filename='avatars/' + activity.riderAvatar) }}" alt="{{ activity.riderName }}" title="{{ activity.riderName }}" data-rider-id="{{ activity.riderId }}" style="width:16px;height:16px;border-radius:50%;object-fit:cover;cursor:pointer;">
+              {% else %}
+                <span style="width:16px;height:16px;border-radius:50%;background:#163352;display:inline-flex;align-items:center;justify-content:center;font-size:0.55rem;font-weight:700;">{{ (activity.riderName or '?')[0] | upper }}</span>
+              {% endif %}
+              <span style="font-weight:600; font-variant-numeric:tabular-nums; color:{% if e.isPR %}var(--accent){% else %}var(--text){% endif %};">{{ e.elapsedSecs | fmt_duration }}</span>
+            </span>
+            {# Other riders' times on the same day #}
+            {% for rival in seg_rivals.get(e.seg_id, []) %}
+            <span style="display:inline-flex; align-items:center; gap:0.3rem;">
+              {% if rival.rider_avatar %}
+                <img src="{{ url_for('static', filename='avatars/' + rival.rider_avatar) }}" alt="{{ rival.rider_name }}" title="{{ rival.rider_name }}" data-rider-id="{{ rival.rider_id }}" style="width:16px;height:16px;border-radius:50%;object-fit:cover;cursor:pointer;">
+              {% else %}
+                <span style="width:16px;height:16px;border-radius:50%;background:#163352;display:inline-flex;align-items:center;justify-content:center;font-size:0.55rem;font-weight:700;">{{ rival.rider_name[0] | upper }}</span>
+              {% endif %}
+              <span style="font-weight:600; font-variant-numeric:tabular-nums; color:{% if rival.elapsedSecs < e.elapsedSecs %}var(--success){% elif rival.elapsedSecs > e.elapsedSecs %}var(--danger){% else %}var(--text-muted){% endif %};">{{ rival.elapsedSecs | fmt_duration }}</span>
+              {% if rival.isPR %}<span style="font-size:0.7rem; background:var(--accent); color:#fff; padding:0.1rem 0.35rem; border-radius:4px;">PR</span>{% endif %}
+            </span>
+            {% endfor %}
+          </div>
+        </td>
+        <td style="padding:0.6rem 0; text-align:right; color:var(--text-muted); font-size:0.875rem; vertical-align:middle;">
+          {% if e.avgSpeedMps %}{{ (e.avgSpeedMps * 2.23694) | round(1) }} mph{% else %}—{% endif %}
+        </td>
+        <td style="padding:0.6rem 0; text-align:right; vertical-align:middle; white-space:nowrap;">
+          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0.25rem;">
+            {# Owner's trend #}
+            {% set trend = seg_trends.get(e.seg_id) %}
+            <span style="display:inline-flex; align-items:center; gap:0.25rem;">
+              {% if activity.riderAvatar %}
+                <img src="{{ url_for('static', filename='avatars/' + activity.riderAvatar) }}" alt="{{ activity.riderName }}" data-rider-id="{{ activity.riderId }}" style="width:14px;height:14px;border-radius:50%;object-fit:cover;cursor:pointer;">
+              {% else %}
+                <span style="width:14px;height:14px;border-radius:50%;background:#163352;display:inline-flex;align-items:center;justify-content:center;font-size:0.5rem;font-weight:700;">{{ (activity.riderName or '?')[0] | upper }}</span>
+              {% endif %}
+              {% if trend %}
+                {% if trend.dir == 'up' %}
+                  <span style="color:#10b981; font-size:1rem; font-weight:700;" title="{{ trend.delta | fmt_duration }} faster">↑</span><span style="color:#10b981; font-size:0.75rem;">{{ trend.delta | fmt_duration }}</span>
+                {% elif trend.dir == 'down' %}
+                  <span style="color:#ef4444; font-size:1rem; font-weight:700;" title="{{ trend.delta | fmt_duration }} slower">↓</span><span style="color:#ef4444; font-size:0.75rem;">{{ trend.delta | fmt_duration }}</span>
+                {% else %}
+                  <span style="color:var(--text-muted); font-size:0.875rem;">—</span>
+                {% endif %}
+              {% else %}
+                <span style="color:var(--text-muted); font-size:0.875rem;">—</span>
+              {% endif %}
+            </span>
+            {# Rival trends #}
+            {% for rival in seg_rivals.get(e.seg_id, []) %}
+              {% set rt = rival_trends.get(rival.rider_id, {}).get(e.seg_id) %}
+              <span style="display:inline-flex; align-items:center; gap:0.25rem;">
+                {% if rival.rider_avatar %}
+                  <img src="{{ url_for('static', filename='avatars/' + rival.rider_avatar) }}" alt="{{ rival.rider_name }}" data-rider-id="{{ rival.rider_id }}" style="width:14px;height:14px;border-radius:50%;object-fit:cover;cursor:pointer;">
+                {% else %}
+                  <span style="width:14px;height:14px;border-radius:50%;background:#163352;display:inline-flex;align-items:center;justify-content:center;font-size:0.5rem;font-weight:700;">{{ rival.rider_name[0] | upper }}</span>
+                {% endif %}
+                {% if rt %}
+                  {% if rt.dir == 'up' %}
+                    <span style="color:#10b981; font-size:1rem; font-weight:700;" title="{{ rt.delta | fmt_duration }} faster">↑</span><span style="color:#10b981; font-size:0.75rem;">{{ rt.delta | fmt_duration }}</span>
+                  {% elif rt.dir == 'down' %}
+                    <span style="color:#ef4444; font-size:1rem; font-weight:700;" title="{{ rt.delta | fmt_duration }} slower">↓</span><span style="color:#ef4444; font-size:0.75rem;">{{ rt.delta | fmt_duration }}</span>
+                  {% else %}
+                    <span style="color:var(--text-muted); font-size:0.875rem;">—</span>
+                  {% endif %}
+                {% else %}
+                  <span style="color:var(--text-muted); font-size:0.875rem;">—</span>
+                {% endif %}
+              </span>
+            {% endfor %}
+          </div>
+        </td>
+        <td style="padding:0.6rem 0; text-align:right; vertical-align:top;"><a href="{{ url_for('segments.detail', sid=e.seg_id) }}" style="font-size:0.8125rem; color:var(--text-muted);">→</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:var(--text-muted); font-size:0.875rem; margin:0 0 0.5rem;">No segment efforts on this ride yet.</p>
+  {% endif %}
+
+  <!-- Segment creation panel -->
+  <div id="segPanel" style="display:none; margin-top:1rem; border-top:1px solid #1e4060; padding-top:1rem;">
+    <p id="segInstructions" style="color:var(--accent); font-size:0.875rem; margin-bottom:0.75rem; font-weight:500;">
+      Click on the map to set the START point
+    </p>
+    <div id="segForm" style="display:none;">
+      <form method="POST" action="{{ url_for('segments.create') }}">
+        <input type="hidden" name="activityId" value="{{ activity.id }}">
+        <input type="hidden" name="startLat"   id="segStartLat">
+        <input type="hidden" name="startLng"   id="segStartLng">
+        <input type="hidden" name="endLat"     id="segEndLat">
+        <input type="hidden" name="endLng"     id="segEndLng">
+        <input type="hidden" name="distanceM"  id="segDistM">
+        <input type="hidden" name="polyline"    id="segPolyline">
+        <input type="hidden" name="elevGainM"  id="segElevGainM">
+        <div class="form-group" style="margin-bottom:0.75rem;">
+          <label>Segment name</label>
+          <input type="text" name="name" placeholder="e.g. Lumley Lane Climb" required autofocus>
+        </div>
+        <div style="display:flex; gap:0.5rem;">
+          <button type="submit" class="btn btn-primary">Save Segment &amp; Scan All Rides</button>
+          <button type="button" class="btn btn-secondary" onclick="cancelSegment()">Cancel</button>
+        </div>
+      </form>
+    </div>
+    <div id="segReset" style="display:none; margin-top:0.5rem;">
+      <button class="btn btn-secondary" style="font-size:0.8125rem;" onclick="resetSegmentMode()">↺ Pick different points</button>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Ride Notes -->
+<div class="card" style="margin-top:1rem;">
+  <div class="card-title">Ride Notes</div>
+  <p style="font-size:0.8125rem; color:var(--text-muted); margin:0 0 0.75rem;">Anything the AI should know — GPS dropout, mechanical, cut short, how you felt, etc.</p>
+  <textarea id="rideNotes" rows="3" style="width:100%; box-sizing:border-box; background:var(--surface,#0f2535); color:var(--text); border:1px solid var(--border,#1e4060); border-radius:6px; padding:0.6rem 0.75rem; font-size:0.9375rem; font-family:inherit; resize:vertical; line-height:1.5;">{{ activity.notes or '' }}</textarea>
+  <div style="display:flex; align-items:center; gap:0.75rem; margin-top:0.6rem;">
+    <button class="btn btn-secondary" onclick="saveNotes('{{ activity.id }}')">Save notes</button>
+    <span id="notesSaved" style="font-size:0.8125rem; color:var(--text-muted); display:none;">Saved</span>
+  </div>
+</div>
+
+<!-- AI Coaching Analysis -->
+{% if is_ride %}
+<div class="card" style="margin-top:1rem;" id="kudosCard">
+  <div class="card-title">AI Coaching Analysis</div>
+
+  <div style="margin-bottom:1rem;">
+    <select id="personalitySelect" style="padding:0.4rem 0.6rem; font-size:0.8125rem; background:var(--card-bg); color:var(--text); border:1px solid var(--border); border-radius:0.375rem;">
+      {% for key, p in personalities.items() %}
+      <option value="{{ key }}" {% if current_personality and current_personality.coachPersonality == key %}selected{% elif not current_personality and key == 'default' %}selected{% endif %}>{{ p.label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  {% if activity.aiKudos %}
+    <div id="kudosText" style="line-height:1.9; color:var(--text); white-space:pre-wrap;">{{ activity.aiKudos }}</div>
+    <div style="margin-top:1rem; display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
+      <button class="btn btn-secondary" onclick="getKudos('{{ activity.id }}')">
+        {% if has_memory %}Regenerate with history{% else %}Regenerate{% endif %}
+      </button>
+      <span style="font-size:0.8125rem; color:var(--text-muted);">Generated {{ activity.aiKudosAt | fmt_date }}{% if has_memory %} · using ride history{% endif %}</span>
+    </div>
+  {% else %}
+    <p style="color:var(--text-muted); margin-bottom:1rem;">
+      Get a personalised coaching analysis{% if has_memory %} comparing this ride against your history{% endif %}.
+    </p>
+    <button class="btn btn-primary" onclick="getKudos('{{ activity.id }}')">
+      {% if has_memory %}Analyse with history{% else %}Analyse Ride{% endif %}
+    </button>
+  {% endif %}
+  <div id="kudosSpinner" style="display:none; margin-top:0.75rem; color:var(--text-muted); font-size:0.875rem;">Generating analysis…</div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+{% if coords %}
+(function() {
+  var coords = {{ coords | tojson }};
+  window._rideCoords = coords;
+  window._rideAlt    = {{ alt_raw | tojson }};
+  var map = L.map('map');
+  window._rideMap = map;
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics', maxZoom: 19
+  }).addTo(map);
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 19, opacity: 1
+  }).addTo(map);
+  if (coords.length) {
+    var line = L.polyline(coords, { color: '#fc4c02', weight: 3 }).addTo(map);
+    map.fitBounds(line.getBounds(), { padding: [20, 20] });
+    L.circleMarker(coords[0], {
+      color: '#10b981', fillColor: '#10b981', fillOpacity: 1, radius: 7, weight: 2
+    }).addTo(map).bindPopup('Start');
+    L.marker(coords[coords.length - 1], {
+      icon: L.divIcon({ html: '<div style="font-size:20px;line-height:1;">🏁</div>', className: '', iconAnchor: [10, 20] })
+    }).addTo(map).bindPopup('Finish');
+  }
+})();
+{% endif %}
+
+{% if coords %}
+{% if activity.weatherWindDir is not none and activity.weatherWindKph %}
+(function() {
+  var map = window._rideMap;
+  var coords = window._rideCoords;
+  if (!map || !coords || !coords.length) return;
+  var windDir = {{ activity.weatherWindDir }};
+  var windKph = {{ activity.weatherWindKph }};
+  var arrowDeg = (windDir + 180) % 360;
+  var color = windKph < 15 ? '#64b5f6' : windKph < 30 ? '#ffb74d' : '#ef5350';
+  var sw = windKph < 15 ? 10 : windKph < 30 ? 12 : 14;
+  var sh = Math.round(sw * 1.4);
+  var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + sw + '" height="' + sh + '" viewBox="0 0 10 14">'
+          + '<polygon points="5,0 10,14 5,10 0,14" fill="' + color + '"/></svg>';
+  var step = Math.max(1, Math.floor(coords.length / 10));
+  for (var i = step; i < coords.length - 1; i += step) {
+    L.marker(coords[i], {
+      icon: L.divIcon({
+        html: '<div style="transform:rotate(' + arrowDeg + 'deg);transform-origin:center;opacity:0.8;line-height:0;pointer-events:none;">' + svg + '</div>',
+        className: '',
+        iconSize: [sw, sh],
+        iconAnchor: [sw / 2, sh / 2]
+      }),
+      interactive: false
+    }).addTo(map);
+  }
+})();
+{% endif %}
+{% endif %}
+
+// ── Segment creation ─────────────────────────────────────────────
+var _segState = { active: false, startIdx: null, endIdx: null,
+                  startMarker: null, endMarker: null, segLine: null };
+
+function nearestRouteIdx(lat, lng) {
+  var best = 0, bestD = Infinity, coords = window._rideCoords || [];
+  for (var i = 0; i < coords.length; i++) {
+    var dl = coords[i][0] - lat, dm = coords[i][1] - lng;
+    var d = dl*dl + dm*dm;
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  return best;
+}
+
+function enterSegmentMode() {
+  _segState.active = true;
+  _segState.startIdx = _segState.endIdx = null;
+  document.getElementById('segPanel').style.display = 'block';
+  document.getElementById('segForm').style.display = 'none';
+  document.getElementById('segReset').style.display = 'none';
+  document.getElementById('segInstructions').textContent = 'Click on the map to set the START point';
+  if (window._rideMap) window._rideMap.getContainer().style.cursor = 'crosshair';
+  document.getElementById('map').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function cancelSegment() {
+  resetSegmentMode();
+  document.getElementById('segPanel').style.display = 'none';
+}
+
+function resetSegmentMode() {
+  var map = window._rideMap;
+  if (_segState.startMarker && map) map.removeLayer(_segState.startMarker);
+  if (_segState.endMarker   && map) map.removeLayer(_segState.endMarker);
+  if (_segState.segLine     && map) map.removeLayer(_segState.segLine);
+  _segState = { active: false, startIdx: null, endIdx: null,
+                startMarker: null, endMarker: null, segLine: null };
+  document.getElementById('segForm').style.display = 'none';
+  document.getElementById('segReset').style.display = 'none';
+  document.getElementById('segInstructions').textContent = 'Click on the map to set the START point';
+  if (map) map.getContainer().style.cursor = '';
+}
+
+{% if coords %}
+(function() {
+  var map = window._rideMap;
+  if (!map) return;
+  map.on('click', function(e) {
+    if (!_segState.active) return;
+    var coords = window._rideCoords;
+    var idx = nearestRouteIdx(e.latlng.lat, e.latlng.lng);
+    var pt  = coords[idx];
+
+    if (_segState.startIdx === null) {
+      // First click — start point
+      _segState.startIdx = idx;
+      if (_segState.startMarker) map.removeLayer(_segState.startMarker);
+      _segState.startMarker = L.circleMarker(pt, {
+        color:'#10b981', fillColor:'#10b981', fillOpacity:1, radius:8, weight:2
+      }).addTo(map).bindPopup('Start').openPopup();
+      document.getElementById('segStartLat').value = pt[0];
+      document.getElementById('segStartLng').value = pt[1];
+      document.getElementById('segInstructions').textContent = 'Now click to set the END point';
+
+    } else {
+      // Second click — end point
+      _segState.endIdx = idx;
+      if (_segState.endMarker) map.removeLayer(_segState.endMarker);
+      if (_segState.segLine)   map.removeLayer(_segState.segLine);
+
+      _segState.endMarker = L.circleMarker(pt, {
+        color:'#ef4444', fillColor:'#ef4444', fillOpacity:1, radius:8, weight:2
+      }).addTo(map).bindPopup('End').openPopup();
+
+      var si = Math.min(_segState.startIdx, idx);
+      var ei = Math.max(_segState.startIdx, idx);
+      var segCoords = coords.slice(si, ei + 1);
+      _segState.segLine = L.polyline(segCoords, { color:'#00d4ff', weight:5, opacity:0.85 }).addTo(map);
+
+      // Approximate distance (sum haversine along route slice)
+      var dist = 0;
+      for (var i = si; i < ei; i++) {
+        var R = 6371000;
+        var lat1 = coords[i][0]*Math.PI/180,   lat2 = coords[i+1][0]*Math.PI/180;
+        var dlat = (coords[i+1][0]-coords[i][0])*Math.PI/180;
+        var dlng = (coords[i+1][1]-coords[i][1])*Math.PI/180;
+        var a = Math.sin(dlat/2)*Math.sin(dlat/2) +
+                Math.cos(lat1)*Math.cos(lat2)*Math.sin(dlng/2)*Math.sin(dlng/2);
+        dist += 2*R*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      }
+      document.getElementById('segEndLat').value   = pt[0];
+      document.getElementById('segEndLng').value   = pt[1];
+      document.getElementById('segDistM').value    = Math.round(dist);
+      document.getElementById('segPolyline').value = JSON.stringify(segCoords);
+
+      // Elevation gain from altitude stream slice
+      var altData = window._rideAlt || [];
+      var elevGain = 0;
+      if (altData.length === coords.length) {
+        for (var k = si; k < ei; k++) {
+          var dElev = altData[k + 1] - altData[k];
+          if (dElev > 0) elevGain += dElev;
+        }
+      }
+      document.getElementById('segElevGainM').value = Math.round(elevGain);
+      document.getElementById('segInstructions').textContent =
+        'Segment: ~' + (dist/1609.344).toFixed(2) + ' mi — name it below';
+      document.getElementById('segForm').style.display = 'block';
+      document.getElementById('segReset').style.display = 'block';
+      _segState.active = false;
+      map.getContainer().style.cursor = '';
+    }
+  });
+})();
+{% endif %}
+
+function makeChart(id, data, color) {
+  new Chart(document.getElementById(id), {
+    type: 'line',
+    data: {
+      labels: data.labels,
+      datasets: [{ data: data.values, borderColor: color, borderWidth: 1.5,
+        pointRadius: 0, fill: true,
+        backgroundColor: color.replace(')', ', 0.08)').replace('rgb', 'rgba') }]
+    },
+    options: {
+      animation: false,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: {
+        mode: 'index', intersect: false,
+        callbacks: { title: ctx => ctx[0].label + ' mi' }
+      }},
+      scales: {
+        x: { ticks: { color: '#4d7d95', font: { size: 10 }, maxTicksLimit: 8 }, grid: { display: false } },
+        y: { ticks: { color: '#4d7d95', font: { size: 10 } }, grid: { color: '#163352' } }
+      }
+    }
+  });
+}
+
+{% if charts.elevation %}makeChart('elevChart',   {{ charts.elevation | tojson }}, 'rgb(16,185,129)');{% endif %}
+{% if charts.speed %}makeChart('speedChart',  {{ charts.speed | tojson }},     'rgb(14,165,233)');{% endif %}
+{% if charts.heartrate %}makeChart('hrChart',  {{ charts.heartrate | tojson }}, 'rgb(239,68,68)');{% endif %}
+{% if charts.power %}makeChart('powerChart', {{ charts.power | tojson }},       'rgb(252,76,2)');{% endif %}
+{% if charts.cadence %}makeChart('cadenceChart', {{ charts.cadence | tojson }}, 'rgb(168,85,247)');{% endif %}
+
+{% if activity.weatherWindDir is not none %}
+(function() {
+  var deg = {{ activity.weatherWindDir | tojson }};
+  if (deg === null) return;
+  var dirs = ['N','NE','E','SE','S','SW','W','NW'];
+  var el = document.getElementById('wdCompass');
+  if (el) el.textContent = dirs[Math.round(deg / 45) % 8];
+})();
+{% endif %}
+
+function scanSegments(rid) {
+  var btn = document.getElementById('scanBtn');
+  var res = document.getElementById('scanResult');
+  btn.disabled = true;
+  res.style.display = 'none';
+  fetch('/rides/' + rid + '/scan', { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      res.textContent = d.matched + ' effort' + (d.matched === 1 ? '' : 's') + ' found';
+      res.style.display = 'inline';
+      btn.disabled = false;
+      if (d.matched > 0) setTimeout(function() { location.reload(); }, 800);
+    });
+}
+
+function saveNotes(rid) {
+  var text = document.getElementById('rideNotes').value;
+  var saved = document.getElementById('notesSaved');
+  fetch('/rides/' + rid + '/notes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'notes=' + encodeURIComponent(text)
+  }).then(function(r) {
+    if (r.status === 204) {
+      saved.style.display = 'inline';
+      setTimeout(function() { saved.style.display = 'none'; }, 2000);
+    }
+  });
+}
+</script>
+{% endblock %}

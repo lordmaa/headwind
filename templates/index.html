@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BikeTracker — Connect</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body style="display:flex; align-items:center; justify-content:center; min-height:100vh;">
+  <div style="text-align:center; max-width:400px; padding:2rem;">
+    <div style="font-size:4rem; margin-bottom:1rem;">🚴</div>
+    <h1 style="font-size:1.75rem; font-weight:700; margin-bottom:0.5rem;">BikeTracker</h1>
+    <p style="color:var(--text-muted); margin-bottom:2rem; line-height:1.6;">
+      Connect your Strava account to sync your rides and get AI-powered insights.
+    </p>
+    <a href="{{ url_for('auth.strava') }}" class="btn btn-strava" style="font-size:1rem; padding:0.75rem 1.75rem;">
+      Connect with Strava
+    </a>
+  </div>
+</body>
+</html>

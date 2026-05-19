@@ -1,0 +1,338 @@
+{% extends 'base.html' %}
+
+{% block title %}AI Coach{% endblock %}
+{% block page_title %}AI Coach{% endblock %}
+
+{% block content %}
+<div style="display:flex; flex-direction:column; gap:1.5rem;">
+
+  <!-- Coverage stats -->
+  <div class="stats-grid" style="margin-bottom:0;">
+    <div class="stat-card">
+      <div class="stat-value">{{ analysed }}</div>
+      <div class="stat-label">Rides analysed</div>
+      <div class="stat-sub">of {{ total }} total</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">{{ total - analysed }}</div>
+      <div class="stat-label">Without analysis</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">{{ memories }}</div>
+      <div class="stat-label">Ride memories</div>
+      <div class="stat-sub">used for context</div>
+    </div>
+  </div>
+
+  {% if dots %}
+  <!-- Working memory visualisation -->
+  <div class="card">
+    <div style="display:flex; align-items:baseline; justify-content:space-between; margin-bottom:1.25rem;">
+      <div class="card-title" style="margin:0;">Working Memory</div>
+      <div style="font-size:0.75rem; color:var(--text-muted);">dot size = distance &middot; colour = speed</div>
+    </div>
+
+    <!-- Dot timeline — full width -->
+    <div style="position:relative; margin-bottom:1.5rem;">
+      <svg id="memTimeline" width="100%" height="90" style="display:block; overflow:visible;"></svg>
+    </div>
+
+    <!-- Two-column: monthly stats left, memories right -->
+    <div style="display:grid; grid-template-columns:280px 1fr; gap:1.5rem; align-items:start;">
+
+      <!-- Left: monthly breakdown + sparkline -->
+      <div>
+        <div style="font-size:0.6875rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted); margin-bottom:0.6rem;">Monthly load</div>
+        <div style="display:flex; flex-direction:column; gap:0.4rem; margin-bottom:1.25rem;">
+          {% for m in monthly %}
+          <div style="display:grid; grid-template-columns:60px 1fr auto; gap:0.6rem; align-items:center; padding:0.5rem 0.75rem; background:#0d1f2d; border-radius:6px;">
+            <div style="font-size:0.75rem; color:var(--text-muted);">{{ m.label }}</div>
+            <div style="background:#163352; border-radius:3px; height:5px; overflow:hidden;">
+              <div style="height:100%; width:{{ m.bar_pct }}%; background:var(--accent); border-radius:3px;"></div>
+            </div>
+            <div style="text-align:right; min-width:80px;">
+              <span style="font-size:0.8125rem; font-weight:600; color:var(--text);">{{ m.cnt }}</span>
+              <span style="font-size:0.75rem; color:var(--text-muted);"> rides</span>
+              <div style="font-size:0.7rem; color:var(--text-muted);">{{ m.total_dist }} mi · {{ m.avg_spd }} mph</div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+
+        {% if monthly|length > 1 %}
+        <div style="font-size:0.6875rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted); margin-bottom:0.5rem;">Avg speed trend</div>
+        <svg width="100%" height="55" viewBox="0 0 210 55" preserveAspectRatio="none" style="display:block;">
+          <polyline
+            points="{% for m in monthly %}{{ m.spark_x }},{{ m.spark_y }} {% endfor %}"
+            fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+          {% for m in monthly %}
+          <circle cx="{{ m.spark_x }}" cy="{{ m.spark_y }}" r="3" fill="var(--accent)"/>
+          <text x="{{ m.spark_x }}" y="{{ m.spark_y - 7 }}" text-anchor="middle" font-size="8" fill="#e2e8f0">{{ m.avg_spd }}</text>
+          {% endfor %}
+        </svg>
+        {% endif %}
+      </div>
+
+      <!-- Right: recent memories -->
+      <div>
+        <div style="font-size:0.6875rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted); margin-bottom:0.6rem;">Recent memories in context</div>
+        <div style="display:flex; flex-direction:column; gap:0.4rem;">
+          {% for r in recent %}
+          <div style="display:grid; grid-template-columns:auto 1fr; gap:0.75rem; align-items:start; padding:0.6rem 0.75rem; background:#0d1f2d; border-radius:6px;">
+            <div style="text-align:right; min-width:72px;">
+              <div style="font-size:0.75rem; font-weight:600; color:var(--text); white-space:nowrap;">{{ r.rideDate | fmt_date }}</div>
+              <div style="font-size:0.7rem; color:var(--text-muted);">{{ r.distanceMi | round(1) }} mi</div>
+            </div>
+            <div>
+              <div style="font-size:0.8125rem; font-weight:500; color:var(--text); margin-bottom:0.2rem;">{{ r.rideName }}</div>
+              <div style="font-size:0.75rem; color:var(--text-muted); line-height:1.4;">{{ (r.aiSummary or '')[:160] }}…</div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Goals + Bulk Analysis side by side -->
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; align-items:start;">
+
+    <!-- Coaching goals -->
+    <form method="POST" action="{{ url_for('ai_page.save_goals') }}" class="card" style="margin:0;">
+      <div class="card-title">Coaching Goals</div>
+      <p style="color:var(--text-muted); font-size:0.875rem; margin-bottom:1rem;">
+        Tell the AI what you're training for. Injected into every coaching analysis so feedback stays relevant to your objectives.
+      </p>
+      <div class="form-group">
+        <textarea name="goals" rows="6" placeholder="e.g. Training for a 100-mile sportive in August. Focusing on aerobic base and climbing. Trying to lose weight — currently 92kg, targeting 85kg."
+          style="resize:vertical;">{{ (settings.coachingGoals or '') if settings }}</textarea>
+      </div>
+      <button type="submit" class="btn btn-primary">Save Goals</button>
+    </form>
+
+    <!-- Bulk analysis -->
+    <div class="card" style="margin:0;">
+      <div class="card-title">Bulk Analysis</div>
+      <p style="color:var(--text-muted); font-size:0.875rem; margin-bottom:1.25rem;">
+        Generate AI coaching notes for multiple rides at once. Builds ride memories for richer future context.
+      </p>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem; margin-bottom:0.75rem;">
+        <div class="form-group" style="margin:0;">
+          <label>From</label>
+          <input type="date" id="bulkFrom">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>To</label>
+          <input type="date" id="bulkTo">
+        </div>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:1rem; flex-wrap:wrap;">
+        <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer; font-size:0.8125rem; color:var(--text-muted);">
+          <input type="checkbox" id="bulkForce" style="accent-color:var(--accent);">
+          Re-analyse existing
+        </label>
+        <span id="bulkCountLabel" style="font-size:0.8125rem; color:var(--text-muted);"></span>
+      </div>
+
+      <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:0;">
+        <button class="btn btn-secondary" onclick="setPreset(30)">Last 30d</button>
+        <button class="btn btn-secondary" onclick="setPreset(90)">Last 90d</button>
+        <button class="btn btn-secondary" onclick="setPreset(0)">All time</button>
+        <button class="btn btn-primary" id="bulkStartBtn" onclick="startBulk()">Start</button>
+      </div>
+
+      <div id="bulkProgress" style="display:none; margin-top:1.25rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+          <span id="bulkStatusText" style="font-size:0.8125rem; color:var(--text-muted);">Starting…</span>
+          <span id="bulkCounter" style="font-size:0.8125rem; color:var(--text-muted); font-variant-numeric:tabular-nums;"></span>
+        </div>
+        <div style="background:#163352; border-radius:4px; height:6px; overflow:hidden;">
+          <div id="bulkBar" style="height:100%; background:var(--accent); width:0%; transition:width 0.3s;"></div>
+        </div>
+        <div id="bulkLog" style="margin-top:0.75rem; font-size:0.8125rem; color:var(--text-muted); max-height:180px; overflow-y:auto; display:flex; flex-direction:column; gap:0.2rem;"></div>
+      </div>
+
+      <div id="bulkDone" style="display:none; margin-top:1rem; padding:0.65rem 0.875rem; border-radius:6px; background:#0d2a1a; border:1px solid #14532d; color:#86efac; font-size:0.875rem;"></div>
+    </div>
+
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Memory dot timeline ──────────────────────────────────────────
+(function() {
+  var svg = document.getElementById('memTimeline');
+  if (!svg) return;
+  var dots = {{ dots | tojson }};
+  if (!dots.length) return;
+
+  var W = svg.clientWidth || svg.parentElement.clientWidth || 600;
+  var H = 90;
+  var PAD = 12;
+  var innerW = W - PAD * 2;
+
+  // Tooltip
+  var tip = document.createElement('div');
+  tip.style.cssText = 'position:fixed;background:#0d1f2d;border:1px solid #1e4060;border-radius:6px;padding:0.4rem 0.65rem;font-size:0.75rem;color:#e2e8f0;pointer-events:none;display:none;z-index:999;max-width:200px;line-height:1.4;';
+  document.body.appendChild(tip);
+
+  // Speed colour: slow = #2d5a7b (muted blue), fast = #fc4c02 (strava orange)
+  function speedColor(pct) {
+    var r = Math.round(45  + (pct / 100) * (252 - 45));
+    var g = Math.round(90  + (pct / 100) * (76  - 90));
+    var b = Math.round(123 + (pct / 100) * (2   - 123));
+    return 'rgb(' + r + ',' + g + ',' + b + ')';
+  }
+
+  // Baseline
+  var base = H - 14;
+
+  // Draw month tick lines (derived from dot positions at month boundaries)
+  // Just draw subtle horizontal baseline
+  var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  line.setAttribute('x1', PAD); line.setAttribute('x2', W - PAD);
+  line.setAttribute('y1', base); line.setAttribute('y2', base);
+  line.setAttribute('stroke', '#1e4060'); line.setAttribute('stroke-width', '1');
+  svg.appendChild(line);
+
+  dots.forEach(function(d) {
+    var cx = PAD + (d.x / 100) * innerW;
+    // Jitter y slightly using hash of date string for visual texture
+    var hash = d.date.split('').reduce(function(a,c){ return a + c.charCodeAt(0); }, 0);
+    var jitter = ((hash % 13) - 6) * 1.5;
+    var cy = base - d.size - 2 + jitter;
+    cy = Math.max(d.size + 2, Math.min(base - d.size - 1, cy));
+
+    var circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('cx', cx);
+    circle.setAttribute('cy', cy);
+    circle.setAttribute('r', d.size);
+    circle.setAttribute('fill', speedColor(d.spd_pct));
+    circle.setAttribute('opacity', '0.85');
+    circle.style.cursor = 'pointer';
+
+    circle.addEventListener('mouseenter', function(e) {
+      tip.innerHTML = '<strong>' + d.name + '</strong><br>' + d.date + '<br>' + d.dist + ' mi · ' + d.speed + ' mph';
+      tip.style.display = 'block';
+    });
+    circle.addEventListener('mousemove', function(e) {
+      tip.style.left = (e.clientX + 12) + 'px';
+      tip.style.top  = (e.clientY - 8)  + 'px';
+    });
+    circle.addEventListener('mouseleave', function() { tip.style.display = 'none'; });
+    svg.appendChild(circle);
+  });
+
+  // Date labels at start and end
+  function addLabel(text, x, anchor) {
+    var t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    t.setAttribute('x', x); t.setAttribute('y', H - 2);
+    t.setAttribute('text-anchor', anchor);
+    t.setAttribute('font-size', '9'); t.setAttribute('fill', '#4d7d95');
+    t.textContent = text;
+    svg.appendChild(t);
+  }
+  addLabel(dots[0].date, PAD, 'start');
+  addLabel(dots[dots.length-1].date, W - PAD, 'end');
+})();
+
+function today() {
+  return new Date().toISOString().slice(0,10);
+}
+function daysAgo(n) {
+  var d = new Date(); d.setDate(d.getDate() - n);
+  return d.toISOString().slice(0,10);
+}
+
+function setPreset(days) {
+  if (days === 0) {
+    document.getElementById('bulkFrom').value = '';
+    document.getElementById('bulkTo').value   = '';
+  } else {
+    document.getElementById('bulkFrom').value = daysAgo(days);
+    document.getElementById('bulkTo').value   = today();
+  }
+  updateCount();
+}
+
+function updateCount() {
+  var from  = document.getElementById('bulkFrom').value;
+  var to    = document.getElementById('bulkTo').value;
+  var force = document.getElementById('bulkForce').checked ? '1' : '0';
+  var url   = '/ai/count?force=' + force + (from ? '&from='+from : '') + (to ? '&to='+to : '');
+  fetch(url).then(r => r.json()).then(d => {
+    var label = document.getElementById('bulkCountLabel');
+    label.textContent = d.count + ' ride' + (d.count === 1 ? '' : 's') + ' to analyse';
+    label.style.color = d.count > 0 ? 'var(--text)' : 'var(--text-muted)';
+  });
+}
+
+document.getElementById('bulkFrom').addEventListener('change', updateCount);
+document.getElementById('bulkTo').addEventListener('change',   updateCount);
+document.getElementById('bulkForce').addEventListener('change', updateCount);
+updateCount();
+
+function startBulk() {
+  var from  = document.getElementById('bulkFrom').value;
+  var to    = document.getElementById('bulkTo').value;
+  var force = document.getElementById('bulkForce').checked ? '1' : '0';
+
+  document.getElementById('bulkProgress').style.display = 'block';
+  document.getElementById('bulkDone').style.display     = 'none';
+  document.getElementById('bulkStartBtn').disabled      = true;
+  document.getElementById('bulkLog').innerHTML          = '';
+  document.getElementById('bulkBar').style.width        = '0%';
+
+  var url = '/ai/bulk-analyse?force=' + force + (from ? '&from='+from : '') + (to ? '&to='+to : '');
+  var es  = new EventSource(url);
+
+  es.onmessage = function(e) {
+    var d = JSON.parse(e.data);
+    if (d.type === 'start') {
+      document.getElementById('bulkCounter').textContent = '0 / ' + d.total;
+    } else if (d.type === 'progress') {
+      var pct = Math.round((d.i / d.total) * 100);
+      document.getElementById('bulkBar').style.width = pct + '%';
+      document.getElementById('bulkCounter').textContent = d.i + ' / ' + d.total;
+      document.getElementById('bulkStatusText').textContent = d.date + ' — ' + d.name;
+      var log = document.getElementById('bulkLog');
+      var row = document.createElement('div');
+      row.textContent = '✓ ' + d.date + ' · ' + d.name;
+      row.style.color = 'var(--text-muted)';
+      log.appendChild(row);
+      log.scrollTop = log.scrollHeight;
+    } else if (d.type === 'error') {
+      var log = document.getElementById('bulkLog');
+      var row = document.createElement('div');
+      row.textContent = '✗ ' + d.name;
+      row.style.color = 'var(--danger,#ef4444)';
+      log.appendChild(row);
+      log.scrollTop = log.scrollHeight;
+    } else if (d.type === 'done') {
+      es.close();
+      document.getElementById('bulkBar').style.width = '100%';
+      document.getElementById('bulkStartBtn').disabled = false;
+      document.getElementById('bulkStatusText').textContent = 'Done';
+      var doneEl = document.getElementById('bulkDone');
+      doneEl.style.display = 'block';
+      doneEl.textContent   = '✓ ' + d.analysed + ' ride' + (d.analysed===1?'':'s') + ' analysed'
+        + (d.skipped > 0 ? ', ' + d.skipped + ' failed' : '') + '.';
+      updateCount();
+    }
+  };
+
+  es.onerror = function() {
+    es.close();
+    document.getElementById('bulkStartBtn').disabled = false;
+    document.getElementById('bulkStatusText').textContent = 'Connection lost.';
+  };
+}
+</script>
+{% endblock %}

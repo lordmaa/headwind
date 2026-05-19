@@ -1,0 +1,10 @@
+flask>=3.0.0
+python-dotenv>=1.0.0
+openai>=1.50.0
+requests>=2.31.0
+polyline>=2.0.0
+paho-mqtt>=1.6.1
+garminconnect>=0.3.2
+fitparse>=1.2.0
+Pillow>=10.0.0
+gunicorn>=21.2.0

@@ -1,0 +1,155 @@
+{% extends 'base.html' %}
+
+{% block title %}Import Rides{% endblock %}
+{% block page_title %}Import Rides{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width:600px;">
+  <div class="card-title">Import Rides</div>
+
+  <p style="font-size:0.875rem;color:var(--text-muted);margin-bottom:1.25rem;line-height:1.6;">
+    Upload a single <strong style="color:var(--text);">.gpx</strong> or
+    <strong style="color:var(--text);">.fit</strong> file, a
+    <strong style="color:var(--text);">zip of activity files</strong>, or a full
+    <strong style="color:var(--text);">Strava data export zip</strong>
+    (contains <code>activities.csv</code>).
+    Already-imported activities are skipped automatically.
+  </p>
+
+  <div id="dropZone" class="drop-zone">
+    <div class="drop-icon">📦</div>
+    <div class="drop-label">Drop a file here or <label for="fileInput" class="drop-browse">browse</label></div>
+    <div class="drop-hint">.gpx · .fit · .zip — single file or batch</div>
+    <input type="file" id="fileInput" accept=".zip,.fit,.gpx,.fit.gz,.gpx.gz" style="display:none;">
+  </div>
+
+  <div id="selectedFile" style="display:none;margin-top:0.75rem;font-size:0.875rem;color:var(--text-muted);"></div>
+
+  {% if riders %}
+  <div class="form-group" style="margin-top:1rem;">
+    <label for="riderSelect">Rider</label>
+    <select id="riderSelect" style="max-width:260px;">
+      {% for r in riders %}
+      <option value="{{ r.id }}" {% if r.isDefault %}selected{% endif %}>{{ r.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+
+  <button id="uploadBtn" class="btn btn-primary" style="margin-top:1rem;display:none;" onclick="startUpload()">
+    Import
+  </button>
+</div>
+
+<div id="progressCard" class="card" style="max-width:600px;margin-top:1.25rem;display:none;">
+  <div class="card-title">Importing…</div>
+  <div class="progress-bar-wrap">
+    <div class="progress-bar-fill" id="progressFill" style="width:0%"></div>
+  </div>
+  <div id="progressLabel" style="font-size:0.8125rem;color:var(--text-muted);margin-top:0.5rem;">
+    Starting…
+  </div>
+  <div id="progressStats" style="display:flex;gap:1.5rem;margin-top:1rem;font-size:0.875rem;"></div>
+</div>
+
+<div id="doneCard" class="card" style="max-width:600px;margin-top:1.25rem;display:none;">
+  <div class="card-title">Done</div>
+  <div id="doneStats" style="font-size:0.9375rem;line-height:2;"></div>
+  <a href="/dashboard" class="btn btn-primary" style="margin-top:1rem;display:inline-flex;">View Dashboard</a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const dropZone  = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const selectedFile = document.getElementById('selectedFile');
+const uploadBtn = document.getElementById('uploadBtn');
+let chosenFile = null;
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f) setFile(f);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) setFile(fileInput.files[0]); });
+
+function setFile(f) {
+  chosenFile = f;
+  const mb = (f.size / 1024 / 1024).toFixed(1);
+  selectedFile.textContent = `${f.name}  (${mb} MB)`;
+  selectedFile.style.display = 'block';
+  uploadBtn.style.display = 'inline-flex';
+}
+
+async function startUpload() {
+  if (!chosenFile) return;
+  uploadBtn.disabled = true;
+  uploadBtn.textContent = 'Uploading…';
+
+  const fd = new FormData();
+  fd.append('zipfile', chosenFile);
+  const riderSel = document.getElementById('riderSelect');
+  if (riderSel) fd.append('riderId', riderSel.value);
+
+  document.getElementById('progressCard').style.display = 'block';
+  document.getElementById('doneCard').style.display = 'none';
+
+  const resp = await fetch('/import/upload', { method: 'POST', body: fd });
+  const reader = resp.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const parts = buf.split('\n\n');
+    buf = parts.pop();
+    for (const chunk of parts) {
+      const line = chunk.trim();
+      if (!line.startsWith('data:')) continue;
+      try { handleEvent(JSON.parse(line.slice(5).trim())); } catch {}
+    }
+  }
+}
+
+function handleEvent(d) {
+  if (d.error) {
+    document.getElementById('progressLabel').textContent = 'Error: ' + d.error;
+    document.getElementById('progressLabel').style.color = 'var(--danger)';
+    return;
+  }
+
+  if (d.total !== undefined && d.done === undefined) {
+    const src = d.source === 'strava' ? 'Strava export' : 'GPS files';
+    document.getElementById('progressLabel').textContent = `Detected ${src} — ${d.total} activities`;
+    return;
+  }
+
+  if (d.done !== undefined) {
+    const pct = d.total ? Math.round(d.done / d.total * 100) : 0;
+    document.getElementById('progressFill').style.width = pct + '%';
+    document.getElementById('progressLabel').textContent =
+      `${d.done} / ${d.total}  (${pct}%)`;
+    document.getElementById('progressStats').innerHTML =
+      `<span style="color:var(--success)">✓ ${d.imported} imported</span>` +
+      `<span style="color:var(--text-muted)">— ${d.skipped} skipped</span>` +
+      (d.errors ? `<span style="color:var(--danger)">✗ ${d.errors} errors</span>` : '');
+  }
+
+  if (d.complete) {
+    document.getElementById('progressCard').querySelector('.card-title').textContent = 'Complete';
+    document.getElementById('doneCard').style.display = 'block';
+    document.getElementById('doneStats').innerHTML =
+      `<strong style="color:var(--success)">${d.imported}</strong> rides imported<br>` +
+      `<span style="color:var(--text-muted)">${d.skipped} already existed / skipped</span>` +
+      (d.errors ? `<br><span style="color:var(--danger)">${d.errors} files could not be parsed</span>` : '');
+  }
+}
+</script>
+{% endblock %}

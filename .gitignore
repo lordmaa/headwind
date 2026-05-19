@@ -1,0 +1,28 @@
+# Secrets
+.env
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# Personal avatar photos
+static/avatars/rider_*.jpg
+
+# Garmin auth tokens
+.garmin_tokens/
+
+# Python
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Claude Code / dev tooling
+.claude/
+CLAUDE.md
+AGENTS.md
+
+# Editor / OS
+.DS_Store
+*.swp
