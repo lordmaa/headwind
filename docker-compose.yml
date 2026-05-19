@@ -7,7 +7,8 @@ services:
       - db_data:/data
       - garmin_tokens:/app/.garmin_tokens
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       - DATABASE_URL=/data/bike.db
     restart: unless-stopped

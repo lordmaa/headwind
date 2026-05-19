@@ -31,6 +31,10 @@ Strava, AI coaching, MQTT, and Garmin are all optional — you can import `.fit`
 
 Everything else (Strava, OpenAI, MQTT, Garmin) is optional and documented in `.env.example`.
 
+### Portainer
+
+Deploy as a Git stack pointing at this repo. The `.env` file is optional — set `SECRET_KEY`, `APP_USERNAME`, and `APP_PASSWORD` in Portainer's **Environment variables** section instead.
+
 ### Build from source
 
 ```bash
