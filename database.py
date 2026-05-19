@@ -180,12 +180,6 @@ def migrate_db():
 
     db.commit()
 
-    # ── Seed default riders on a fresh install ───────────────────────
-    if db.execute('SELECT COUNT(*) FROM Rider').fetchone()[0] == 0:
-        db.execute("INSERT INTO Rider (name, avatarPath, isDefault) VALUES ('Rob', 'custard_cream.svg', 1)")
-        db.execute("INSERT INTO Rider (name, avatarPath, isDefault) VALUES ('Smithy', NULL, 0)")
-        db.commit()
-
     # ── Backfill columns added after initial release ─────────────────
     # (Safe to run on old DBs that predate the CREATE TABLE above)
 

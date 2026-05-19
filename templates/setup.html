@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+
+{% block title %}Setup{% endblock %}
+{% block page_title %}Welcome{% endblock %}
+
+{% block content %}
+<div style="max-width:480px; margin:3rem auto;">
+  <div class="card">
+    <div class="card-title" style="font-size:1.25rem; margin-bottom:0.25rem;">Let's get you set up</div>
+    <p style="color:var(--text-muted); font-size:0.875rem; margin-bottom:1.5rem;">
+      Tell us who's riding. You can add more riders and change names later under <strong>Riders</strong>.
+    </p>
+
+    <form method="POST" action="/setup">
+      <div style="margin-bottom:1.25rem;">
+        <label style="display:block; font-size:0.8125rem; color:var(--text-muted); margin-bottom:0.4rem;">
+          Your name <span style="color:var(--accent);">*</span>
+        </label>
+        <input
+          type="text" name="name1" required autofocus
+          placeholder="e.g. Alex"
+          style="width:100%; box-sizing:border-box; background:#0f2535; color:var(--text);
+                 border:1px solid var(--border); border-radius:6px;
+                 padding:0.5rem 0.75rem; font-size:0.9375rem;">
+      </div>
+
+      <div style="margin-bottom:1.75rem;">
+        <label style="display:block; font-size:0.8125rem; color:var(--text-muted); margin-bottom:0.4rem;">
+          Riding buddy's name <span style="color:var(--text-muted); font-weight:400;">(optional)</span>
+        </label>
+        <input
+          type="text" name="name2"
+          placeholder="e.g. Jordan"
+          style="width:100%; box-sizing:border-box; background:#0f2535; color:var(--text);
+                 border:1px solid var(--border); border-radius:6px;
+                 padding:0.5rem 0.75rem; font-size:0.9375rem;">
+      </div>
+
+      <button type="submit" class="btn btn-primary" style="width:100%; padding:0.6rem; font-size:1rem;">
+        Get started →
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -124,6 +124,7 @@ def create_app():
     from routes.garmin        import bp as garmin_bp
     from routes.garmin_page   import bp as garmin_page_bp
     from routes.about         import bp as about_bp
+    from routes.setup         import bp as setup_bp
 
     # ── Auth guard ───────────────────────────────────────────────
     _PUBLIC = {'login.login_page', 'login.logout', 'static',
@@ -135,6 +136,10 @@ def create_app():
             return
         if not session.get('logged_in'):
             return redirect(url_for('login.login_page'))
+        if request.endpoint != 'setup.wizard':
+            from database import query_db
+            if query_db('SELECT COUNT(*) FROM Rider', one=True)[0] == 0:
+                return redirect('/setup')
 
     app.permanent_session_lifetime = timedelta(days=30)
 
@@ -156,6 +161,7 @@ def create_app():
     app.register_blueprint(garmin_bp)
     app.register_blueprint(garmin_page_bp)
     app.register_blueprint(about_bp)
+    app.register_blueprint(setup_bp)
 
     # Start background threads only in the main worker process, not the reloader watcher
     if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' or not app.debug:
