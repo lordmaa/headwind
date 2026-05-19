@@ -37,7 +37,30 @@ def migrate_db():
             db.execute('UPDATE Activity SET riderId=? WHERE riderId IS NULL', [default[0]])
         db.commit()
 
-    # Settings columns
+    # Settings table (create on fresh DB, then add any missing columns)
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS Settings (
+            id               INTEGER PRIMARY KEY,
+            aiProvider       TEXT,
+            openaiKey        TEXT,
+            openaiModel      TEXT,
+            ollamaUrl        TEXT,
+            ollamaModel      TEXT,
+            ntfyUrl          TEXT,
+            webhookSubId     TEXT,
+            mqttHost         TEXT,
+            mqttPort         INTEGER DEFAULT 1883,
+            mqttUser         TEXT,
+            mqttPassword     TEXT,
+            coachingGoals    TEXT,
+            coachPersonality TEXT DEFAULT 'default',
+            garminEmail      TEXT,
+            garminPassword   TEXT,
+            garminSyncHours  INTEGER DEFAULT 2
+        )
+    ''')
+    db.commit()
+
     cols = [r[1] for r in db.execute('PRAGMA table_info(Settings)').fetchall()]
     if 'ntfyUrl' not in cols:
         db.execute('ALTER TABLE Settings ADD COLUMN ntfyUrl TEXT')
