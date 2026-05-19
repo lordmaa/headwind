@@ -6,22 +6,15 @@ services:
     volumes:
       - db_data:/data
       - garmin_tokens:/app/.garmin_tokens
-    env_file:
-      - path: .env
-        required: false
     environment:
       - DATABASE_URL=/data/bike.db
-      # ── Required ──────────────────────────────────────────────
-      # Change SECRET_KEY before exposing to the internet
       - SECRET_KEY=change-me-please
       - APP_USERNAME=admin
       - APP_PASSWORD=changeme
-      # ── Strava (optional) ─────────────────────────────────────
+      - APP_URL=http://localhost:5001
       - STRAVA_CLIENT_ID=
       - STRAVA_CLIENT_SECRET=
-      - APP_URL=http://localhost:5001
       - STRAVA_WEBHOOK_TOKEN=changeme
-      # ── AI coaching (optional) ────────────────────────────────
       - OPENAI_API_KEY=
     restart: unless-stopped
 
