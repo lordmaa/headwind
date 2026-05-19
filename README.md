@@ -4,16 +4,20 @@ A self-hosted cycling dashboard built with Flask and SQLite. Syncs from Strava, 
 
 ## Quick start
 
+No clone needed — just grab two files:
+
 ```bash
-git clone https://github.com/YOUR_USERNAME/bike-flask.git
-cd bike-flask
+curl -O https://raw.githubusercontent.com/lordmaa/bike-flask/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/lordmaa/bike-flask/main/.env.example
 
-cp .env.example .env
-# Open .env and set SECRET_KEY, APP_USERNAME, APP_PASSWORD
+mv .env.example .env
+# Edit .env — set SECRET_KEY, APP_USERNAME, APP_PASSWORD
 
-docker compose up --build
+docker compose up -d
 # → http://localhost:5001
 ```
+
+Docker pulls the pre-built image automatically. The database is created fresh on first run and stored in a named volume so it survives restarts and upgrades.
 
 Strava, AI coaching, MQTT, and Garmin are all optional — you can import `.fit` / `.gpx` files straight away without any API keys. The app seeds two placeholder riders on a fresh install; rename them under **Riders** in the UI.
 
@@ -27,7 +31,16 @@ Strava, AI coaching, MQTT, and Garmin are all optional — you can import `.fit`
 
 Everything else (Strava, OpenAI, MQTT, Garmin) is optional and documented in `.env.example`.
 
-### Running without Docker
+### Build from source
+
+```bash
+git clone https://github.com/lordmaa/bike-flask.git
+cd bike-flask
+cp .env.example .env
+docker compose -f docker-compose.dev.yml up --build
+```
+
+### Run without Docker
 
 ```bash
 pip install -r requirements.txt
