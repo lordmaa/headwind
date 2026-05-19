@@ -5,39 +5,67 @@ from flask import current_app, g
 def migrate_db():
     db = get_db()
 
-    # ── Rider table ──────────────────────────────────────────────────
+    # ── Create all tables first ──────────────────────────────────────
     db.execute('''
         CREATE TABLE IF NOT EXISTS Rider (
             id         INTEGER PRIMARY KEY AUTOINCREMENT,
             name       TEXT NOT NULL,
             avatarPath TEXT,
-            isDefault  INTEGER DEFAULT 0
+            isDefault  INTEGER DEFAULT 0,
+            haDevice   TEXT
         )
     ''')
 
-    # Seed default riders if table is empty
-    if db.execute('SELECT COUNT(*) FROM Rider').fetchone()[0] == 0:
-        db.execute("INSERT INTO Rider (name, avatarPath, isDefault) VALUES ('Rob', 'custard_cream.svg', 1)")
-        db.execute("INSERT INTO Rider (name, avatarPath, isDefault) VALUES ('Smithy', NULL, 0)")
-        db.commit()
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS Activity (
+            id                  TEXT PRIMARY KEY,
+            name                TEXT,
+            type                TEXT,
+            sportType           TEXT,
+            startDate           TEXT,
+            startDateLocal      TEXT,
+            timezone            TEXT,
+            distance            REAL,
+            movingTime          INTEGER,
+            elapsedTime         INTEGER,
+            totalElevationGain  REAL,
+            averageSpeed        REAL,
+            maxSpeed            REAL,
+            averageHeartrate    REAL,
+            maxHeartrate        REAL,
+            averageWatts        REAL,
+            maxWatts            REAL,
+            weightedAvgWatts    REAL,
+            kilojoules          REAL,
+            averageCadence      REAL,
+            calories            REAL,
+            sufferScore         REAL,
+            startLat            REAL,
+            startLng            REAL,
+            city                TEXT,
+            country             TEXT,
+            summaryPolyline     TEXT,
+            kudosCount          INTEGER,
+            streams             TEXT,
+            rawData             TEXT,
+            description         TEXT,
+            notes               TEXT,
+            riderId             INTEGER REFERENCES Rider(id),
+            weatherTempC        REAL,
+            weatherWindKph      REAL,
+            weatherGustKph      REAL,
+            weatherWindDir      INTEGER,
+            weatherHumidity     INTEGER,
+            weatherRainMm       REAL,
+            weatherCode         INTEGER,
+            weatherSummary      TEXT,
+            weatherWindRel      TEXT,
+            aiKudos             TEXT,
+            createdAt           TEXT DEFAULT (datetime('now')),
+            updatedAt           TEXT DEFAULT (datetime('now'))
+        )
+    ''')
 
-    # haDevice on Rider
-    rider_cols = [r[1] for r in db.execute('PRAGMA table_info(Rider)').fetchall()]
-    if 'haDevice' not in rider_cols:
-        db.execute('ALTER TABLE Rider ADD COLUMN haDevice TEXT')
-        db.commit()
-
-    # riderId on Activity
-    act_cols = [r[1] for r in db.execute('PRAGMA table_info(Activity)').fetchall()]
-    if act_cols and 'riderId' not in act_cols:
-        db.execute('ALTER TABLE Activity ADD COLUMN riderId INTEGER REFERENCES Rider(id)')
-        # Migrate all existing activities to the default rider
-        default = db.execute('SELECT id FROM Rider WHERE isDefault=1 LIMIT 1').fetchone()
-        if default:
-            db.execute('UPDATE Activity SET riderId=? WHERE riderId IS NULL', [default[0]])
-        db.commit()
-
-    # Settings table (create on fresh DB, then add any missing columns)
     db.execute('''
         CREATE TABLE IF NOT EXISTS Settings (
             id               INTEGER PRIMARY KEY,
@@ -59,40 +87,21 @@ def migrate_db():
             garminSyncHours  INTEGER DEFAULT 2
         )
     ''')
-    db.commit()
 
-    cols = [r[1] for r in db.execute('PRAGMA table_info(Settings)').fetchall()]
-    if 'ntfyUrl' not in cols:
-        db.execute('ALTER TABLE Settings ADD COLUMN ntfyUrl TEXT')
-    if 'webhookSubId' not in cols:
-        db.execute('ALTER TABLE Settings ADD COLUMN webhookSubId TEXT')
-    if 'mqttHost' not in cols:
-        db.execute('ALTER TABLE Settings ADD COLUMN mqttHost TEXT')
-    if 'mqttPort' not in cols:
-        db.execute('ALTER TABLE Settings ADD COLUMN mqttPort INTEGER DEFAULT 1883')
-    if 'mqttUser' not in cols:
-        db.execute('ALTER TABLE Settings ADD COLUMN mqttUser TEXT')
-    if 'mqttPassword' not in cols:
-        db.execute('ALTER TABLE Settings ADD COLUMN mqttPassword TEXT')
-    if 'coachingGoals' not in cols:
-        db.execute('ALTER TABLE Settings ADD COLUMN coachingGoals TEXT')
-    if 'garminEmail' not in cols:
-        db.execute('ALTER TABLE Settings ADD COLUMN garminEmail TEXT')
-    if 'garminPassword' not in cols:
-        db.execute('ALTER TABLE Settings ADD COLUMN garminPassword TEXT')
-    if 'garminSyncHours' not in cols:
-        db.execute('ALTER TABLE Settings ADD COLUMN garminSyncHours INTEGER DEFAULT 2')
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS GarminDaily (
+            date         TEXT PRIMARY KEY,
+            restingHR    INTEGER,
+            hrv          INTEGER,
+            hrvBalanced  INTEGER DEFAULT 0,
+            sleepHours   REAL,
+            sleepScore   INTEGER,
+            bodyBattery  INTEGER,
+            steps        INTEGER,
+            stressScore  INTEGER
+        )
+    ''')
 
-    # GarminDaily columns
-    gcols = [r[1] for r in db.execute('PRAGMA table_info(GarminDaily)').fetchall()]
-    if 'steps' not in gcols:
-        db.execute('ALTER TABLE GarminDaily ADD COLUMN steps INTEGER')
-    if 'stressScore' not in gcols:
-        db.execute('ALTER TABLE GarminDaily ADD COLUMN stressScore INTEGER')
-    if 'coachPersonality' not in cols:
-        db.execute("ALTER TABLE Settings ADD COLUMN coachPersonality TEXT DEFAULT 'default'")
-
-    # Segment tables
     db.execute('''
         CREATE TABLE IF NOT EXISTS Segment (
             id               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -102,16 +111,13 @@ def migrate_db():
             endLat           REAL NOT NULL,
             endLng           REAL NOT NULL,
             distanceM        REAL,
+            elevationGainM   REAL,
             sourceActivityId TEXT,
             polyline         TEXT,
             createdAt        TEXT DEFAULT (datetime('now'))
         )
     ''')
-    seg_cols = [r[1] for r in db.execute('PRAGMA table_info(Segment)').fetchall()]
-    if 'polyline' not in seg_cols:
-        db.execute('ALTER TABLE Segment ADD COLUMN polyline TEXT')
-    if 'elevationGainM' not in seg_cols:
-        db.execute('ALTER TABLE Segment ADD COLUMN elevationGainM REAL')
+
     db.execute('''
         CREATE TABLE IF NOT EXISTS SegmentEffort (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -126,7 +132,6 @@ def migrate_db():
         )
     ''')
 
-    # RideMemory table
     db.execute('''
         CREATE TABLE IF NOT EXISTS RideMemory (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -144,39 +149,8 @@ def migrate_db():
             userNotes   TEXT,
             aiSummary   TEXT,
             tags        TEXT,
-            createdAt   TEXT DEFAULT (datetime(\'now\')),
-            updatedAt   TEXT DEFAULT (datetime(\'now\'))
-        )
-    ''')
-
-    # Weather + description columns on Activity
-    _act_cols = {r[1] for r in db.execute('PRAGMA table_info(Activity)').fetchall()}
-    for _col, _defn in [
-        ('description',    'TEXT'),
-        ('notes',          'TEXT'),
-        ('weatherTempC',   'REAL'),
-        ('weatherWindKph', 'REAL'),
-        ('weatherGustKph', 'REAL'),
-        ('weatherWindDir', 'INTEGER'),
-        ('weatherHumidity','INTEGER'),
-        ('weatherRainMm',  'REAL'),
-        ('weatherCode',    'INTEGER'),
-        ('weatherSummary', 'TEXT'),
-        ('weatherWindRel', 'TEXT'),
-    ]:
-        if _col not in _act_cols:
-            db.execute(f'ALTER TABLE Activity ADD COLUMN {_col} {_defn}')
-    db.commit()
-
-    db.execute('''
-        CREATE TABLE IF NOT EXISTS GarminDaily (
-            date         TEXT PRIMARY KEY,
-            restingHR    INTEGER,
-            hrv          INTEGER,
-            hrvBalanced  INTEGER DEFAULT 0,
-            sleepHours   REAL,
-            sleepScore   INTEGER,
-            bodyBattery  INTEGER
+            createdAt   TEXT DEFAULT (datetime('now')),
+            updatedAt   TEXT DEFAULT (datetime('now'))
         )
     ''')
 
@@ -191,6 +165,78 @@ def migrate_db():
             UNIQUE(activityId, distanceMi)
         )
     ''')
+
+    db.commit()
+
+    # ── Seed default riders on a fresh install ───────────────────────
+    if db.execute('SELECT COUNT(*) FROM Rider').fetchone()[0] == 0:
+        db.execute("INSERT INTO Rider (name, avatarPath, isDefault) VALUES ('Rob', 'custard_cream.svg', 1)")
+        db.execute("INSERT INTO Rider (name, avatarPath, isDefault) VALUES ('Smithy', NULL, 0)")
+        db.commit()
+
+    # ── Backfill columns added after initial release ─────────────────
+    # (Safe to run on old DBs that predate the CREATE TABLE above)
+
+    rider_cols = {r[1] for r in db.execute('PRAGMA table_info(Rider)').fetchall()}
+    if 'haDevice' not in rider_cols:
+        db.execute('ALTER TABLE Rider ADD COLUMN haDevice TEXT')
+
+    act_cols = {r[1] for r in db.execute('PRAGMA table_info(Activity)').fetchall()}
+    for col, defn in [
+        ('riderId',         'INTEGER REFERENCES Rider(id)'),
+        ('description',     'TEXT'),
+        ('notes',           'TEXT'),
+        ('weatherTempC',    'REAL'),
+        ('weatherWindKph',  'REAL'),
+        ('weatherGustKph',  'REAL'),
+        ('weatherWindDir',  'INTEGER'),
+        ('weatherHumidity', 'INTEGER'),
+        ('weatherRainMm',   'REAL'),
+        ('weatherCode',     'INTEGER'),
+        ('weatherSummary',  'TEXT'),
+        ('weatherWindRel',  'TEXT'),
+        ('aiKudos',         'TEXT'),
+    ]:
+        if col not in act_cols:
+            db.execute(f'ALTER TABLE Activity ADD COLUMN {col} {defn}')
+
+    if 'riderId' in act_cols and 'riderId' not in act_cols:
+        default = db.execute('SELECT id FROM Rider WHERE isDefault=1 LIMIT 1').fetchone()
+        if default:
+            db.execute('UPDATE Activity SET riderId=? WHERE riderId IS NULL', [default[0]])
+
+    settings_cols = {r[1] for r in db.execute('PRAGMA table_info(Settings)').fetchall()}
+    for col, defn in [
+        ('ntfyUrl',          'TEXT'),
+        ('webhookSubId',     'TEXT'),
+        ('mqttHost',         'TEXT'),
+        ('mqttPort',         'INTEGER DEFAULT 1883'),
+        ('mqttUser',         'TEXT'),
+        ('mqttPassword',     'TEXT'),
+        ('coachingGoals',    'TEXT'),
+        ('coachPersonality', "TEXT DEFAULT 'default'"),
+        ('garminEmail',      'TEXT'),
+        ('garminPassword',   'TEXT'),
+        ('garminSyncHours',  'INTEGER DEFAULT 2'),
+    ]:
+        if col not in settings_cols:
+            db.execute(f'ALTER TABLE Settings ADD COLUMN {col} {defn}')
+
+    garmin_cols = {r[1] for r in db.execute('PRAGMA table_info(GarminDaily)').fetchall()}
+    for col, defn in [
+        ('steps',       'INTEGER'),
+        ('stressScore', 'INTEGER'),
+    ]:
+        if col not in garmin_cols:
+            db.execute(f'ALTER TABLE GarminDaily ADD COLUMN {col} {defn}')
+
+    seg_cols = {r[1] for r in db.execute('PRAGMA table_info(Segment)').fetchall()}
+    for col, defn in [
+        ('polyline',       'TEXT'),
+        ('elevationGainM', 'REAL'),
+    ]:
+        if col not in seg_cols:
+            db.execute(f'ALTER TABLE Segment ADD COLUMN {col} {defn}')
 
     db.commit()
 
