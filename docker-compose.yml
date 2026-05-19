@@ -1,6 +1,6 @@
 services:
   app:
-    image: lordmaa/bike-flask:latest
+    image: lordmerchant99/bike-flask:latest
     ports:
       - "5001:5001"
     volumes:
