@@ -1,3 +1,5 @@
+import json
+
 from flask import Blueprint, render_template, request
 from database import query_db
 
@@ -44,6 +46,17 @@ def index():
         r['restingHR'], r['bodyBattery'], r['sleepHours'], r['sleepScore'], r['steps'], r['stressScore']
     ])]
 
+    # Most recent day with intraday streams for the "today" charts
+    intraday = query_db(
+        "SELECT date, hrStream, bodyBatteryStream FROM GarminDaily "
+        "WHERE hrStream IS NOT NULL OR bodyBatteryStream IS NOT NULL "
+        "ORDER BY date DESC LIMIT 1",
+        one=True
+    )
+    today_hr_stream = json.loads(intraday['hrStream']) if intraday and intraday['hrStream'] else []
+    today_bb_stream = json.loads(intraday['bodyBatteryStream']) if intraday and intraday['bodyBatteryStream'] else []
+    today_intraday_date = intraday['date'] if intraday else None
+
     return render_template('garmin.html',
         labels=labels,
         rhr=rhr,
@@ -54,4 +67,7 @@ def index():
         has_ride=has_ride,
         table_rows=table_rows,
         days=days,
+        today_hr_stream=today_hr_stream,
+        today_bb_stream=today_bb_stream,
+        today_intraday_date=today_intraday_date,
     )

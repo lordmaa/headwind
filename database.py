@@ -230,8 +230,10 @@ def migrate_db():
 
     garmin_cols = {r[1] for r in db.execute('PRAGMA table_info(GarminDaily)').fetchall()}
     for col, defn in [
-        ('steps',       'INTEGER'),
-        ('stressScore', 'INTEGER'),
+        ('steps',              'INTEGER'),
+        ('stressScore',        'INTEGER'),
+        ('hrStream',           'TEXT'),
+        ('bodyBatteryStream',  'TEXT'),
     ]:
         if col not in garmin_cols:
             db.execute(f'ALTER TABLE GarminDaily ADD COLUMN {col} {defn}')

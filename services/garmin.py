@@ -1,3 +1,4 @@
+import json
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -160,10 +161,24 @@ def sync_garmin(email, password, days=7):
             sleep_hrs, sleep_score = None, None
 
         try:
-            bb_data     = api.get_body_battery(d, d)
+            bb_data      = api.get_body_battery(d, d)
             body_battery = _parse_body_battery(bb_data)
+            bb_stream    = []
+            if isinstance(bb_data, list):
+                for item in bb_data:
+                    for pair in (item.get('bodyBatteryValuesArray') or []):
+                        if isinstance(pair, (list, tuple)) and len(pair) >= 2 and pair[1] is not None:
+                            bb_stream.append([int(pair[0]), int(pair[1])])
+            bb_stream_json = json.dumps(bb_stream) if bb_stream else None
         except Exception:
-            body_battery = None
+            body_battery, bb_stream_json = None, None
+
+        try:
+            hr_raw       = api.get_heart_rates(d)
+            hr_stream    = [[int(ts), int(bpm)] for ts, bpm in (hr_raw.get('heartRateValues') or []) if bpm is not None]
+            hr_stream_json = json.dumps(hr_stream) if hr_stream else None
+        except Exception:
+            hr_stream_json = None
 
         try:
             steps_data = api.get_steps_data(d)
@@ -178,18 +193,20 @@ def sync_garmin(email, password, days=7):
             stress_score = None
 
         db.execute('''
-            INSERT INTO GarminDaily (date, restingHR, hrv, hrvBalanced, sleepHours, sleepScore, bodyBattery, steps, stressScore)
-            VALUES (?,?,?,?,?,?,?,?,?)
+            INSERT INTO GarminDaily (date, restingHR, hrv, hrvBalanced, sleepHours, sleepScore, bodyBattery, steps, stressScore, hrStream, bodyBatteryStream)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(date) DO UPDATE SET
-                restingHR    = COALESCE(excluded.restingHR,    restingHR),
-                hrv          = COALESCE(excluded.hrv,          hrv),
-                hrvBalanced  = excluded.hrvBalanced,
-                sleepHours   = COALESCE(excluded.sleepHours,   sleepHours),
-                sleepScore   = COALESCE(excluded.sleepScore,   sleepScore),
-                bodyBattery  = COALESCE(excluded.bodyBattery,  bodyBattery),
-                steps        = COALESCE(excluded.steps,        steps),
-                stressScore  = COALESCE(excluded.stressScore,  stressScore)
-        ''', [d, rhr, hrv, balanced, sleep_hrs, sleep_score, body_battery, steps, stress_score])
+                restingHR           = COALESCE(excluded.restingHR,          restingHR),
+                hrv                 = COALESCE(excluded.hrv,                hrv),
+                hrvBalanced         = excluded.hrvBalanced,
+                sleepHours          = COALESCE(excluded.sleepHours,         sleepHours),
+                sleepScore          = COALESCE(excluded.sleepScore,         sleepScore),
+                bodyBattery         = COALESCE(excluded.bodyBattery,        bodyBattery),
+                steps               = COALESCE(excluded.steps,              steps),
+                stressScore         = COALESCE(excluded.stressScore,        stressScore),
+                hrStream            = COALESCE(excluded.hrStream,           hrStream),
+                bodyBatteryStream   = COALESCE(excluded.bodyBatteryStream,  bodyBatteryStream)
+        ''', [d, rhr, hrv, balanced, sleep_hrs, sleep_score, body_battery, steps, stress_score, hr_stream_json, bb_stream_json])
         synced += 1
 
     db.commit()

@@ -29,6 +29,32 @@
 </div>
 {% else %}
 
+{% if today_hr_stream or today_bb_stream %}
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1rem;">
+
+  <div class="card" style="margin:0;">
+    <div class="card-title" style="display:flex; justify-content:space-between; align-items:baseline;">
+      <span>Heart Rate</span>
+      {% if today_intraday_date %}<span style="font-size:0.75rem; color:var(--text-muted); font-weight:400;">{{ today_intraday_date | fmt_date }}</span>{% endif %}
+    </div>
+    <div style="height:200px; position:relative;">
+      <canvas id="hrIntradayChart"></canvas>
+    </div>
+  </div>
+
+  <div class="card" style="margin:0;">
+    <div class="card-title" style="display:flex; justify-content:space-between; align-items:baseline;">
+      <span>Body Battery</span>
+      {% if today_intraday_date %}<span style="font-size:0.75rem; color:var(--text-muted); font-weight:400;">{{ today_intraday_date | fmt_date }}</span>{% endif %}
+    </div>
+    <div style="height:200px; position:relative;">
+      <canvas id="bbIntradayChart"></canvas>
+    </div>
+  </div>
+
+</div>
+{% endif %}
+
 <div style="text-align:right; margin-bottom:0.4rem; font-size:0.75rem; color:var(--text-muted);">
   <span style="color:rgba(252,76,2,0.9);">&#9650;</span> Rode
 </div>
@@ -141,6 +167,93 @@
 
 {% block scripts %}
 <script>
+// ── Intraday charts ───────────────────────────────────────────
+const hrIntraday = {{ today_hr_stream | tojson }};
+const bbIntraday = {{ today_bb_stream | tojson }};
+
+function tsToTime(ms) {
+  const d = new Date(ms);
+  return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+
+// Thin the labels so the X axis isn't solid text — show one every N points
+function sparseLabels(data, every) {
+  return data.map((_, i) => i % every === 0 ? tsToTime(data[i][0]) : '');
+}
+
+const intradayOpts = (yMin, yMax, yCallback) => ({
+  maintainAspectRatio: false,
+  animation: false,
+  plugins: {
+    legend: { display: false },
+    tooltip: {
+      callbacks: {
+        label: ctx => yCallback(ctx.raw),
+        title: ctx => tsToTime(ctx[0].dataset.data[ctx[0].dataIndex][0]),
+      },
+      mode: 'index',
+      intersect: false,
+    },
+  },
+  scales: {
+    x: {
+      ticks: { color: '#4d7d95', font: { size: 10 }, maxRotation: 0, autoSkip: false },
+      grid: { display: false },
+    },
+    y: {
+      min: yMin, max: yMax,
+      ticks: { color: '#4d7d95', font: { size: 11 }, callback: v => yCallback(v) },
+      grid: { color: '#163352' },
+    },
+  },
+});
+
+if (hrIntraday.length > 0) {
+  const every = Math.max(1, Math.round(hrIntraday.length / 12));
+  new Chart(document.getElementById('hrIntradayChart'), {
+    type: 'line',
+    data: {
+      labels: sparseLabels(hrIntraday, every),
+      datasets: [{
+        data: hrIntraday.map(p => p[1]),
+        borderColor: '#ef4444',
+        backgroundColor: 'rgba(239,68,68,0.12)',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        fill: true,
+        tension: 0.3,
+      }],
+    },
+    options: intradayOpts(30, 200, v => v + ' bpm'),
+  });
+}
+
+if (bbIntraday.length > 0) {
+  const every = Math.max(1, Math.round(bbIntraday.length / 12));
+  const bbValues = bbIntraday.map(p => p[1]);
+  new Chart(document.getElementById('bbIntradayChart'), {
+    type: 'line',
+    data: {
+      labels: sparseLabels(bbIntraday, every),
+      datasets: [{
+        data: bbValues,
+        borderColor: '#10b981',
+        backgroundColor: bbValues.map(v =>
+          v < 25 ? 'rgba(239,68,68,0.15)' :
+          v < 50 ? 'rgba(245,158,11,0.15)' :
+          'rgba(16,185,129,0.15)'
+        ),
+        borderWidth: 1.5,
+        pointRadius: 0,
+        fill: true,
+        tension: 0.3,
+      }],
+    },
+    options: intradayOpts(0, 100, v => v + '%'),
+  });
+}
+
+// ── Multi-day trend charts ─────────────────────────────────────
 const labels     = {{ labels | tojson }};
 const rhrData    = {{ rhr | tojson }};
 const batData    = {{ battery | tojson }};
