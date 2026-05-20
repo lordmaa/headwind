@@ -47,11 +47,16 @@ def restore():
         f.save(tmp.name)
         conn = sqlite3.connect(tmp.name)
         tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
-        conn.close()
         required = {'Rider', 'Activity', 'Settings'}
         if not required.issubset(tables):
+            conn.close()
             os.unlink(tmp.name)
             return render_template('setup.html', error=f'Invalid backup — missing tables: {required - tables}')
+        rider_count = conn.execute('SELECT COUNT(*) FROM Rider').fetchone()[0]
+        conn.close()
+        if rider_count == 0:
+            os.unlink(tmp.name)
+            return render_template('setup.html', error='That backup has no riders — it may be an empty or cleared database. Download a backup from a working Headwind instance.')
     except Exception as e:
         return render_template('setup.html', error=f'Could not read backup file: {e}')
 
