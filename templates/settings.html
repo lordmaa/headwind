@@ -4,96 +4,90 @@
 {% block page_title %}Settings{% endblock %}
 
 {% block content %}
-<div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; align-items:start;">
+<div style="display:flex; flex-direction:column; gap:1.5rem;">
 
-  <!-- Change Password -->
+  <!-- Login Details -->
   <form method="POST" action="/settings/password" class="card">
     <div class="card-title">Login Details</div>
-
-    <div class="form-group">
-      <label>Current Password</label>
-      <input type="password" name="currentPassword" required placeholder="••••••••">
-    </div>
-
-    <div class="form-group">
-      <label>New Username <span style="color:var(--text-muted);">(leave blank to keep <strong style="color:var(--text);">{{ current_username }}</strong>)</span></label>
-      <input type="text" name="newUsername" autocomplete="off" placeholder="{{ current_username }}">
-    </div>
-
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+    <div style="display:grid; grid-template-columns:1fr 2fr 1fr 1fr; gap:1rem; align-items:end;">
+      <div class="form-group" style="margin:0;">
+        <label>Current Password</label>
+        <input type="password" name="currentPassword" required placeholder="••••••••">
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label>New Username <span style="color:var(--text-muted); font-weight:400; text-transform:none; letter-spacing:0;">(blank = keep <strong style="color:var(--text);">{{ current_username }}</strong>)</span></label>
+        <input type="text" name="newUsername" autocomplete="off" placeholder="{{ current_username }}">
+      </div>
       <div class="form-group" style="margin:0;">
         <label>New Password</label>
         <input type="password" name="newPassword" placeholder="••••••••">
       </div>
       <div class="form-group" style="margin:0;">
-        <label>Confirm New Password</label>
+        <label>Confirm Password</label>
         <input type="password" name="confirmPassword" placeholder="••••••••">
       </div>
     </div>
-
     <button type="submit" class="btn btn-primary" style="margin-top:1.25rem;">Update Login</button>
   </form>
 
   <!-- AI Provider -->
   <form method="POST" class="card">
     <div class="card-title">AI Provider</div>
-
-    <div class="form-group">
-      <label>Provider</label>
-      <select name="aiProvider" id="providerSelect" onchange="updateProvider()">
-        <option value="openai" {% if not s or s.aiProvider == 'openai' %}selected{% endif %}>OpenAI</option>
-        <option value="ollama" {% if s and s.aiProvider == 'ollama' %}selected{% endif %}>Ollama (local)</option>
-      </select>
-    </div>
-
-    <div id="openaiFields">
-      <div class="form-group">
-        <label>OpenAI API Key</label>
-        <input type="password" name="openaiKey"
-               value="{{ s.openaiKey if s and s.openaiKey else '' }}"
-               placeholder="sk-...">
-      </div>
-      <div class="form-group">
-        <label>Model</label>
-        <select name="openaiModel">
-          {% for m in openai_models %}
-          <option value="{{ m }}" {% if s and s.openaiModel == m %}selected{% endif %}>{{ m }}</option>
-          {% endfor %}
+    <div style="display:grid; grid-template-columns:180px 1fr 1fr; gap:1rem; align-items:start;">
+      <div class="form-group" style="margin:0;">
+        <label>Provider</label>
+        <select name="aiProvider" id="providerSelect" onchange="updateProvider()">
+          <option value="openai" {% if not s or s.aiProvider == 'openai' %}selected{% endif %}>OpenAI</option>
+          <option value="ollama" {% if s and s.aiProvider == 'ollama' %}selected{% endif %}>Ollama (local)</option>
         </select>
       </div>
-    </div>
-
-    <div id="ollamaFields" style="display:none;">
-      <div class="form-group">
-        <label>Ollama URL</label>
-        <input type="url" name="ollamaUrl"
-               value="{{ s.ollamaUrl if s and s.ollamaUrl else 'http://localhost:11434' }}"
-               placeholder="http://localhost:11434">
+      <div id="openaiFields" style="display:contents;">
+        <div class="form-group" style="margin:0;">
+          <label>API Key</label>
+          <input type="password" name="openaiKey"
+                 value="{{ s.openaiKey if s and s.openaiKey else '' }}"
+                 placeholder="sk-...">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Model</label>
+          <select name="openaiModel">
+            {% for m in openai_models %}
+            <option value="{{ m }}" {% if s and s.openaiModel == m %}selected{% endif %}>{{ m }}</option>
+            {% endfor %}
+          </select>
+        </div>
       </div>
-      <div class="form-group">
-        <label>Model</label>
-        <input type="text" name="ollamaModel"
-               value="{{ s.ollamaModel if s and s.ollamaModel else 'llama3.2' }}"
-               placeholder="llama3.2">
+      <div id="ollamaFields" style="display:none; grid-column:2/-1; display:none;">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+          <div class="form-group" style="margin:0;">
+            <label>Ollama URL</label>
+            <input type="url" name="ollamaUrl"
+                   value="{{ s.ollamaUrl if s and s.ollamaUrl else 'http://localhost:11434' }}"
+                   placeholder="http://localhost:11434">
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label>Model</label>
+            <input type="text" name="ollamaModel"
+                   value="{{ s.ollamaModel if s and s.ollamaModel else 'llama3.2' }}"
+                   placeholder="llama3.2">
+          </div>
+        </div>
       </div>
     </div>
-
 
     <input type="hidden" name="garminEmail"     value="{{ s.garminEmail     if s else '' }}">
     <input type="hidden" name="garminPassword"  value="{{ s.garminPassword  if s else '' }}">
     <input type="hidden" name="garminSyncHours" value="{{ s.garminSyncHours if s and s.garminSyncHours else 2 }}">
-
-    <button type="submit" class="btn btn-primary">Save Settings</button>
+    <button type="submit" class="btn btn-primary" style="margin-top:1.25rem;">Save</button>
   </form>
 
   <!-- MQTT / Home Assistant -->
-  <form method="POST" class="card" style="grid-column:1/-1;">
+  <form method="POST" class="card">
     <div class="card-title">Home Assistant — MQTT</div>
     <p style="color:var(--text-muted); font-size:0.875rem; margin-bottom:1rem; line-height:1.6;">
-      Publishes 10 sensors to Home Assistant via MQTT Discovery — total rides, distance,
+      Publishes sensors to Home Assistant via MQTT Discovery — total rides, distance,
       elevation, calories, time, Everests, laps of Earth, and last ride details.
     </p>
-
     <div style="display:grid; grid-template-columns:3fr 1fr 2fr 2fr; gap:1rem;">
       <div class="form-group" style="margin:0;">
         <label>Broker Host</label>
@@ -121,7 +115,6 @@
       </div>
     </div>
 
-    <!-- hidden fields to preserve other settings on this form submit -->
     <input type="hidden" name="aiProvider"       value="{{ s.aiProvider       if s else 'openai' }}">
     <input type="hidden" name="openaiKey"        value="{{ s.openaiKey        if s else '' }}">
     <input type="hidden" name="openaiModel"      value="{{ s.openaiModel      if s else 'gpt-4o' }}">
@@ -133,183 +126,176 @@
 
     <div style="display:flex; gap:0.75rem; margin-top:1.25rem; align-items:center; flex-wrap:wrap;">
       <button type="submit" class="btn btn-primary">Save</button>
-      <button type="button" class="btn btn-secondary" onclick="mqttPublish()" id="mqttBtn">
-        Publish to HA
-      </button>
+      <button type="button" class="btn btn-secondary" onclick="mqttPublish()" id="mqttBtn">Publish to HA</button>
       <span id="mqttStatus" style="font-size:0.8125rem; color:var(--text-muted);"></span>
     </div>
   </form>
 
-  <!-- Weather Backfill -->
-  <div class="card">
-    <div class="card-title">Weather Backfill</div>
-    <p style="color:var(--text-muted); font-size:0.875rem; margin-bottom:1rem; line-height:1.6;">
-      Fetch weather data for all historical rides that don't have it yet.
-      Runs automatically in batches until complete — click once and let it run.
-    </p>
-    <div style="display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap;">
-      <button class="btn btn-secondary" onclick="weatherBackfill()" id="backfillBtn">Backfill All Weather</button>
-      <span id="backfillStatus" style="font-size:0.8125rem; color:var(--text-muted);"></span>
-    </div>
-  </div>
+  <!-- Garmin + Webhook side by side -->
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; align-items:start;">
 
-  <!-- Backup & Restore -->
-  <div class="card">
-    <div class="card-title">Backup &amp; Restore</div>
-    <p style="color:var(--text-muted); font-size:0.875rem; margin-bottom:1rem; line-height:1.6;">
-      Export a full backup of your database — all rides, segments, settings, and rider data.
-      Keep a copy before major changes or when migrating to a new machine.
-    </p>
-    <div style="display:flex; gap:0.75rem; align-items:flex-start; flex-wrap:wrap;">
-      <div>
-        <a href="/settings/backup/export" class="btn btn-secondary">Download Backup</a>
-        <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.4rem;">Downloads a <code>.zip</code> (db + avatars)</div>
+    <!-- Garmin Connect -->
+    <form method="POST" class="card">
+      <div class="card-title">Garmin Connect</div>
+      <p style="color:var(--text-muted); font-size:0.875rem; margin-bottom:1rem; line-height:1.6;">
+        Pulls resting HR, HRV, sleep score, and body battery from Garmin Connect for richer AI coaching context.
+      </p>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+        <div class="form-group" style="margin:0;">
+          <label>Garmin Email</label>
+          <input type="email" name="garminEmail"
+                 value="{{ s.garminEmail if s and s.garminEmail else '' }}"
+                 placeholder="you@example.com">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Password</label>
+          <input type="password" name="garminPassword"
+                 value="{{ s.garminPassword if s and s.garminPassword else '' }}"
+                 placeholder="••••••••">
+        </div>
       </div>
-      <div>
-        <form method="POST" action="/settings/backup/import" enctype="multipart/form-data" id="importForm" style="display:flex; flex-direction:column; gap:0.4rem;">
-          <div style="display:flex; gap:0.5rem; align-items:center;">
-            <label class="btn btn-secondary" style="cursor:pointer; margin:0;">
-              Restore Backup
-              <input type="file" name="backup" accept=".zip,.db" style="display:none;" onchange="document.getElementById('importForm').submit()">
-            </label>
-            <span id="importStatus" style="font-size:0.8125rem; color:var(--text-muted);"></span>
-          </div>
-          <div style="font-size:0.75rem; color:var(--text-muted);">Replaces current data — back up first</div>
-        </form>
-      </div>
-    </div>
-  </div>
-
-  <!-- Garmin Connect -->
-  <form method="POST" class="card">
-    <div class="card-title">Garmin Connect</div>
-    <p style="color:var(--text-muted); font-size:0.875rem; margin-bottom:1rem; line-height:1.6;">
-      Pulls resting HR, HRV, sleep score, and body battery from Garmin Connect.
-      Used to give AI coaching richer recovery context. Uses the unofficial API — credentials are stored locally.
-    </p>
-
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
-      <div class="form-group" style="margin:0;">
-        <label>Garmin Email</label>
-        <input type="email" name="garminEmail"
-               value="{{ s.garminEmail if s and s.garminEmail else '' }}"
-               placeholder="you@example.com">
-      </div>
-      <div class="form-group" style="margin:0;">
-        <label>Password</label>
-        <input type="password" name="garminPassword"
-               value="{{ s.garminPassword if s and s.garminPassword else '' }}"
-               placeholder="••••••••">
-      </div>
-    </div>
-
-    <div style="margin-top:1rem;">
-      <div class="form-group" style="margin:0; max-width:200px;">
-        <label>Auto-sync every <span style="color:var(--text-muted);">(hours)</span></label>
+      <div class="form-group" style="margin-top:1rem; max-width:160px;">
+        <label>Sync every (hours)</label>
         <input type="number" name="garminSyncHours" min="1" max="24"
                value="{{ s.garminSyncHours if s and s.garminSyncHours else 2 }}"
                placeholder="2">
       </div>
+
+      <input type="hidden" name="aiProvider"       value="{{ s.aiProvider       if s else 'openai' }}">
+      <input type="hidden" name="openaiKey"        value="{{ s.openaiKey        if s else '' }}">
+      <input type="hidden" name="openaiModel"      value="{{ s.openaiModel      if s else 'gpt-4o' }}">
+      <input type="hidden" name="ollamaUrl"        value="{{ s.ollamaUrl        if s else '' }}">
+      <input type="hidden" name="ollamaModel"      value="{{ s.ollamaModel      if s else '' }}">
+      <input type="hidden" name="mqttHost"         value="{{ s.mqttHost         if s else '' }}">
+      <input type="hidden" name="mqttPort"         value="{{ s.mqttPort         if s else 1883 }}">
+      <input type="hidden" name="mqttUser"         value="{{ s.mqttUser         if s else '' }}">
+      <input type="hidden" name="mqttPassword"     value="{{ s.mqttPassword     if s else '' }}">
+
+      <div style="display:flex; gap:0.75rem; margin-top:1.25rem; align-items:center; flex-wrap:wrap;">
+        <button type="submit" class="btn btn-primary">Save</button>
+        <button type="button" class="btn btn-secondary" onclick="garminSync()" id="garminBtn"
+                {% if not s or not s.garminEmail %}disabled{% endif %}>Sync Now</button>
+        <span id="garminStatus" style="font-size:0.8125rem; color:var(--text-muted);"></span>
+      </div>
+    </form>
+
+    <!-- Strava Webhook -->
+    <div class="card">
+      <div class="card-title">Auto-Sync Webhook</div>
+      <p style="color:var(--text-muted); font-size:0.875rem; margin-bottom:1rem; line-height:1.6;">
+        When subscribed, Strava notifies this app the moment you finish a ride.
+        The ride syncs and AI coaching fires automatically.
+      </p>
+      {% if s and s.webhookSubId %}
+        <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:1rem;">
+          <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--success);"></span>
+          <span style="font-size:0.875rem; color:var(--text);">Active — subscription ID {{ s.webhookSubId }}</span>
+        </div>
+        <button class="btn btn-secondary" onclick="manageWebhook('unsubscribe')">Unsubscribe</button>
+      {% else %}
+        <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:1rem;">
+          <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--text-muted);"></span>
+          <span style="font-size:0.875rem; color:var(--text-muted);">Not subscribed</span>
+        </div>
+        <button class="btn btn-primary" onclick="manageWebhook('subscribe')">Subscribe</button>
+      {% endif %}
+      <div id="webhookStatus" style="margin-top:0.75rem; font-size:0.875rem; color:var(--text-muted);"></div>
     </div>
 
-    <!-- hidden fields to preserve other settings on this form submit -->
-    <input type="hidden" name="aiProvider"       value="{{ s.aiProvider       if s else 'openai' }}">
-    <input type="hidden" name="openaiKey"        value="{{ s.openaiKey        if s else '' }}">
-    <input type="hidden" name="openaiModel"      value="{{ s.openaiModel      if s else 'gpt-4o' }}">
-    <input type="hidden" name="ollamaUrl"        value="{{ s.ollamaUrl        if s else '' }}">
-    <input type="hidden" name="ollamaModel"      value="{{ s.ollamaModel      if s else '' }}">
+  </div>
 
-    <input type="hidden" name="mqttHost"     value="{{ s.mqttHost     if s else '' }}">
-    <input type="hidden" name="mqttPort"     value="{{ s.mqttPort     if s else 1883 }}">
-    <input type="hidden" name="mqttUser"     value="{{ s.mqttUser     if s else '' }}">
-    <input type="hidden" name="mqttPassword" value="{{ s.mqttPassword if s else '' }}">
+  <!-- Weather Backfill + Backup side by side -->
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; align-items:start;">
 
-    <div style="display:flex; gap:0.75rem; margin-top:1.25rem; align-items:center; flex-wrap:wrap;">
-      <button type="submit" class="btn btn-primary">Save</button>
-      <button type="button" class="btn btn-secondary" onclick="garminSync()" id="garminBtn"
-              {% if not s or not s.garminEmail %}disabled{% endif %}>
-        Sync Now
-      </button>
-      <span id="garminStatus" style="font-size:0.8125rem; color:var(--text-muted);"></span>
+    <!-- Weather Backfill -->
+    <div class="card">
+      <div class="card-title">Weather Backfill</div>
+      <p style="color:var(--text-muted); font-size:0.875rem; margin-bottom:1rem; line-height:1.6;">
+        Fetch weather data for all historical rides that are missing it.
+        Runs in batches automatically — click once and let it finish.
+      </p>
+      <div style="display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap;">
+        <button class="btn btn-secondary" onclick="weatherBackfill()" id="backfillBtn">Backfill All Weather</button>
+        <span id="backfillStatus" style="font-size:0.8125rem; color:var(--text-muted);"></span>
+      </div>
     </div>
-  </form>
 
-  <!-- Strava Webhook -->
-  <div class="card" style="grid-column:1/-1;">
-    <div class="card-title">Auto-Sync Webhook</div>
-    <p style="color:var(--text-muted); font-size:0.875rem; margin-bottom:1rem; line-height:1.6;">
-      When subscribed, Strava will notify this app instantly when you finish a ride.
-      The ride will be synced and AI coaching feedback generated automatically.
-    </p>
+    <!-- Backup & Restore -->
+    <div class="card">
+      <div class="card-title">Backup &amp; Restore</div>
+      <p style="color:var(--text-muted); font-size:0.875rem; margin-bottom:1rem; line-height:1.6;">
+        Export a full backup — all rides, segments, settings, avatars, and rider data.
+        Use to migrate to a new machine or restore after a problem.
+      </p>
+      <div style="display:flex; gap:0.75rem; align-items:flex-start; flex-wrap:wrap;">
+        <div>
+          <a href="/settings/backup/export" class="btn btn-secondary">Download Backup</a>
+          <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.4rem;">Downloads a <code>.zip</code> (db + avatars)</div>
+        </div>
+        <div>
+          <form method="POST" action="/settings/backup/import" enctype="multipart/form-data" id="importForm" style="display:flex; flex-direction:column; gap:0.4rem;">
+            <label class="btn btn-secondary" style="cursor:pointer; margin:0;">
+              Restore Backup
+              <input type="file" name="backup" accept=".zip,.db" style="display:none;" onchange="document.getElementById('importForm').submit()">
+            </label>
+            <div style="font-size:0.75rem; color:var(--text-muted);">Replaces current data — back up first</div>
+          </form>
+        </div>
+      </div>
+    </div>
 
-    {% if s and s.webhookSubId %}
-      <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:1rem;">
-        <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--success);"></span>
-        <span style="font-size:0.875rem; color:var(--text);">Active — subscription ID {{ s.webhookSubId }}</span>
-      </div>
-      <button class="btn btn-secondary" onclick="manageWebhook('unsubscribe')">Unsubscribe</button>
-    {% else %}
-      <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:1rem;">
-        <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--text-muted);"></span>
-        <span style="font-size:0.875rem; color:var(--text-muted);">Not subscribed</span>
-      </div>
-      <button class="btn btn-primary" onclick="manageWebhook('subscribe')">Subscribe</button>
-    {% endif %}
-    <div id="webhookStatus" style="margin-top:0.75rem; font-size:0.875rem; color:var(--text-muted);"></div>
   </div>
 
   <!-- Setup Guide -->
-  <div class="card" style="grid-column:1/-1;">
+  <div class="card">
     <div class="card-title">Setup Guide</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:2rem;">
+      <div>
+        <div style="font-size:0.6875rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--accent); font-weight:600; margin-bottom:0.5rem;">Strava Integration</div>
+        <ol style="color:var(--text-muted); font-size:0.8125rem; line-height:1.8; padding-left:1.2rem; margin:0 0 1.25rem;">
+          <li>Go to <strong style="color:var(--text);">strava.com/settings/api</strong> and create an app. Set the callback domain to your server's hostname or IP.</li>
+          <li>Copy your <strong style="color:var(--text);">Client ID</strong> and <strong style="color:var(--text);">Client Secret</strong> into <code>STRAVA_CLIENT_ID</code> and <code>STRAVA_CLIENT_SECRET</code>.</li>
+          <li>Visit <strong style="color:var(--text);">/auth/strava</strong> to complete the OAuth handshake — once only.</li>
+        </ol>
 
-    <div style="font-size:0.6875rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--accent); font-weight:600; margin-bottom:0.5rem;">Strava Integration</div>
-    <ol style="color:var(--text-muted); font-size:0.8125rem; line-height:1.8; padding-left:1.2rem; margin:0 0 1.25rem;">
-      <li>Go to <strong style="color:var(--text);">strava.com/settings/api</strong> and create an app. Set the callback domain to your server's hostname or IP.</li>
-      <li>Copy your <strong style="color:var(--text);">Client ID</strong> and <strong style="color:var(--text);">Client Secret</strong> into the <code>STRAVA_CLIENT_ID</code> and <code>STRAVA_CLIENT_SECRET</code> environment variables.</li>
-      <li>Visit <strong style="color:var(--text);">/auth/strava</strong> to complete the OAuth handshake — this only needs to be done once.</li>
-    </ol>
+        <div style="font-size:0.6875rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--accent); font-weight:600; margin-bottom:0.5rem;">Auto-Sync Webhook</div>
+        <ol style="color:var(--text-muted); font-size:0.8125rem; line-height:1.8; padding-left:1.2rem; margin:0 0 1.25rem;">
+          <li>Set <code>APP_URL</code> to your public URL (e.g. <code>https://headwind.yourdomain.com</code>). A Cloudflare Tunnel works well.</li>
+          <li>Set <code>STRAVA_WEBHOOK_TOKEN</code> to any secret string.</li>
+          <li>Click <strong style="color:var(--text);">Subscribe</strong> in the Webhook section above.</li>
+        </ol>
 
-    <div style="font-size:0.6875rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--accent); font-weight:600; margin-bottom:0.5rem;">Auto-Sync Webhook</div>
-    <p style="color:var(--text-muted); font-size:0.8125rem; line-height:1.6; margin:0 0 0.6rem;">
-      The webhook means new rides appear automatically the moment you finish — no manual sync needed.
-      For it to work, Strava needs to reach your server from the internet.
-    </p>
-    <ol style="color:var(--text-muted); font-size:0.8125rem; line-height:1.8; padding-left:1.2rem; margin:0 0 1.25rem;">
-      <li>Set <code>APP_URL</code> to your publicly reachable URL (e.g. <code>https://headwind.yourdomain.com</code>). A Cloudflare Tunnel or reverse proxy works well.</li>
-      <li>Set <code>STRAVA_WEBHOOK_TOKEN</code> to any secret string you choose.</li>
-      <li>Click <strong style="color:var(--text);">Subscribe</strong> in the Auto-Sync Webhook section above. Strava will verify the callback and activate it.</li>
-    </ol>
+        <div style="font-size:0.6875rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--accent); font-weight:600; margin-bottom:0.5rem;">Home Assistant / MQTT</div>
+        <p style="color:var(--text-muted); font-size:0.8125rem; line-height:1.6; margin:0 0 1.25rem;">
+          Enter broker details above. Sensors publish every 20 seconds and after every sync.
+          Set the <strong style="color:var(--text);">HA Device</strong> on each rider's profile for per-rider push notifications.
+        </p>
 
-    <div style="font-size:0.6875rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--accent); font-weight:600; margin-bottom:0.5rem;">Environment Variables</div>
-    <div style="background:#0a1e2e; border:1px solid var(--border); border-radius:8px; padding:0.9rem 1rem; font-size:0.8125rem; font-family:monospace; line-height:2; margin-bottom:1.25rem;">
-      <div><span style="color:var(--accent);">DATABASE_URL</span>=<span style="color:var(--text-muted);">/data/bike.db</span></div>
-      <div><span style="color:var(--accent);">SECRET_KEY</span>=<span style="color:var(--text-muted);">your-random-secret</span></div>
-      <div><span style="color:var(--accent);">APP_USERNAME</span>=<span style="color:var(--text-muted);">admin</span></div>
-      <div><span style="color:var(--accent);">APP_PASSWORD</span>=<span style="color:var(--text-muted);">your-password</span></div>
-      <div><span style="color:var(--accent);">APP_URL</span>=<span style="color:var(--text-muted);">https://headwind.yourdomain.com</span></div>
-      <div><span style="color:var(--accent);">STRAVA_CLIENT_ID</span>=<span style="color:var(--text-muted);">your-strava-app-id</span></div>
-      <div><span style="color:var(--accent);">STRAVA_CLIENT_SECRET</span>=<span style="color:var(--text-muted);">your-strava-app-secret</span></div>
-      <div><span style="color:var(--accent);">STRAVA_WEBHOOK_TOKEN</span>=<span style="color:var(--text-muted);">any-secret-string</span></div>
-      <div><span style="color:var(--accent);">OPENAI_API_KEY</span>=<span style="color:var(--text-muted);">(optional — for AI coaching)</span></div>
+        <div style="font-size:0.6875rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--accent); font-weight:600; margin-bottom:0.5rem;">Garmin Connect</div>
+        <p style="color:var(--text-muted); font-size:0.8125rem; line-height:1.6; margin:0;">
+          Enter credentials above. First auth may require running <code>python3 garmin_setup.py</code> inside the container.
+          Recovery data syncs automatically every few hours after that.
+        </p>
+      </div>
+      <div>
+        <div style="font-size:0.6875rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--accent); font-weight:600; margin-bottom:0.5rem;">Environment Variables</div>
+        <div style="background:#0a1e2e; border:1px solid var(--border); border-radius:8px; padding:0.9rem 1rem; font-size:0.8125rem; font-family:monospace; line-height:2;">
+          <div><span style="color:var(--accent);">DATABASE_URL</span>=<span style="color:var(--text-muted);">/data/bike.db</span></div>
+          <div><span style="color:var(--accent);">SECRET_KEY</span>=<span style="color:var(--text-muted);">your-random-secret</span></div>
+          <div><span style="color:var(--accent);">APP_USERNAME</span>=<span style="color:var(--text-muted);">admin</span></div>
+          <div><span style="color:var(--accent);">APP_PASSWORD</span>=<span style="color:var(--text-muted);">your-password</span></div>
+          <div><span style="color:var(--accent);">APP_URL</span>=<span style="color:var(--text-muted);">https://headwind.yourdomain.com</span></div>
+          <div><span style="color:var(--accent);">STRAVA_CLIENT_ID</span>=<span style="color:var(--text-muted);">your-strava-app-id</span></div>
+          <div><span style="color:var(--accent);">STRAVA_CLIENT_SECRET</span>=<span style="color:var(--text-muted);">your-strava-app-secret</span></div>
+          <div><span style="color:var(--accent);">STRAVA_WEBHOOK_TOKEN</span>=<span style="color:var(--text-muted);">any-secret-string</span></div>
+          <div><span style="color:var(--accent);">OPENAI_API_KEY</span>=<span style="color:var(--text-muted);">(optional — for AI coaching)</span></div>
+        </div>
+      </div>
     </div>
-
-    <div style="font-size:0.6875rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--accent); font-weight:600; margin-bottom:0.5rem;">Home Assistant / MQTT</div>
-    <p style="color:var(--text-muted); font-size:0.8125rem; line-height:1.6; margin:0 0 1.25rem;">
-      Enter your MQTT broker address, port, and credentials in the <strong style="color:var(--text);">Home Assistant</strong> section above.
-      Once saved, 17 sensors publish automatically every 20 seconds and after every ride sync.
-      New ride notifications route to your HA companion app — set the <strong style="color:var(--text);">HA Device</strong> field on each rider's profile page.
-    </p>
-
-    <div style="font-size:0.6875rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--accent); font-weight:600; margin-bottom:0.5rem;">Garmin Connect</div>
-    <p style="color:var(--text-muted); font-size:0.8125rem; line-height:1.6; margin:0;">
-      Enter your Garmin Connect email and password in the <strong style="color:var(--text);">Garmin Connect</strong> section above.
-      The first sync may require interactive login — run <code>python3 garmin_setup.py</code> inside the container if it fails.
-      After that, recovery data (resting HR, HRV, sleep, body battery) syncs every few hours automatically.
-    </p>
   </div>
 
   <!-- About -->
-  <div class="card" style="grid-column:1/-1;">
+  <div class="card">
     <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.75rem;">
       <img src="{{ url_for('static', filename='logo.png') }}" alt="" style="width:36px; height:36px; border-radius:9px; flex-shrink:0;">
       <div>
@@ -332,8 +318,8 @@
 <script>
 function updateProvider() {
   var p = document.getElementById('providerSelect').value;
-  document.getElementById('openaiFields').style.display = p === 'openai' ? '' : 'none';
-  document.getElementById('ollamaFields').style.display = p === 'ollama' ? '' : 'none';
+  document.getElementById('openaiFields').style.display = p === 'openai' ? 'contents' : 'none';
+  document.getElementById('ollamaFields').style.display = p === 'ollama' ? 'block' : 'none';
 }
 updateProvider();
 
