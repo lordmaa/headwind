@@ -104,6 +104,9 @@ def index():
                MAX(CASE WHEN e.isPR=1 THEN e.activityDate END) AS pr_date
         FROM Segment s
         LEFT JOIN SegmentEffort e ON e.segmentId = s.id
+        LEFT JOIN Activity a ON a.id = e.activityId
+        LEFT JOIN Rider r ON r.id = a.riderId
+        WHERE e.id IS NULL OR r.isDefault = 1
         GROUP BY s.id
         ORDER BY s.createdAt DESC
     ''')
