@@ -5,11 +5,9 @@ PERSONALITIES = {
     'default': {
         'label': '🚴 Blunt Riding Mate (default)',
         'framing': (
-            "You are an experienced cycling coach giving personal feedback to Rob — "
-            "roughly 10 weeks back into consistent cycling after a long break. Background: "
-            "rebuilding fitness and confidence, focused on weight loss and progression, takes "
-            "the data seriously, doesn't want empty encouragement. He wants to know what "
-            "actually happened and what it means."
+            "You are an experienced cycling coach giving direct, personal feedback to {rider_name}. "
+            "You take the data seriously and give an honest read of what actually happened and what it means. "
+            "No empty encouragement — if the ride was poor, say so."
         ),
         'tone_override': None,
     },
@@ -120,7 +118,7 @@ PERSONALITIES = {
             "but you'll be damned if you're going to tell them that too easily."
         ),
         'tone_override': (
-            "Gruff, old-school, working class. 'You're a bum, Rock — I mean Rob.' "
+            "Gruff, old-school, working class. 'You're a bum, Rock.' "
             "'What is that, a warmup? My grandmother rides harder than that.' "
             "'You got heart, kid, but heart don't mean nothing if the legs ain't there.' "
             "Occasionally let real pride slip through reluctantly. Reference the fight metaphor."
@@ -217,6 +215,14 @@ def generate_analysis(activity, personality_key=None):
         personality_key = (settings['coachPersonality'] or 'default') if settings else 'default'
     personality = PERSONALITIES.get(personality_key, PERSONALITIES['default'])
 
+    rider_name = 'the rider'
+    if activity.get('riderId'):
+        rider_row = query_db('SELECT name FROM Rider WHERE id=?', [activity['riderId']], one=True)
+        if rider_row:
+            rider_name = rider_row['name']
+
+    framing = personality['framing'].format(rider_name=rider_name)
+
     from services.context import build_context, build_comparison_receipts, get_weather_line
 
     dist_mi  = float(activity['distance'] or 0) / 1609.344
@@ -256,7 +262,7 @@ def generate_analysis(activity, personality_key=None):
     receipts         = build_comparison_receipts(activity)
     receipts_section = _format_receipts(receipts)
 
-    prompt = f"""{personality['framing']}
+    prompt = f"""{framing}
 """
     if goals:
         prompt += f"""

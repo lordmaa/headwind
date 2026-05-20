@@ -272,7 +272,7 @@ def push_update(activity=None):
             speed_mph = round((act.get('averageSpeed') or 0) * 2.23694, 1)
             wx        = act.get('weatherSummary') or ''
 
-            rider_name = 'Rob'
+            rider_name = 'Rider'
             ha_device  = None
             if act.get('riderId'):
                 rider = query_db('SELECT name, haDevice FROM Rider WHERE id=?', [act['riderId']], one=True)
