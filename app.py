@@ -178,7 +178,7 @@ def create_app():
             return
         if not session.get('logged_in'):
             return redirect(url_for('login.login_page'))
-        if request.endpoint != 'setup.wizard':
+        if request.endpoint not in ('setup.wizard', 'setup.restore'):
             from database import query_db
             if query_db('SELECT COUNT(*) FROM Rider', one=True)[0] == 0:
                 return redirect('/setup')
