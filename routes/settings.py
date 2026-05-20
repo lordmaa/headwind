@@ -1,8 +1,11 @@
 import os
+import shutil
+import sqlite3
+import tempfile
 from pathlib import Path
 
 from dotenv import load_dotenv, set_key
-from flask import Blueprint, flash, redirect, render_template, request
+from flask import Blueprint, flash, redirect, render_template, request, send_file
 from database import get_db, query_db
 
 bp = Blueprint('settings', __name__)
@@ -140,4 +143,67 @@ def change_password():
         os.environ['APP_PASSWORD'] = new_pw
 
     flash('Login details updated.', 'success')
+    return redirect('/settings')
+
+
+@bp.route('/backup/export')
+def backup_export():
+    from flask import current_app
+    db_path = current_app.config.get('DATABASE_URL') or os.environ.get('DATABASE_URL', '')
+    db_path = db_path.replace('sqlite:///', '')
+    if not db_path or not Path(db_path).exists():
+        flash('Database file not found.', 'error')
+        return redirect('/settings')
+
+    # Use SQLite's online backup API so we get a consistent snapshot even under load
+    tmp = tempfile.NamedTemporaryFile(suffix='.db', delete=False)
+    tmp.close()
+    try:
+        src = sqlite3.connect(db_path)
+        dst = sqlite3.connect(tmp.name)
+        src.backup(dst)
+        src.close()
+        dst.close()
+        return send_file(tmp.name, as_attachment=True, download_name='headwind-backup.db',
+                         mimetype='application/octet-stream')
+    except Exception as e:
+        flash(f'Export failed: {e}', 'error')
+        return redirect('/settings')
+
+
+@bp.route('/backup/import', methods=['POST'])
+def backup_import():
+    from flask import current_app
+    f = request.files.get('backup')
+    if not f or not f.filename:
+        flash('No file selected.', 'error')
+        return redirect('/settings')
+
+    db_path = current_app.config.get('DATABASE_URL') or os.environ.get('DATABASE_URL', '')
+    db_path = db_path.replace('sqlite:///', '')
+    if not db_path:
+        flash('Could not determine database path.', 'error')
+        return redirect('/settings')
+
+    # Write upload to a temp file and validate it's a real SQLite DB with expected tables
+    tmp = tempfile.NamedTemporaryFile(suffix='.db', delete=False)
+    try:
+        f.save(tmp.name)
+        conn = sqlite3.connect(tmp.name)
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+        conn.close()
+        required = {'Rider', 'Activity', 'Settings'}
+        if not required.issubset(tables):
+            flash(f'Invalid backup — missing tables: {required - tables}', 'error')
+            return redirect('/settings')
+    except Exception as e:
+        flash(f'Invalid database file: {e}', 'error')
+        return redirect('/settings')
+
+    # Back up the current DB alongside it, then replace
+    backup_of_current = db_path + '.pre-restore'
+    shutil.copy2(db_path, backup_of_current)
+    shutil.move(tmp.name, db_path)
+
+    flash('Database restored from backup. Previous database saved as .pre-restore alongside the db file.', 'success')
     return redirect('/settings')
