@@ -2,10 +2,11 @@ import os
 import shutil
 import sqlite3
 import tempfile
+import zipfile
 from pathlib import Path
 
 from dotenv import load_dotenv, set_key
-from flask import Blueprint, flash, redirect, render_template, request, send_file
+from flask import Blueprint, current_app, flash, redirect, render_template, request, send_file
 from database import get_db, query_db
 
 bp = Blueprint('settings', __name__)
@@ -146,26 +147,63 @@ def change_password():
     return redirect('/settings')
 
 
+def _db_path():
+    p = current_app.config.get('DATABASE') or os.environ.get('DATABASE_URL', '')
+    return p.replace('sqlite:///', '')
+
+
+def _avatar_dir():
+    return os.path.join(current_app.root_path, 'static', 'avatars')
+
+
+def _validate_db(path):
+    """Open a SQLite file and return (tables set, rider_count) or raise."""
+    conn = sqlite3.connect(path)
+    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    rider_count = conn.execute('SELECT COUNT(*) FROM Rider').fetchone()[0] if 'Rider' in tables else 0
+    conn.close()
+    return tables, rider_count
+
+
+def _apply_restore(tmp_db, avatar_src_dir=None):
+    """Replace live DB with tmp_db and optionally copy avatars. Saves .pre-restore."""
+    db = _db_path()
+    shutil.copy2(db, db + '.pre-restore')
+    shutil.move(tmp_db, db)
+    if avatar_src_dir and os.path.isdir(avatar_src_dir):
+        dest = _avatar_dir()
+        os.makedirs(dest, exist_ok=True)
+        for name in os.listdir(avatar_src_dir):
+            shutil.copy2(os.path.join(avatar_src_dir, name), os.path.join(dest, name))
+
+
 @bp.route('/backup/export')
 def backup_export():
-    from flask import current_app
-    db_path = current_app.config.get('DATABASE_URL') or os.environ.get('DATABASE_URL', '')
-    db_path = db_path.replace('sqlite:///', '')
-    if not db_path or not Path(db_path).exists():
+    db = _db_path()
+    if not db or not Path(db).exists():
         flash('Database file not found.', 'error')
         return redirect('/settings')
 
-    # Use SQLite's online backup API so we get a consistent snapshot even under load
-    tmp = tempfile.NamedTemporaryFile(suffix='.db', delete=False)
-    tmp.close()
+    tmp_dir = tempfile.mkdtemp()
     try:
-        src = sqlite3.connect(db_path)
-        dst = sqlite3.connect(tmp.name)
+        # Consistent DB snapshot via SQLite backup API
+        snap = os.path.join(tmp_dir, 'headwind.db')
+        src = sqlite3.connect(db)
+        dst = sqlite3.connect(snap)
         src.backup(dst)
         src.close()
         dst.close()
-        return send_file(tmp.name, as_attachment=True, download_name='headwind-backup.db',
-                         mimetype='application/octet-stream')
+
+        zip_path = os.path.join(tmp_dir, 'headwind-backup.zip')
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+            zf.write(snap, 'headwind.db')
+            av_dir = _avatar_dir()
+            if os.path.isdir(av_dir):
+                for name in os.listdir(av_dir):
+                    zf.write(os.path.join(av_dir, name), f'avatars/{name}')
+
+        return send_file(zip_path, as_attachment=True, download_name='headwind-backup.zip',
+                         mimetype='application/zip')
     except Exception as e:
         flash(f'Export failed: {e}', 'error')
         return redirect('/settings')
@@ -173,37 +211,38 @@ def backup_export():
 
 @bp.route('/backup/import', methods=['POST'])
 def backup_import():
-    from flask import current_app
     f = request.files.get('backup')
     if not f or not f.filename:
         flash('No file selected.', 'error')
         return redirect('/settings')
 
-    db_path = current_app.config.get('DATABASE_URL') or os.environ.get('DATABASE_URL', '')
-    db_path = db_path.replace('sqlite:///', '')
-    if not db_path:
-        flash('Could not determine database path.', 'error')
-        return redirect('/settings')
-
-    # Write upload to a temp file and validate it's a real SQLite DB with expected tables
-    tmp = tempfile.NamedTemporaryFile(suffix='.db', delete=False)
+    tmp_dir = tempfile.mkdtemp()
     try:
-        f.save(tmp.name)
-        conn = sqlite3.connect(tmp.name)
-        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
-        conn.close()
+        upload = os.path.join(tmp_dir, f.filename)
+        f.save(upload)
+
+        if zipfile.is_zipfile(upload):
+            with zipfile.ZipFile(upload) as zf:
+                if 'headwind.db' not in zf.namelist():
+                    flash('Invalid backup zip — headwind.db not found inside.', 'error')
+                    return redirect('/settings')
+                zf.extractall(tmp_dir)
+            tmp_db = os.path.join(tmp_dir, 'headwind.db')
+            avatar_src = os.path.join(tmp_dir, 'avatars')
+        else:
+            tmp_db = upload
+            avatar_src = None
+
+        tables, _ = _validate_db(tmp_db)
         required = {'Rider', 'Activity', 'Settings'}
         if not required.issubset(tables):
             flash(f'Invalid backup — missing tables: {required - tables}', 'error')
             return redirect('/settings')
+
+        _apply_restore(tmp_db, avatar_src)
     except Exception as e:
-        flash(f'Invalid database file: {e}', 'error')
+        flash(f'Restore failed: {e}', 'error')
         return redirect('/settings')
 
-    # Back up the current DB alongside it, then replace
-    backup_of_current = db_path + '.pre-restore'
-    shutil.copy2(db_path, backup_of_current)
-    shutil.move(tmp.name, db_path)
-
-    flash('Database restored from backup. Previous database saved as .pre-restore alongside the db file.', 'success')
+    flash('Restored from backup — previous database saved as .pre-restore.', 'success')
     return redirect('/settings')

@@ -1,10 +1,8 @@
 import os
-import shutil
-import sqlite3
+import zipfile
 import tempfile
-from pathlib import Path
 
-from flask import Blueprint, current_app, flash, redirect, render_template, request
+from flask import Blueprint, redirect, render_template, request
 from database import get_db, query_db
 
 bp = Blueprint('setup', __name__)
@@ -39,26 +37,32 @@ def restore():
     if not f or not f.filename:
         return render_template('setup.html', error='No file selected.')
 
-    db_path = current_app.config.get('DATABASE_URL') or os.environ.get('DATABASE_URL', '')
-    db_path = db_path.replace('sqlite:///', '')
-
-    tmp = tempfile.NamedTemporaryFile(suffix='.db', delete=False)
+    tmp_dir = tempfile.mkdtemp()
     try:
-        f.save(tmp.name)
-        conn = sqlite3.connect(tmp.name)
-        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+        upload = os.path.join(tmp_dir, f.filename)
+        f.save(upload)
+
+        if zipfile.is_zipfile(upload):
+            with zipfile.ZipFile(upload) as zf:
+                if 'headwind.db' not in zf.namelist():
+                    return render_template('setup.html', error='Invalid backup zip — headwind.db not found inside.')
+                zf.extractall(tmp_dir)
+            tmp_db = os.path.join(tmp_dir, 'headwind.db')
+            avatar_src = os.path.join(tmp_dir, 'avatars')
+        else:
+            tmp_db = upload
+            avatar_src = None
+
+        from routes.settings import _validate_db, _apply_restore
+        tables, rider_count = _validate_db(tmp_db)
         required = {'Rider', 'Activity', 'Settings'}
         if not required.issubset(tables):
-            conn.close()
-            os.unlink(tmp.name)
             return render_template('setup.html', error=f'Invalid backup — missing tables: {required - tables}')
-        rider_count = conn.execute('SELECT COUNT(*) FROM Rider').fetchone()[0]
-        conn.close()
         if rider_count == 0:
-            os.unlink(tmp.name)
-            return render_template('setup.html', error='That backup has no riders — it may be an empty or cleared database. Download a backup from a working Headwind instance.')
-    except Exception as e:
-        return render_template('setup.html', error=f'Could not read backup file: {e}')
+            return render_template('setup.html', error='That backup has no riders — download a backup from a working Headwind instance.')
 
-    shutil.move(tmp.name, db_path)
+        _apply_restore(tmp_db, avatar_src if avatar_src and os.path.isdir(avatar_src) else None)
+    except Exception as e:
+        return render_template('setup.html', error=f'Could not restore backup: {e}')
+
     return redirect('/dashboard')

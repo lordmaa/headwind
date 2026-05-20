@@ -163,14 +163,14 @@
     <div style="display:flex; gap:0.75rem; align-items:flex-start; flex-wrap:wrap;">
       <div>
         <a href="/settings/backup/export" class="btn btn-secondary">Download Backup</a>
-        <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.4rem;">Downloads a <code>.db</code> file</div>
+        <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.4rem;">Downloads a <code>.zip</code> (db + avatars)</div>
       </div>
       <div>
         <form method="POST" action="/settings/backup/import" enctype="multipart/form-data" id="importForm" style="display:flex; flex-direction:column; gap:0.4rem;">
           <div style="display:flex; gap:0.5rem; align-items:center;">
             <label class="btn btn-secondary" style="cursor:pointer; margin:0;">
               Restore Backup
-              <input type="file" name="backup" accept=".db" style="display:none;" onchange="document.getElementById('importForm').submit()">
+              <input type="file" name="backup" accept=".zip,.db" style="display:none;" onchange="document.getElementById('importForm').submit()">
             </label>
             <span id="importStatus" style="font-size:0.8125rem; color:var(--text-muted);"></span>
           </div>
