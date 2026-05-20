@@ -3,8 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}{% endblock %} — BikeTracker</title>
+  <title>{% block title %}{% endblock %} — Headwind</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
   {% block head %}{% endblock %}
 </head>
 <body>
@@ -12,21 +14,19 @@
   <div class="sidebar-overlay" id="sidebarOverlay"></div>
   <nav class="sidebar" id="sidebar">
     <div class="sidebar-header">
-      <div class="app-name">BikeTracker</div>
-      <div class="person-name">Strava Connected</div>
+      <div style="display:flex; align-items:center; gap:0.6rem;">
+        <img src="{{ url_for('static', filename='logo.png') }}" alt="" style="width:32px; height:32px; border-radius:8px; flex-shrink:0;">
+        <div class="app-name">Headwind</div>
+      </div>
     </div>
     <div class="sidebar-nav">
       <a href="{{ url_for('dashboard.dashboard') }}"
          class="nav-item {% if request.endpoint == 'dashboard.dashboard' %}active{% endif %}">
         Dashboard
       </a>
-      <a href="{{ url_for('import_rides.index') }}"
-         class="nav-item {% if request.blueprint == 'import_rides' %}active{% endif %}">
-        Import
-      </a>
       <a href="{{ url_for('data.index') }}"
          class="nav-item {% if request.blueprint == 'data' %}active{% endif %}">
-        Data
+        Analytics
       </a>
       <a href="{{ url_for('segments.index') }}"
          class="nav-item {% if request.blueprint == 'segments' %}active{% endif %}">
@@ -36,10 +36,6 @@
          class="nav-item {% if request.blueprint == 'heatmap' %}active{% endif %}">
         Heatmap
       </a>
-      <a href="{{ url_for('riders.index') }}"
-         class="nav-item {% if request.blueprint == 'riders' %}active{% endif %}">
-        Riders
-      </a>
       <a href="{{ url_for('ai_page.index') }}"
          class="nav-item {% if request.blueprint == 'ai_page' %}active{% endif %}">
         AI Coach
@@ -48,9 +44,13 @@
          class="nav-item {% if request.blueprint == 'garmin_page' %}active{% endif %}">
         Recovery
       </a>
-      <a href="{{ url_for('about.index') }}"
-         class="nav-item {% if request.blueprint == 'about' %}active{% endif %}">
-        About
+      <a href="{{ url_for('riders.index') }}"
+         class="nav-item {% if request.blueprint == 'riders' %}active{% endif %}">
+        Riders
+      </a>
+      <a href="{{ url_for('import_rides.index') }}"
+         class="nav-item {% if request.blueprint == 'import_rides' %}active{% endif %}">
+        Import
       </a>
       <div class="nav-divider"></div>
       <a href="{{ url_for('settings.index') }}"

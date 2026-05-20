@@ -243,6 +243,34 @@
 </div>
 {% endif %}
 
+<!-- HR Widget -->
+{% if activity.averageHeartrate %}
+<div class="card" style="margin-bottom:1.5rem; padding:1rem 1.25rem;">
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.875rem;">
+    <div style="font-size:0.6875rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted); font-weight:600;">Heart Rate</div>
+    {% if charts.heartrate %}<span style="font-size:0.6875rem; color:#ef4444; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.25); padding:0.15rem 0.5rem; border-radius:4px;">♥ Garmin</span>{% endif %}
+  </div>
+  <div style="display:flex; gap:2.5rem; align-items:flex-end;">
+    <div>
+      <div style="font-size:2.25rem; font-weight:700; color:#ef4444; line-height:1; font-variant-numeric:tabular-nums;">{{ activity.averageHeartrate | int }}</div>
+      <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.25rem;">avg bpm</div>
+    </div>
+    {% if activity.maxHeartrate %}
+    <div>
+      <div style="font-size:2.25rem; font-weight:700; color:var(--text); line-height:1; font-variant-numeric:tabular-nums;">{{ activity.maxHeartrate | int }}</div>
+      <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.25rem;">max bpm</div>
+    </div>
+    {% endif %}
+    {% if activity.averageHeartrate and activity.maxHeartrate %}
+    <div style="margin-left:auto; text-align:right;">
+      <div style="font-size:1.125rem; font-weight:600; color:var(--text-muted); font-variant-numeric:tabular-nums;">{{ ((activity.averageHeartrate / activity.maxHeartrate) * 100) | int }}%</div>
+      <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.25rem;">avg of max</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
 <!-- Map + Charts -->
 {% set has_charts = charts.elevation or charts.speed or charts.heartrate or charts.power or charts.cadence %}
 {% if coords or has_charts %}
@@ -258,7 +286,7 @@
   <div class="charts-col">
     {% if charts.elevation %}
     <div class="card">
-      <div class="card-title">Elevation (ft)</div>
+      <div class="card-title">Elevation{% if charts.heartrate %} &amp; Heart Rate{% endif %}</div>
       <canvas id="elevChart"></canvas>
     </div>
     {% endif %}
@@ -268,7 +296,7 @@
       <canvas id="speedChart"></canvas>
     </div>
     {% endif %}
-    {% if charts.heartrate %}
+    {% if charts.heartrate and not charts.elevation %}
     <div class="card">
       <div class="card-title">Heart Rate (bpm)</div>
       <canvas id="hrChart"></canvas>
@@ -682,9 +710,42 @@ function makeChart(id, data, color) {
   });
 }
 
-{% if charts.elevation %}makeChart('elevChart',   {{ charts.elevation | tojson }}, 'rgb(16,185,129)');{% endif %}
+function makeElevHrChart(id, elevData, hrData) {
+  new Chart(document.getElementById(id), {
+    type: 'line',
+    data: {
+      labels: elevData.labels,
+      datasets: [
+        { label: 'Elev (ft)', data: elevData.values, borderColor: 'rgb(16,185,129)', borderWidth: 1.5,
+          pointRadius: 0, fill: true, backgroundColor: 'rgba(16,185,129, 0.08)', yAxisID: 'yElev' },
+        { label: 'HR (bpm)',  data: hrData.values,   borderColor: 'rgb(239,68,68)',  borderWidth: 1.5,
+          pointRadius: 0, fill: false, yAxisID: 'yHr' }
+      ]
+    },
+    options: {
+      animation: false,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, labels: { color: '#4d7d95', font: { size: 10 }, boxWidth: 10, padding: 12 } },
+        tooltip: { mode: 'index', intersect: false,
+          callbacks: { title: ctx => ctx[0].label + ' mi' } }
+      },
+      scales: {
+        x: { ticks: { color: '#4d7d95', font: { size: 10 }, maxTicksLimit: 8 }, grid: { display: false } },
+        yElev: { position: 'left',  ticks: { color: 'rgb(16,185,129)', font: { size: 10 } }, grid: { color: '#163352' } },
+        yHr:   { position: 'right', ticks: { color: 'rgb(239,68,68)',  font: { size: 10 } }, grid: { drawOnChartArea: false } }
+      }
+    }
+  });
+}
+
+{% if charts.elevation and charts.heartrate %}
+makeElevHrChart('elevChart', {{ charts.elevation | tojson }}, {{ charts.heartrate | tojson }});
+{% elif charts.elevation %}
+makeChart('elevChart', {{ charts.elevation | tojson }}, 'rgb(16,185,129)');
+{% endif %}
 {% if charts.speed %}makeChart('speedChart',  {{ charts.speed | tojson }},     'rgb(14,165,233)');{% endif %}
-{% if charts.heartrate %}makeChart('hrChart',  {{ charts.heartrate | tojson }}, 'rgb(239,68,68)');{% endif %}
+{% if charts.heartrate and not charts.elevation %}makeChart('hrChart', {{ charts.heartrate | tojson }}, 'rgb(239,68,68)');{% endif %}
 {% if charts.power %}makeChart('powerChart', {{ charts.power | tojson }},       'rgb(252,76,2)');{% endif %}
 {% if charts.cadence %}makeChart('cadenceChart', {{ charts.cadence | tojson }}, 'rgb(168,85,247)');{% endif %}
 

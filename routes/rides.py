@@ -283,7 +283,7 @@ def export_gpx(rid):
 
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
-        '<gpx version="1.1" creator="BikeTracker" xmlns="http://www.topografix.com/GPX/1/1">',
+        '<gpx version="1.1" creator="Headwind" xmlns="http://www.topografix.com/GPX/1/1">',
         '  <trk>',
         f'    <name>{name_escaped}</name>',
         '    <trkseg>',

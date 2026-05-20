@@ -6,9 +6,9 @@ log = logging.getLogger(__name__)
 
 DEVICE = {
     "identifiers": ["bike_tracker"],
-    "name": "Bike Tracker",
+    "name": "Headwind",
     "model": "bike-flask",
-    "manufacturer": "BikeTracker",
+    "manufacturer": "Headwind",
 }
 
 SENSORS = [

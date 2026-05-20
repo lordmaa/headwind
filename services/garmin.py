@@ -75,6 +75,60 @@ def _parse_stress(stress_data):
         return None
 
 
+def fetch_ride_hr(api, start_utc_iso, elapsed_secs, time_stream=None):
+    """
+    Pull minute-by-minute HR from Garmin for the ride's time window.
+    If time_stream (list of elapsed seconds from Strava) is provided, interpolates
+    HR values onto it so the chart aligns with distance/speed.
+    Returns {'avg': int, 'max': int, 'stream_data': [bpm, ...]} or None.
+    """
+    import bisect
+    from datetime import datetime, timezone
+
+    start_dt = datetime.fromisoformat(start_utc_iso.replace('Z', '+00:00'))
+    start_ms = int(start_dt.timestamp() * 1000)
+    end_ms   = start_ms + int(elapsed_secs) * 1000
+    date_str = start_dt.strftime('%Y-%m-%d')
+
+    hr_data = api.get_heart_rates(date_str)
+    raw     = hr_data.get('heartRateValues') or []
+
+    # Ride-only pairs for avg/max
+    ride_pairs = [(ts, bpm) for ts, bpm in raw if bpm is not None and start_ms <= ts <= end_ms]
+    if not ride_pairs:
+        return None
+
+    bpms = [bpm for _, bpm in ride_pairs]
+    avg  = round(sum(bpms) / len(bpms))
+    peak = max(bpms)
+
+    if time_stream:
+        # Include up to 5 min before start so interpolation has a proper anchor
+        # at elapsed=0 rather than snapping to the first in-window Garmin point.
+        buffer_ms = 5 * 60 * 1000
+        interp_pairs = [(ts, bpm) for ts, bpm in raw
+                        if bpm is not None and (start_ms - buffer_ms) <= ts <= end_ms]
+        timestamps = [ts for ts, _ in interp_pairs]
+        hr_vals    = [bpm for _, bpm in interp_pairs]
+        stream_data = []
+        for elapsed in time_stream:
+            t   = start_ms + elapsed * 1000
+            idx = bisect.bisect_left(timestamps, t)
+            if idx == 0:
+                stream_data.append(hr_vals[0])
+            elif idx >= len(timestamps):
+                stream_data.append(hr_vals[-1])
+            else:
+                t0, t1 = timestamps[idx - 1], timestamps[idx]
+                v0, v1 = hr_vals[idx - 1], hr_vals[idx]
+                frac = (t - t0) / (t1 - t0) if t1 > t0 else 0
+                stream_data.append(round(v0 + frac * (v1 - v0)))
+    else:
+        stream_data = bpms
+
+    return {'avg': avg, 'max': peak, 'stream_data': stream_data}
+
+
 def sync_garmin(email, password, days=7):
     """Fetch the last `days` days of Garmin daily metrics and upsert into GarminDaily."""
     from database import get_db

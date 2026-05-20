@@ -1,3 +1,4 @@
+import json
 import threading
 from flask import Blueprint, current_app, jsonify, request
 from database import get_db, query_db
@@ -30,9 +31,34 @@ def _process_new_activity(app, activity_id):
             try:
                 s = query_db('SELECT garminEmail, garminPassword FROM Settings WHERE id=1', one=True)
                 if s and s['garminEmail'] and s['garminPassword']:
-                    from services.garmin import sync_garmin
+                    from services.garmin import sync_garmin, fetch_ride_hr, _client
                     sync_garmin(s['garminEmail'], s['garminPassword'], days=14)
                     log.warning('Webhook: Garmin sync complete for activity %s', activity_id)
+
+                    # Enrich with Garmin HR if Strava didn't capture it
+                    if not activity.get('averageHeartrate') and activity.get('startDate') and activity.get('elapsedTime'):
+                        try:
+                            garmin_api = _client(s['garminEmail'], s['garminPassword'])
+                            streams = json.loads(activity['streams']) if activity.get('streams') else {}
+                            time_stream = (streams.get('time') or {}).get('data')
+                            hr = fetch_ride_hr(garmin_api, activity['startDate'], activity['elapsedTime'], time_stream)
+                            if hr:
+                                streams['heartrate'] = {
+                                    'type': 'heartrate',
+                                    'data': hr['stream_data'],
+                                    'series_type': 'time',
+                                    'original_size': len(hr['stream_data']),
+                                    'resolution': 'medium' if time_stream else 'low',
+                                }
+                                db = get_db()
+                                db.execute(
+                                    'UPDATE Activity SET averageHeartrate=?, maxHeartrate=?, streams=? WHERE id=?',
+                                    [hr['avg'], hr['max'], json.dumps(streams), str(activity_id)],
+                                )
+                                db.commit()
+                                log.warning('Webhook: Garmin HR enriched activity %s — avg=%s max=%s', activity_id, hr['avg'], hr['max'])
+                        except Exception as hre:
+                            log.warning('Webhook: Garmin HR enrichment failed (non-fatal): %s', hre)
             except Exception as ge:
                 log.warning('Webhook: Garmin sync failed (non-fatal): %s', ge)
 
@@ -53,7 +79,7 @@ def _process_new_activity(app, activity_id):
         except Exception as e:
             log.error('Webhook processing failed for %s: %s', activity_id, e, exc_info=True)
             try:
-                send_notification('BikeTracker sync error', str(e))
+                send_notification('Headwind sync error', str(e))
             except Exception:
                 pass
 

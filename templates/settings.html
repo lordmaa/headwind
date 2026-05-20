@@ -233,6 +233,23 @@
     <div id="webhookStatus" style="margin-top:0.75rem; font-size:0.875rem; color:var(--text-muted);"></div>
   </div>
 
+  <!-- About -->
+  <div class="card">
+    <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.75rem;">
+      <img src="{{ url_for('static', filename='logo.png') }}" alt="" style="width:36px; height:36px; border-radius:9px; flex-shrink:0;">
+      <div>
+        <div style="font-weight:700; font-size:1rem; color:var(--text);">Headwind</div>
+        <div style="font-size:0.75rem; color:var(--text-muted);">Self-hosted, private cycling analytics</div>
+      </div>
+    </div>
+    <p style="color:var(--text-muted); font-size:0.8125rem; line-height:1.6; margin:0 0 0.75rem;">
+      Your rides, your data — stored locally on your own hardware.
+      Syncs from Strava and Garmin Connect, supports FIT/GPX imports,
+      and runs entirely on your network.
+    </p>
+    <a href="{{ url_for('about.index') }}" class="btn btn-secondary" style="font-size:0.8125rem;">View full feature list</a>
+  </div>
+
 </div>
 {% endblock %}
 

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Login — BikeTracker</title>
+  <title>Login — Headwind</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
   <style>
     body { display:flex; align-items:center; justify-content:center; min-height:100vh; background:var(--bg); }
@@ -17,7 +17,10 @@
 </head>
 <body>
   <div class="card login-card">
-    <div class="login-logo">🚴 BikeTracker</div>
+    <div style="display:flex; align-items:center; gap:0.6rem; margin-bottom:0.25rem;">
+      <img src="{{ url_for('static', filename='logo.png') }}" alt="" style="width:40px; height:40px; border-radius:10px;">
+      <div class="login-logo" style="margin-bottom:0;">Headwind</div>
+    </div>
     <div class="login-sub">Sign in to continue</div>
 
     {% if error %}

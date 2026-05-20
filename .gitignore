@@ -26,3 +26,7 @@ AGENTS.md
 # Editor / OS
 .DS_Store
 *.swp
+
+# Generated demo data
+demo_gpx/
+demo_gpx2/

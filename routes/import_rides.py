@@ -111,6 +111,20 @@ def _process_single_file(path, original_name, rider_id=None):
         save_best_efforts(db, act.get('id'), act.get('startDateLocal'), act.get('streams'))
         db.commit()
         log.warning('Single file import: imported id=%s name=%s', act['id'], act.get('name'))
+
+        try:
+            from services.segments import scan_activity_against_segments, _refresh_prs
+            segments = db.execute('SELECT * FROM Segment').fetchall()
+            if segments:
+                act_row = db.execute('SELECT * FROM Activity WHERE id=?', [act['id']]).fetchone()
+                if act_row:
+                    scan_activity_against_segments(db, act_row, segments)
+                    for seg in segments:
+                        _refresh_prs(db, seg['id'])
+                    db.commit()
+        except Exception:
+            pass
+
         try:
             from services.mqtt import push_update
             act_row = db.execute('SELECT * FROM Activity WHERE id=?', [act['id']]).fetchone()

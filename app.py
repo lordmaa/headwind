@@ -29,12 +29,54 @@ def _garmin_heartbeat(app):
         interval_hours = 2
         try:
             with app.app_context():
-                from database import query_db
+                import json
+                import logging
+                from database import query_db, get_db
+                log = logging.getLogger(__name__)
                 s = query_db('SELECT garminEmail, garminPassword, garminSyncHours FROM Settings WHERE id=1', one=True)
                 if s and s['garminEmail'] and s['garminPassword']:
                     interval_hours = s['garminSyncHours'] or 2
-                    from services.garmin import sync_garmin
+                    from services.garmin import sync_garmin, fetch_ride_hr, _client
                     sync_garmin(s['garminEmail'], s['garminPassword'], days=14)
+
+                    # Backfill HR for owner's recent rides where Strava had no HR data
+                    missing = query_db('''
+                        SELECT a.id, a.startDate, a.elapsedTime, a.streams
+                        FROM Activity a
+                        JOIN Rider r ON r.id = a.riderId
+                        WHERE r.isDefault = 1
+                          AND a.averageHeartrate IS NULL
+                          AND a.startDate IS NOT NULL
+                          AND a.elapsedTime IS NOT NULL
+                          AND a.startDate >= datetime('now', '-7 days')
+                    ''')
+                    if missing:
+                        try:
+                            garmin_api = _client(s['garminEmail'], s['garminPassword'])
+                            db = get_db()
+                            for act in missing:
+                                try:
+                                    streams = json.loads(act['streams']) if act['streams'] else {}
+                                    time_stream = (streams.get('time') or {}).get('data')
+                                    hr = fetch_ride_hr(garmin_api, act['startDate'], act['elapsedTime'], time_stream)
+                                    if hr:
+                                        streams['heartrate'] = {
+                                            'type': 'heartrate',
+                                            'data': hr['stream_data'],
+                                            'series_type': 'time',
+                                            'original_size': len(hr['stream_data']),
+                                            'resolution': 'medium' if time_stream else 'low',
+                                        }
+                                        db.execute(
+                                            'UPDATE Activity SET averageHeartrate=?, maxHeartrate=?, streams=? WHERE id=?',
+                                            [hr['avg'], hr['max'], json.dumps(streams), act['id']],
+                                        )
+                                        db.commit()
+                                        log.warning('Garmin HR backfill: enriched %s — avg=%s max=%s', act['id'], hr['avg'], hr['max'])
+                                except Exception as hre:
+                                    log.warning('Garmin HR backfill failed for %s: %s', act['id'], hre)
+                        except Exception:
+                            pass
         except Exception:
             pass
         time.sleep(interval_hours * 3600)
