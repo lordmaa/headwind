@@ -1,45 +1,238 @@
-{% extends 'base.html' %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome — Headwind</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+  <style>
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      background: var(--bg);
+      padding: 3rem 1rem;
+    }
+    .wizard { width: 100%; max-width: 560px; }
 
-{% block title %}Setup{% endblock %}
-{% block page_title %}Welcome{% endblock %}
+    .wizard-hero {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .wizard-hero img {
+      width: 56px; height: 56px; border-radius: 14px; flex-shrink: 0;
+    }
+    .wizard-hero-text h1 {
+      font-size: 1.75rem; font-weight: 700; color: var(--text); margin: 0 0 0.2rem;
+    }
+    .wizard-hero-text p {
+      font-size: 0.875rem; color: var(--text-muted); margin: 0;
+    }
 
-{% block content %}
-<div style="max-width:480px; margin:3rem auto;">
-  <div class="card">
-    <div class="card-title" style="font-size:1.25rem; margin-bottom:0.25rem;">Let's get you set up</div>
-    <p style="color:var(--text-muted); font-size:0.875rem; margin-bottom:1.5rem;">
-      Tell us who's riding. You can add more riders and change names later under <strong>Riders</strong>.
-    </p>
+    .arch-box {
+      background: #0a1e2e;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.1rem 1.25rem;
+      margin-bottom: 1.75rem;
+    }
+    .arch-box-title {
+      font-size: 0.6875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 600;
+      color: var(--accent);
+      margin-bottom: 0.75rem;
+    }
+    .arch-row {
+      display: flex;
+      gap: 0.75rem;
+      align-items: flex-start;
+      margin-bottom: 0.65rem;
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .arch-row:last-child { margin-bottom: 0; }
+    .arch-icon {
+      font-size: 1rem;
+      flex-shrink: 0;
+      margin-top: 0.05rem;
+    }
+    .arch-row strong { color: var(--text); }
 
-    <form method="POST" action="/setup">
-      <div style="margin-bottom:1.25rem;">
-        <label style="display:block; font-size:0.8125rem; color:var(--text-muted); margin-bottom:0.4rem;">
-          Your name <span style="color:var(--accent);">*</span>
-        </label>
-        <input
-          type="text" name="name1" required autofocus
-          placeholder="e.g. Alex"
-          style="width:100%; box-sizing:border-box; background:#0f2535; color:var(--text);
-                 border:1px solid var(--border); border-radius:6px;
-                 padding:0.5rem 0.75rem; font-size:0.9375rem;">
-      </div>
+    .section-label {
+      font-size: 0.6875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+    }
+    .owner-badge {
+      display: inline-block;
+      font-size: 0.625rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      background: var(--accent);
+      color: #fff;
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      margin-left: 0.4rem;
+      vertical-align: middle;
+    }
 
-      <div style="margin-bottom:1.75rem;">
-        <label style="display:block; font-size:0.8125rem; color:var(--text-muted); margin-bottom:0.4rem;">
-          Riding buddy's name <span style="color:var(--text-muted); font-weight:400;">(optional)</span>
-        </label>
-        <input
-          type="text" name="name2"
-          placeholder="e.g. Jordan"
-          style="width:100%; box-sizing:border-box; background:#0f2535; color:var(--text);
-                 border:1px solid var(--border); border-radius:6px;
-                 padding:0.5rem 0.75rem; font-size:0.9375rem;">
-      </div>
+    .rider-row {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      margin-bottom: 0.6rem;
+    }
+    .rider-row input {
+      flex: 1;
+      background: #0f2535;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.9375rem;
+    }
+    .rider-row input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .btn-remove {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1.1rem;
+      cursor: pointer;
+      padding: 0.25rem 0.4rem;
+      border-radius: 4px;
+      line-height: 1;
+    }
+    .btn-remove:hover { color: var(--danger); }
 
-      <button type="submit" class="btn btn-primary" style="width:100%; padding:0.6rem; font-size:1rem;">
-        Get started →
-      </button>
-    </form>
+    .btn-add {
+      background: none;
+      border: 1px dashed var(--border);
+      color: var(--text-muted);
+      font-size: 0.8125rem;
+      cursor: pointer;
+      padding: 0.45rem 0.9rem;
+      border-radius: 6px;
+      width: 100%;
+      margin-top: 0.25rem;
+      margin-bottom: 1.75rem;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .btn-add:hover { border-color: var(--accent); color: var(--text); }
+
+    .submit-btn {
+      width: 100%;
+      padding: 0.7rem;
+      font-size: 1rem;
+    }
+  </style>
+</head>
+<body>
+<div class="wizard">
+
+  <!-- Hero -->
+  <div class="wizard-hero">
+    <img src="{{ url_for('static', filename='logo.png') }}" alt="Headwind">
+    <div class="wizard-hero-text">
+      <h1>Welcome to Headwind</h1>
+      <p>Self-hosted, private cycling analytics — let's get you set up.</p>
+    </div>
   </div>
+
+  <!-- Architecture explanation -->
+  <div class="arch-box">
+    <div class="arch-box-title">How riders work</div>
+    <div class="arch-row">
+      <span class="arch-icon">🔑</span>
+      <span>
+        <strong>One Strava account per instance.</strong>
+        The owner rider's rides sync automatically via Strava. That's you.
+      </span>
+    </div>
+    <div class="arch-row">
+      <span class="arch-icon">👥</span>
+      <span>
+        <strong>Additional riders</strong> are co-riders — training partners, family, club mates.
+        Their rides are imported manually via FIT or GPX file.
+        They don't need a Strava account.
+      </span>
+    </div>
+    <div class="arch-row">
+      <span class="arch-icon">📊</span>
+      <span>
+        Every rider gets their own <strong>stats, segment PRs, achievements, and AI coaching</strong>.
+        Heatmap and segments are shared across everyone on the instance.
+      </span>
+    </div>
+    <div class="arch-row">
+      <span class="arch-icon">➕</span>
+      <span>You can add or remove riders any time from the <strong>Riders</strong> page.</span>
+    </div>
+  </div>
+
+  <form method="POST" action="/setup" id="setupForm">
+
+    <!-- Owner rider -->
+    <div style="margin-bottom:1.25rem;">
+      <div class="section-label">
+        Your name <span class="owner-badge">Owner</span>
+      </div>
+      <div class="rider-row">
+        <input
+          type="text"
+          name="riders[]"
+          required
+          autofocus
+          placeholder="e.g. Alex"
+          autocomplete="off">
+      </div>
+      <p style="font-size:0.75rem; color:var(--text-muted); margin:0.3rem 0 0;">
+        This rider connects to Strava and receives automatic ride syncs.
+      </p>
+    </div>
+
+    <!-- Additional riders -->
+    <div class="section-label" style="margin-bottom:0.5rem;">
+      Additional riders <span style="font-weight:400; text-transform:none; letter-spacing:0;">(optional)</span>
+    </div>
+    <div id="extraRiders"></div>
+    <button type="button" class="btn-add" onclick="addRider()">+ Add another rider</button>
+
+    <button type="submit" class="btn btn-primary submit-btn">Set up Headwind →</button>
+  </form>
+
 </div>
-{% endblock %}
+
+<script>
+var extraCount = 0;
+function addRider() {
+  extraCount++;
+  var div = document.createElement('div');
+  div.className = 'rider-row';
+  div.id = 'extra-' + extraCount;
+  div.innerHTML =
+    '<input type="text" name="riders[]" placeholder="Rider name" autocomplete="off">' +
+    '<button type="button" class="btn-remove" onclick="removeRider(' + extraCount + ')" title="Remove">×</button>';
+  document.getElementById('extraRiders').appendChild(div);
+  div.querySelector('input').focus();
+}
+function removeRider(id) {
+  var el = document.getElementById('extra-' + id);
+  if (el) el.remove();
+}
+</script>
+</body>
+</html>
