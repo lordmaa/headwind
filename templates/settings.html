@@ -4,7 +4,7 @@
 {% block page_title %}Settings{% endblock %}
 
 {% block content %}
-<div style="max-width:600px; display:flex; flex-direction:column; gap:1.5rem;">
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; align-items:start;">
 
   <!-- Change Password -->
   <form method="POST" action="/settings/password" class="card">
@@ -87,14 +87,14 @@
   </form>
 
   <!-- MQTT / Home Assistant -->
-  <form method="POST" class="card">
+  <form method="POST" class="card" style="grid-column:1/-1;">
     <div class="card-title">Home Assistant — MQTT</div>
     <p style="color:var(--text-muted); font-size:0.875rem; margin-bottom:1rem; line-height:1.6;">
       Publishes 10 sensors to Home Assistant via MQTT Discovery — total rides, distance,
       elevation, calories, time, Everests, laps of Earth, and last ride details.
     </p>
 
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+    <div style="display:grid; grid-template-columns:3fr 1fr 2fr 2fr; gap:1rem;">
       <div class="form-group" style="margin:0;">
         <label>Broker Host</label>
         <input type="text" name="mqttHost"
@@ -107,9 +107,6 @@
                value="{{ s.mqttPort if s and s.mqttPort else 1883 }}"
                placeholder="1883">
       </div>
-    </div>
-
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-top:1rem;">
       <div class="form-group" style="margin:0;">
         <label>Username <span style="color:var(--text-muted);">(optional)</span></label>
         <input type="text" name="mqttUser"
@@ -238,7 +235,7 @@
   </form>
 
   <!-- Strava Webhook -->
-  <div class="card">
+  <div class="card" style="grid-column:1/-1;">
     <div class="card-title">Auto-Sync Webhook</div>
     <p style="color:var(--text-muted); font-size:0.875rem; margin-bottom:1rem; line-height:1.6;">
       When subscribed, Strava will notify this app instantly when you finish a ride.
@@ -262,7 +259,7 @@
   </div>
 
   <!-- Setup Guide -->
-  <div class="card">
+  <div class="card" style="grid-column:1/-1;">
     <div class="card-title">Setup Guide</div>
 
     <div style="font-size:0.6875rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--accent); font-weight:600; margin-bottom:0.5rem;">Strava Integration</div>
@@ -312,7 +309,7 @@
   </div>
 
   <!-- About -->
-  <div class="card">
+  <div class="card" style="grid-column:1/-1;">
     <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.75rem;">
       <img src="{{ url_for('static', filename='logo.png') }}" alt="" style="width:36px; height:36px; border-radius:9px; flex-shrink:0;">
       <div>
