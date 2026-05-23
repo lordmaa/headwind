@@ -1,9 +1,12 @@
 import json
+import logging
 import secrets
 import urllib.request
 import urllib.error
 
 from flask import Blueprint, abort, jsonify, redirect, render_template, request, url_for
+
+log = logging.getLogger(__name__)
 
 from database import get_db, query_db
 from services.segments import scan_activity_against_segments, _refresh_prs
@@ -120,14 +123,20 @@ def _do_sync(friend_id):
     if friend['token']:
         headers['X-Feed-Token'] = friend['token']
 
+    log.info('Friends sync: fetching feed for "%s" from %s', friend['name'], feed_url)
     try:
         req = urllib.request.Request(feed_url, headers=headers)
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read().decode())
     except urllib.error.HTTPError as e:
+        log.warning('Friends sync: HTTP %s from %s', e.code, feed_url)
         return 0, f'HTTP {e.code} from {feed_url}'
     except Exception as e:
+        log.warning('Friends sync: fetch failed for "%s": %s', friend['name'], e)
         return 0, str(e)
+
+    rides = data.get('rides', [])
+    log.info('Friends sync: received %d rides from "%s"', len(rides), data.get('name') or friend['name'])
 
     db   = get_db()
     name = data.get('name') or friend['name']
@@ -136,6 +145,7 @@ def _do_sync(friend_id):
         db.execute('INSERT INTO Rider (name, isDefault) VALUES (?, 0)', [name])
         rider_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
         db.execute('UPDATE Friend SET riderId=? WHERE id=?', [rider_id, friend_id])
+        log.info('Friends sync: created rider "%s" (id=%s)', name, rider_id)
     else:
         rider_id = friend['riderId']
         db.execute('UPDATE Rider SET name=? WHERE id=?', [name, rider_id])
@@ -143,7 +153,7 @@ def _do_sync(friend_id):
     segments = db.execute('SELECT * FROM Segment').fetchall()
     synced   = 0
 
-    for ride in data.get('rides', []):
+    for ride in rides:
         remote_id = f"f{friend_id}_{ride['id']}"
         db.execute('''
             INSERT INTO Activity (
@@ -171,6 +181,10 @@ def _do_sync(friend_id):
             ride.get('streams'),      rider_id,
         ])
         synced += 1
+        if synced % 250 == 0:
+            log.info('Friends sync: upserted %d / %d rides for "%s"…', synced, len(rides), name)
+
+    log.info('Friends sync: all %d rides upserted for "%s"', synced, name)
 
     if segments and synced:
         acts = db.execute(
@@ -178,12 +192,18 @@ def _do_sync(friend_id):
             "WHERE riderId=? AND streams IS NOT NULL AND streams NOT IN ('null', '{}')",
             [rider_id]
         ).fetchall()
-        for act in acts:
+        log.info('Friends sync: scanning %d activities against %d segments for "%s"…',
+                 len(acts), len(segments), name)
+        for i, act in enumerate(acts, 1):
             scan_activity_against_segments(db, act, segments)
+            if i % 500 == 0:
+                log.info('Friends sync: segment scan %d / %d for "%s"…', i, len(acts), name)
+        log.info('Friends sync: segment scan complete, refreshing PRs…')
         for seg in segments:
             _refresh_prs(db, seg['id'])
 
     db.execute("UPDATE Friend SET lastSynced=datetime('now'), name=? WHERE id=?",
                [friend['name'], friend_id])
     db.commit()
+    log.info('Friends sync: done — %d rides synced for "%s"', synced, name)
     return synced, None

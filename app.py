@@ -8,7 +8,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from config import Config
 from database import close_db, migrate_db
 
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s: %(message)s')
 
 
 def _mqtt_heartbeat(app):
