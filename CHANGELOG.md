@@ -2,6 +2,11 @@
 
 All notable changes to Headwind are documented here.
 
+## [1.0.2] - 2026-05-23
+
+### Fixed
+- Friend sync: Activity.rawData NOT NULL constraint failure on instances with older DB schemas
+
 ## [1.0.1] - 2026-05-23
 
 ### Fixed

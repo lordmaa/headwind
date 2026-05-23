@@ -310,9 +310,9 @@ def _do_sync(friend_id):
                         id, name, type, sportType, startDate, startDateLocal, distance, movingTime,
                         elapsedTime, totalElevationGain, averageSpeed, maxSpeed,
                         averageHeartrate, maxHeartrate, averageWatts, weightedAvgWatts,
-                        averageCadence, calories, startLat, startLng, streams, riderId,
+                        averageCadence, calories, startLat, startLng, streams, rawData, riderId,
                         createdAt, updatedAt
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
                     ON CONFLICT(id) DO UPDATE SET
                         name=excluded.name, streams=excluded.streams, updatedAt=datetime('now')
                 ''', [
@@ -327,7 +327,7 @@ def _do_sync(friend_id):
                     obj.get('averageWatts'),     obj.get('weightedAvgWatts'),
                     obj.get('averageCadence'),   obj.get('calories'),
                     obj.get('startLat'),      obj.get('startLng'),
-                    obj.get('streams'),       rider_id,
+                    obj.get('streams'),       '{}', rider_id,
                 ])
                 new_ride_ids.append(remote_id)
                 synced += 1
