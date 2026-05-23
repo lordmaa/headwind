@@ -2,6 +2,12 @@
 
 All notable changes to Headwind are documented here.
 
+## [1.0.1] - 2026-05-23
+
+### Fixed
+- Feed token copy button now works on HTTP (non-HTTPS) origins using execCommand fallback
+- Token regeneration and initial token generation no longer silently fail on fresh installs with no Settings row
+
 ## [1.0.0] - 2026-05-23
 
 Initial public release.
