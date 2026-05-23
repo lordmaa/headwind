@@ -2,11 +2,12 @@ import os
 import shutil
 import sqlite3
 import tempfile
+import urllib.request
 import zipfile
 from pathlib import Path
 
 from dotenv import load_dotenv, set_key
-from flask import Blueprint, current_app, flash, redirect, render_template, request, send_file
+from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, send_file
 from database import get_db, query_db
 
 bp = Blueprint('settings', __name__)
@@ -86,6 +87,21 @@ def index():
         build_time = None
     return render_template('settings.html', s=s, openai_models=OPENAI_MODELS,
                            current_username=current_username, build_time=build_time)
+
+
+@bp.route('/version-check')
+def version_check():
+    try:
+        req  = urllib.request.Request(
+            'https://hub.docker.com/v2/repositories/lordmerchant99/bike-flask/tags/latest',
+            headers={'User-Agent': 'Headwind/1.0'},
+        )
+        resp = urllib.request.urlopen(req, timeout=8)
+        import json
+        data = json.loads(resp.read())
+        return jsonify({'last_updated': data.get('last_updated')})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 502
 
 
 @bp.route('/weather-backfill', methods=['POST'])
