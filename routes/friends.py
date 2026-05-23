@@ -28,7 +28,6 @@ def feed():
         FROM Activity
         WHERE riderId = (SELECT id FROM Rider WHERE isDefault=1)
         ORDER BY startDateLocal DESC
-        LIMIT 100
     ''')
 
     return jsonify({
