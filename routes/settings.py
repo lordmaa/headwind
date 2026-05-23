@@ -85,8 +85,13 @@ def index():
             build_time = _f.read().strip()
     except FileNotFoundError:
         build_time = None
+    try:
+        from version import __version__
+    except ImportError:
+        __version__ = 'dev'
     return render_template('settings.html', s=s, openai_models=OPENAI_MODELS,
-                           current_username=current_username, build_time=build_time)
+                           current_username=current_username, build_time=build_time,
+                           app_version=__version__)
 
 
 @bp.route('/version-check')

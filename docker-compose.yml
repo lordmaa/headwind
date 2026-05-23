@@ -1,11 +1,12 @@
 services:
-  app:
-    image: lordmerchant99/bike-flask:latest
+  headwind:
+    image: lordmerchant99/headwind:latest
+    container_name: headwind
     ports:
       - "5001:5001"
     volumes:
-      - /portainer/files/appdata/config/headwind/data:/data
-      - /portainer/files/appdata/config/headwind/garmin_tokens:/app/.garmin_tokens
+      - ./data:/data
+      - ./garmin_tokens:/app/.garmin_tokens
     environment:
       - DATABASE_URL=/data/bike.db
       - SECRET_KEY=change-me-please
