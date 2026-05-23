@@ -77,7 +77,9 @@ def feed():
                     FROM Activity WHERE riderId=? ORDER BY startDateLocal DESC
                 ''', [owner_id])
             for row in cur:
-                yield json.dumps({'type': 'ride', **dict(row)}) + '\n'
+                d = dict(row)
+                d.pop('type', None)  # avoid collision with the NDJSON routing key
+                yield json.dumps({'type': 'ride', **d}) + '\n'
 
     return Response(stream_with_context(generate()), mimetype='application/x-ndjson')
 
@@ -299,7 +301,7 @@ def _do_sync(friend_id):
                         name=excluded.name, streams=excluded.streams, updatedAt=datetime('now')
                 ''', [
                     remote_id,
-                    obj.get('name'),          obj.get('type') or obj.get('sportType'),
+                    obj.get('name'),          obj.get('sportType'),
                     obj.get('sportType'),
                     obj.get('startDate'),     obj.get('startDateLocal'),
                     obj.get('distance'),      obj.get('movingTime'),
