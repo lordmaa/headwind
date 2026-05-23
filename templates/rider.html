@@ -184,6 +184,17 @@
         {% if b.earned and b.earned_date %}
           <span style="font-size:0.7rem; color:var(--accent);">{{ b.earned_date | fmt_date }}</span>
         {% endif %}
+        {% if not b.earned and b.progress is defined and b.target is defined and b.target %}
+          {% set pct = [[((b.progress / b.target) * 100) | round | int, 0] | max, 100] | min %}
+          <div style="width:90%; margin-top:0.15rem;">
+            <div style="background:#0d1f30; border-radius:999px; height:3px; overflow:hidden;">
+              <div style="width:{{ pct }}%; height:100%; background:#4d7d95; border-radius:999px;"></div>
+            </div>
+            <div style="font-size:0.62rem; color:var(--text-muted); margin-top:0.2rem; font-variant-numeric:tabular-nums;">
+              {{ b.progress }}&thinsp;/&thinsp;{{ b.target }}
+            </div>
+          </div>
+        {% endif %}
       </{{ tag }}>
       {% endfor %}
     </div>

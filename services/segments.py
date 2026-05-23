@@ -5,6 +5,8 @@ from math import atan2, cos, radians, sin, sqrt
 log = logging.getLogger(__name__)
 
 TOLERANCE_M = 30  # metres — how close to a segment endpoint counts as a hit
+CHECKPOINT_M = 60  # metres — tolerance for interior waypoints (wider to absorb GPS drift)
+CHECKPOINT_N = 4   # number of evenly-spaced interior checkpoints to sample
 
 
 def _haversine(lat1, lon1, lat2, lon2):
@@ -13,6 +15,19 @@ def _haversine(lat1, lon1, lat2, lon2):
     dp, dl  = radians(lat2 - lat1), radians(lon2 - lon1)
     a = sin(dp / 2) ** 2 + cos(p1) * cos(p2) * sin(dl / 2) ** 2
     return 2 * R * atan2(sqrt(a), sqrt(1 - a))
+
+
+def _sample_checkpoints(polyline_json, n=CHECKPOINT_N):
+    """Return n evenly-spaced interior points from a segment polyline, skipping endpoints."""
+    try:
+        pts = json.loads(polyline_json) if polyline_json else []
+    except Exception:
+        pts = []
+    if len(pts) < 4:
+        return []
+    interior = pts[1:-1]
+    step = max(1, len(interior) // (n + 1))
+    return [interior[min(i * step, len(interior) - 1)] for i in range(1, n + 1)]
 
 
 def match_segment(activity_streams_json, seg):
@@ -42,7 +57,8 @@ def match_segment(activity_streams_json, seg):
     latlng = latlng[:n]
     times  = times[:n]
 
-    dist_m = seg['distanceM'] or 0
+    dist_m      = seg['distanceM'] or 0
+    checkpoints = _sample_checkpoints(seg['polyline']) if seg['polyline'] else []
     best_elapsed = None
 
     def _try_start(start_idx):
@@ -78,6 +94,21 @@ def match_segment(activity_streams_json, seg):
             )
             if actual_dist < dist_m * 0.7:
                 return
+        # For segments with a polyline, require the activity to pass near each
+        # sampled interior checkpoint in order. This catches rides that hit the
+        # start and end zones via a completely different route (especially loops
+        # where start ≈ end, so the endpoint check alone is not enough).
+        if checkpoints:
+            cp_cursor = start_idx
+            for cp_lat, cp_lng in checkpoints:
+                hit = False
+                for j in range(cp_cursor + 1, end_idx):
+                    if _haversine(latlng[j][0], latlng[j][1], cp_lat, cp_lng) < CHECKPOINT_M:
+                        cp_cursor = j
+                        hit = True
+                        break
+                if not hit:
+                    return
         if best_elapsed is None or elapsed < best_elapsed:
             best_elapsed = elapsed
 

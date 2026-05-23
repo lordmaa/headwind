@@ -216,7 +216,7 @@ def generate_analysis(activity, personality_key=None):
     personality = PERSONALITIES.get(personality_key, PERSONALITIES['default'])
 
     rider_name = 'the rider'
-    if activity.get('riderId'):
+    if activity['riderId']:
         rider_row = query_db('SELECT name FROM Rider WHERE id=?', [activity['riderId']], one=True)
         if rider_row:
             rider_name = rider_row['name']
@@ -241,9 +241,38 @@ def generate_analysis(activity, personality_key=None):
             current += f' (NP: {activity["weightedAvgWatts"]:.0f} W)'
         current += '\n'
     if activity['averageHeartrate']:
-        hr_line = f'  Avg HR     : {activity["averageHeartrate"]:.0f} bpm'
+        import json as _json
+        avg_hr = float(activity['averageHeartrate'])
+        hr_line = f'  Avg HR     : {avg_hr:.0f} bpm'
         if activity['maxHeartrate']:
             hr_line += f' (max {activity["maxHeartrate"]:.0f} bpm)'
+
+        # Compare to Garmin resting HR if available
+        ride_date = str(activity['startDateLocal'])[:10]
+        garmin_hr = query_db(
+            'SELECT restingHR FROM GarminDaily WHERE date <= ? AND restingHR IS NOT NULL ORDER BY date DESC LIMIT 1',
+            [ride_date], one=True
+        )
+        if garmin_hr and garmin_hr['restingHR']:
+            rhr = garmin_hr['restingHR']
+            hr_line += f' — resting HR {rhr}bpm ({avg_hr - rhr:.0f}bpm above rest)'
+
+        # HR drift from the heartrate stream
+        try:
+            streams = _json.loads(activity['streams'] or '{}')
+            hr_data = (streams.get('heartrate') or {}).get('data') or []
+            if len(hr_data) >= 12:
+                third = len(hr_data) // 3
+                first_avg = sum(hr_data[:third]) / third
+                last_avg  = sum(hr_data[-third:]) / third
+                drift = last_avg - first_avg
+                if drift > 5:
+                    hr_line += f' | HR drifted +{drift:.0f}bpm first→last third (cardiac drift)'
+                elif drift < -5:
+                    hr_line += f' | HR fell {abs(drift):.0f}bpm first→last third (fading effort / pacing off)'
+        except Exception:
+            pass
+
         current += hr_line + '\n'
     if activity['averageCadence']:
         current += f'  Avg cadence: {activity["averageCadence"]:.0f} rpm\n'

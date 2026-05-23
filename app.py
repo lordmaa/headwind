@@ -167,10 +167,12 @@ def create_app():
     from routes.garmin_page   import bp as garmin_page_bp
     from routes.about         import bp as about_bp
     from routes.setup         import bp as setup_bp
+    from routes.friends       import bp as friends_bp
 
     # ── Auth guard ───────────────────────────────────────────────
     _PUBLIC = {'login.login_page', 'login.logout', 'static',
-               'auth.strava', 'auth.callback', 'webhook.event'}
+               'auth.strava', 'auth.callback', 'webhook.event',
+               'friends.feed'}
 
     @app.before_request
     def check_login():
@@ -204,6 +206,7 @@ def create_app():
     app.register_blueprint(garmin_page_bp)
     app.register_blueprint(about_bp)
     app.register_blueprint(setup_bp)
+    app.register_blueprint(friends_bp)
 
     # Start background threads only in the main worker process, not the reloader watcher
     if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' or not app.debug:

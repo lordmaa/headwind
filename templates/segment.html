@@ -120,16 +120,27 @@
 
 <!-- Efforts leaderboard -->
 {% if efforts %}
+{% set all_riders = efforts | map(attribute='rider_id') | unique | list %}
 <div class="card" style="padding:0; overflow:hidden;">
-  <div style="padding:1rem 1.25rem; border-bottom:1px solid #1e4060; display:flex; align-items:center; justify-content:space-between; gap:1rem;">
+  <div style="padding:1rem 1.25rem; border-bottom:1px solid #1e4060; display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
     <div class="card-title" style="margin:0;">All Efforts</div>
-    <select id="yearFilter" onchange="filterEfforts()" style="background:var(--surface2,#0d2135); color:var(--text); border:1px solid #1e4060; border-radius:6px; padding:0.3rem 0.6rem; font-size:0.875rem; cursor:pointer;">
-      <option value="all">All Time</option>
-      {% set years = efforts | map(attribute='activityDate') | map('truncate', 4, False, '') | unique | sort | reverse | list %}
-      {% for y in years %}
-      <option value="{{ y }}">{{ y }}</option>
-      {% endfor %}
-    </select>
+    <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+      {% if all_riders | length > 1 %}
+      <select id="riderFilter" onchange="filterEfforts()" style="background:var(--surface2,#0d2135); color:var(--text); border:1px solid #1e4060; border-radius:6px; padding:0.3rem 0.6rem; font-size:0.875rem; cursor:pointer;">
+        <option value="all">All Riders</option>
+        {% for e in efforts | unique(attribute='rider_id') %}
+        <option value="{{ e.rider_id }}">{{ e.rider_name or 'Unknown' }}</option>
+        {% endfor %}
+      </select>
+      {% endif %}
+      <select id="yearFilter" onchange="filterEfforts()" style="background:var(--surface2,#0d2135); color:var(--text); border:1px solid #1e4060; border-radius:6px; padding:0.3rem 0.6rem; font-size:0.875rem; cursor:pointer;">
+        <option value="all">All Time</option>
+        {% set years = efforts | map(attribute='activityDate') | map('truncate', 4, False, '') | unique | sort | reverse | list %}
+        {% for y in years %}
+        <option value="{{ y }}">{{ y }}</option>
+        {% endfor %}
+      </select>
+    </div>
   </div>
   <table style="width:100%; border-collapse:collapse;">
     <thead>
@@ -145,7 +156,7 @@
     </thead>
     <tbody>
       {% for e in efforts %}
-      <tr data-year="{{ e.activityDate[:4] }}"
+      <tr data-year="{{ e.activityDate[:4] }}" data-rider-id="{{ e.rider_id }}"
           style="border-bottom:1px solid #1e4060; {% if e.isPR %}background:rgba(252,76,2,0.06);{% endif %}"
           onmouseover="this.style.background='rgba(255,255,255,0.025)'"
           onmouseout="this.style.background='{% if e.isPR %}rgba(252,76,2,0.06){% endif %}'">
@@ -201,11 +212,15 @@
 function rankLabel(n) { return ['🥇','🥈','🥉'][n-1] || String(n); }
 
 function filterEfforts() {
-  var yr = document.getElementById('yearFilter').value;
-  var rows = document.querySelectorAll('tr[data-year]');
-  var rank = 1;
+  var yr     = document.getElementById('yearFilter').value;
+  var riderEl = document.getElementById('riderFilter');
+  var rider  = riderEl ? riderEl.value : 'all';
+  var rows   = document.querySelectorAll('tr[data-year]');
+  var rank   = 1;
   rows.forEach(function(row) {
-    var show = yr === 'all' || row.dataset.year === yr;
+    var yearOk  = yr === 'all' || row.dataset.year === yr;
+    var riderOk = rider === 'all' || row.dataset.riderId === rider;
+    var show    = yearOk && riderOk;
     row.style.display = show ? '' : 'none';
     if (show) {
       var cell = row.querySelector('.effort-rank');

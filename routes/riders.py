@@ -108,13 +108,15 @@ def _compute_badges(rid, totals):
     def _wc(n, cond, params=None):
         cnt = _count_cond(cond, params)
         d, i = _nth_cond(n, cond, params) if cnt >= n else (None, None)
-        return {'earned': cnt >= n, 'earned_date': d, 'ride_id': i}
+        return {'earned': cnt >= n, 'earned_date': d, 'ride_id': i,
+                'progress': cnt, 'target': n}
 
     headwind_count = _count_cond("weatherWindRel='headwind'")
 
     def _hw(n):
         d, i = _nth_cond(n, "weatherWindRel='headwind'") if headwind_count >= n else (None, None)
-        return {'earned': headwind_count >= n, 'earned_date': d, 'ride_id': i}
+        return {'earned': headwind_count >= n, 'earned_date': d, 'ride_id': i,
+                'progress': headwind_count, 'target': n}
 
     def _first_repeat(n):
         row = query_db('''
@@ -167,25 +169,31 @@ def _compute_badges(rid, totals):
 
     def _rc(n):   # ride count helper
         d, i = _nth_ride(n) if total_rides >= n else (None, None)
-        return {'earned': total_rides >= n, 'earned_date': d, 'ride_id': i}
+        return {'earned': total_rides >= n, 'earned_date': d, 'ride_id': i,
+                'progress': total_rides, 'target': n}
     def _dm(mi):  # distance milestone helper
         d, i = _dist_milestone(mi) if total_dist_mi >= mi else (None, None)
-        return {'earned': total_dist_mi >= mi, 'earned_date': d, 'ride_id': i}
+        return {'earned': total_dist_mi >= mi, 'earned_date': d, 'ride_id': i,
+                'progress': round(total_dist_mi), 'target': int(mi)}
     def _em(m):   # elevation milestone helper
         d, i = _elev_milestone(m) if everests >= m / 8849 else (None, None)
-        return {'earned': everests >= m / 8849, 'earned_date': d, 'ride_id': i}
-    def _fr(cond, params=None):  # first ride matching condition
+        ev_target = round(m / 8849, 1)
+        return {'earned': everests >= m / 8849, 'earned_date': d, 'ride_id': i,
+                'progress': round(everests, 2), 'target': ev_target}
+    def _fr(cond, params=None):  # first ride matching condition — binary, no bar
         d, i = _first_ride(cond, params)
         return {'earned': bool(d), 'earned_date': d, 'ride_id': i}
     def _fe(n):   # nth segment effort helper
         d, i = _nth_effort(n) if seg_efforts_total >= n else (None, None)
-        return {'earned': seg_efforts_total >= n, 'earned_date': d, 'ride_id': i}
-    def _fs(mph): # first segment effort at speed
+        return {'earned': seg_efforts_total >= n, 'earned_date': d, 'ride_id': i,
+                'progress': seg_efforts_total, 'target': n}
+    def _fs(mph): # first segment effort at speed — binary, no bar
         d, i = _first_effort_speed(mph) if seg_max_speed_mph >= mph else (None, None)
         return {'earned': seg_max_speed_mph >= mph, 'earned_date': d, 'ride_id': i}
     def _rp(n):   # first repeat nth time on same segment
         d, i = _first_repeat(n) if seg_max_repeats >= n else (None, None)
-        return {'earned': seg_max_repeats >= n, 'earned_date': d, 'ride_id': i}
+        return {'earned': seg_max_repeats >= n, 'earned_date': d, 'ride_id': i,
+                'progress': seg_max_repeats, 'target': n}
 
     def _b(icon, name, desc, r):
         return {'icon': icon, 'name': name, 'desc': desc, **r}
@@ -334,9 +342,11 @@ def _compute_badges(rid, totals):
         _b('⚡', '250 Efforts',       '250 segment efforts', _fe(250)),
         _b('🏆', '500 Efforts',       '500 segment efforts', _fe(500)),
         _b('🥇', 'First PR',          'Set your first segment PR',
-           {'earned': seg_prs_held >= 1, 'earned_date': None, 'ride_id': None}),
+           {'earned': seg_prs_held >= 1, 'earned_date': None, 'ride_id': None,
+            'progress': seg_prs_held, 'target': 1}),
         _b('👑', 'King of the Road',  f'Hold every segment PR ({total_segs_defined} segments)',
-           {'earned': total_segs_defined > 0 and seg_prs_held >= total_segs_defined, 'earned_date': None, 'ride_id': None}),
+           {'earned': total_segs_defined > 0 and seg_prs_held >= total_segs_defined, 'earned_date': None, 'ride_id': None,
+            'progress': seg_prs_held, 'target': total_segs_defined or 1}),
         _b('🔁', 'Creature of Habit', 'Ride the same segment 10+ times', _rp(10)),
         _b('😤', 'Obsessed',          'Ride the same segment 25+ times', _rp(25)),
         _b('🏠', 'Local Legend',      'Ride the same segment 50+ times', _rp(50)),

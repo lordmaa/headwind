@@ -4,6 +4,7 @@
 {% block page_title %}Dashboard{% endblock %}
 
 {% block topbar_actions %}
+  <a href="{{ url_for('friends.index') }}" class="btn btn-secondary">Friends</a>
   <button class="btn btn-primary" id="syncBtn" onclick="doSync()">Sync</button>
 {% endblock %}
 
@@ -189,33 +190,30 @@
 
   {% if is_filtered %}
   {% if search_results %}
-  <table style="width:100%; border-collapse:collapse; font-size:0.875rem;">
-    <thead>
-      <tr style="border-bottom:1px solid var(--border);">
-        <th style="padding:0.4rem 0.5rem; text-align:left; color:var(--text-muted); font-weight:500;">Date</th>
-        <th style="padding:0.4rem 0.5rem; text-align:left; color:var(--text-muted); font-weight:500;">Name</th>
-        <th style="padding:0.4rem 0.5rem; text-align:right; color:var(--text-muted); font-weight:500;">Dist</th>
-        <th style="padding:0.4rem 0.5rem; text-align:right; color:var(--text-muted); font-weight:500;">Time</th>
-        <th style="padding:0.4rem 0.5rem; text-align:right; color:var(--text-muted); font-weight:500;">Speed</th>
-        <th style="padding:0.4rem 0.5rem; text-align:right; color:var(--text-muted); font-weight:500;">Elev</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for a in search_results %}
-      <tr style="border-bottom:1px solid rgba(22,51,82,0.5);" onclick="location.href='/rides/{{ a.id }}'" class="clickable-row">
-        <td style="padding:0.45rem 0.5rem; color:var(--text-muted); white-space:nowrap;">{{ a.startDateLocal | fmt_date }}</td>
-        <td style="padding:0.45rem 0.5rem; color:var(--text);">
+  <div>
+    {% for a in search_results %}
+    <div onclick="location.href='/rides/{{ a.id }}'"
+         style="display:flex; align-items:center; gap:0.75rem; padding:0.65rem 0;
+                border-bottom:1px solid rgba(22,51,82,0.5); cursor:pointer;
+                transition:background 0.1s;"
+         onmouseover="this.style.background='rgba(255,255,255,0.025)'"
+         onmouseout="this.style.background=''">
+      <div style="flex:1; min-width:0;">
+        <div style="font-size:0.9375rem; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
           {{ a.sportType | sport_icon }} {{ a.name }}
-          {% if a.aiKudos %}<span style="font-size:0.7rem; color:var(--accent); margin-left:0.3rem;">AI</span>{% endif %}
-        </td>
-        <td style="padding:0.45rem 0.5rem; text-align:right; color:var(--text); white-space:nowrap;">{{ a.distance | fmt_dist }}</td>
-        <td style="padding:0.45rem 0.5rem; text-align:right; color:var(--text-muted); white-space:nowrap;">{{ a.movingTime | fmt_duration }}</td>
-        <td style="padding:0.45rem 0.5rem; text-align:right; color:var(--text-muted); white-space:nowrap;">{{ a.averageSpeed | fmt_speed }}</td>
-        <td style="padding:0.45rem 0.5rem; text-align:right; color:var(--text-muted); white-space:nowrap;">{{ a.totalElevationGain | fmt_elev }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+          {% if a.aiKudos %}<span style="font-size:0.7rem; color:var(--accent); margin-left:0.3rem; font-weight:400;">AI</span>{% endif %}
+        </div>
+        <div style="font-size:0.775rem; color:var(--text-muted); margin-top:0.15rem;">
+          {{ a.startDateLocal | fmt_date }}
+          &nbsp;·&nbsp;<span style="color:var(--text);">{{ a.distance | fmt_dist }}</span>
+          &nbsp;·&nbsp;{{ a.movingTime | fmt_duration }}
+          &nbsp;·&nbsp;{{ a.averageSpeed | fmt_speed }}
+          {% if a.totalElevationGain %}&nbsp;·&nbsp;{{ a.totalElevationGain | fmt_elev }}{% endif %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
   {% else %}
   <p style="color:var(--text-muted); font-size:0.875rem; margin:0.5rem 0;">No activities match your filters.</p>
   {% endif %}
@@ -242,48 +240,38 @@
             <span>{{ day.label }}</span>
             <span class="tree-meta">{{ day.count }} activit{% if day.count != 1 %}ies{% else %}y{% endif %} &middot; {{ day.dist | fmt_dist }}</span>
           </div>
-          <table style="table-layout:fixed;">
-            <colgroup>
-              <col>
-              <col style="width:90px;">
-              <col style="width:80px;">
-              <col style="width:90px;">
-              <col style="width:90px;">
-              <col style="width:32px;">
-            </colgroup>
-            <thead>
-              <tr>
-                <th>Ride</th>
-                <th style="text-align:right;">Distance</th>
-                <th style="text-align:right;">Time</th>
-                <th style="text-align:right;">Speed</th>
-                <th style="text-align:right;">Elevation</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
+          <div>
               {% for a in day.activities %}
-              <tr class="ride-row" onclick="location.href='/rides/{{ a.id }}'">
-                <td style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-                  <span style="margin-right:0.4rem;">{{ a.sportType | sport_icon }}</span>{{ a.name }}
-                </td>
-                <td style="text-align:right; font-variant-numeric:tabular-nums;">{{ a.distance | fmt_dist }}</td>
-                <td style="text-align:right; font-variant-numeric:tabular-nums; color:var(--text-muted);">{{ a.movingTime | fmt_duration }}</td>
-                <td style="text-align:right; font-variant-numeric:tabular-nums; color:var(--text-muted);">{{ a.averageSpeed | fmt_speed }}</td>
-                <td style="text-align:right; font-variant-numeric:tabular-nums; color:var(--text-muted);">{{ a.totalElevationGain | fmt_elev }}</td>
-                <td style="text-align:right;">
-                  {% if a.riderName %}
-                    {% if a.riderAvatar %}
-                      <img src="{{ url_for('static', filename='avatars/' + a.riderAvatar) }}" class="rider-avatar" alt="{{ a.riderName }}" title="{{ a.riderName }}" data-rider-id="{{ a.riderId }}" style="width:22px;height:22px;cursor:pointer;">
-                    {% else %}
-                      <span class="rider-initial" title="{{ a.riderName }}" style="width:22px;height:22px;font-size:0.6875rem;">{{ a.riderName[0] | upper }}</span>
-                    {% endif %}
+              <div onclick="location.href='/rides/{{ a.id }}'"
+                   style="display:flex; align-items:center; gap:0.75rem; padding:0.55rem 0.25rem;
+                          border-bottom:1px solid rgba(22,51,82,0.4); cursor:pointer;
+                          transition:background 0.1s;"
+                   onmouseover="this.style.background='rgba(255,255,255,0.025)'"
+                   onmouseout="this.style.background=''">
+                <div style="flex:1; min-width:0;">
+                  <div style="font-size:0.9375rem; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                    {{ a.sportType | sport_icon }} {{ a.name }}
+                    {% if a.aiKudos %}<span style="font-size:0.7rem; color:var(--accent); margin-left:0.3rem; font-weight:400;">AI</span>{% endif %}
+                  </div>
+                  <div style="font-size:0.775rem; color:var(--text-muted); margin-top:0.15rem; font-variant-numeric:tabular-nums;">
+                    <span style="color:var(--text);">{{ a.distance | fmt_dist }}</span>
+                    &nbsp;·&nbsp;{{ a.movingTime | fmt_duration }}
+                    &nbsp;·&nbsp;{{ a.averageSpeed | fmt_speed }}
+                    {% if a.totalElevationGain %}&nbsp;·&nbsp;{{ a.totalElevationGain | fmt_elev }}{% endif %}
+                  </div>
+                </div>
+                {% if a.riderName %}
+                <div style="flex-shrink:0;">
+                  {% if a.riderAvatar %}
+                    <img src="{{ url_for('static', filename='avatars/' + a.riderAvatar) }}" class="rider-avatar" alt="{{ a.riderName }}" title="{{ a.riderName }}" data-rider-id="{{ a.riderId }}" style="width:24px;height:24px;cursor:pointer;">
+                  {% else %}
+                    <span class="rider-initial" title="{{ a.riderName }}" style="width:24px;height:24px;font-size:0.6875rem;">{{ a.riderName[0] | upper }}</span>
                   {% endif %}
-                </td>
-              </tr>
+                </div>
+                {% endif %}
+              </div>
               {% endfor %}
-            </tbody>
-          </table>
+          </div>
         </div>
         {% endfor %}
 

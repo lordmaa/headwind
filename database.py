@@ -224,9 +224,22 @@ def migrate_db():
         ('garminEmail',      'TEXT'),
         ('garminPassword',   'TEXT'),
         ('garminSyncHours',  'INTEGER DEFAULT 2'),
+        ('feedToken',        'TEXT'),
     ]:
         if col not in settings_cols:
             db.execute(f'ALTER TABLE Settings ADD COLUMN {col} {defn}')
+
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS Friend (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            name        TEXT NOT NULL,
+            url         TEXT NOT NULL,
+            token       TEXT,
+            riderId     INTEGER REFERENCES Rider(id),
+            lastSynced  TEXT,
+            createdAt   TEXT DEFAULT (datetime('now'))
+        )
+    ''')
 
     garmin_cols = {r[1] for r in db.execute('PRAGMA table_info(GarminDaily)').fetchall()}
     for col, defn in [
