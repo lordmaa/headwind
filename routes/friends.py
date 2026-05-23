@@ -3,6 +3,7 @@ import logging
 import secrets
 import threading
 import time
+import urllib.parse
 import urllib.request
 import urllib.error
 
@@ -16,11 +17,22 @@ from services.segments import scan_activity_against_segments, _refresh_prs
 bp = Blueprint('friends', __name__)
 
 
+@bp.route('/api/riders')
+def riders_list():
+    """Token-authenticated rider list — lets a friend's instance discover who's here."""
+    token = request.headers.get('X-Feed-Token', '') or request.args.get('token', '')
+    settings = query_db('SELECT feedToken FROM Settings WHERE id=1', one=True)
+    if not settings or not settings['feedToken'] or token != settings['feedToken']:
+        abort(403)
+    riders = query_db('SELECT id, name, isDefault FROM Rider ORDER BY isDefault DESC, name ASC')
+    return jsonify([dict(r) for r in riders])
+
+
 @bp.route('/api/feed')
 def feed():
     """Token-authenticated NDJSON stream — no session required.
     Each line is a JSON object with a 'type' field: meta | segment | ride.
-    Accepts ?since=YYYY-MM-DD to stream only rides newer than that date.
+    Accepts ?since=YYYY-MM-DD and ?rider=<name> to filter.
     """
     token = request.headers.get('X-Feed-Token', '') or request.args.get('token', '')
     settings = query_db('SELECT feedToken FROM Settings WHERE id=1', one=True)
@@ -28,12 +40,16 @@ def feed():
         abort(403)
 
     since = request.args.get('since')
+    rider_name = request.args.get('rider')
 
     def generate():
         from database import get_db as _get_db
         db = _get_db()
 
-        rider = db.execute('SELECT * FROM Rider WHERE isDefault=1').fetchone()
+        if rider_name:
+            rider = db.execute('SELECT * FROM Rider WHERE name=? COLLATE NOCASE', [rider_name]).fetchone()
+        else:
+            rider = db.execute('SELECT * FROM Rider WHERE isDefault=1').fetchone()
         yield json.dumps({'type': 'meta', 'name': rider['name'] if rider else 'Unknown'}) + '\n'
 
         for s in db.execute('SELECT id, name, startLat, startLng, endLat, endLng, '
@@ -93,17 +109,49 @@ def regenerate_token():
     return redirect(url_for('friends.index'))
 
 
+@bp.route('/friends/probe', methods=['POST'])
+def probe():
+    """Fetch the rider list from a remote instance to populate the Add Friend dropdown."""
+    data  = request.get_json(silent=True) or {}
+    url   = (data.get('url')   or '').strip().rstrip('/')
+    token = (data.get('token') or '').strip()
+    if not url:
+        return jsonify({'error': 'URL required'}), 400
+
+    probe_url = url + '/api/riders'
+    headers   = {'User-Agent': 'Headwind/1.0'}
+    if token:
+        headers['X-Feed-Token'] = token
+
+    try:
+        req  = urllib.request.Request(probe_url, headers=headers)
+        resp = urllib.request.urlopen(req, timeout=10)
+        riders = json.loads(resp.read())
+        return jsonify({'riders': riders})
+    except urllib.error.HTTPError as e:
+        if e.code == 403:
+            return jsonify({'error': 'Invalid token — check the feed token and try again'})
+        if e.code == 404:
+            # Older instance without /api/riders — return a synthetic default entry
+            return jsonify({'riders': [{'id': None, 'name': 'Default rider', 'isDefault': 1}]})
+        return jsonify({'error': f'HTTP {e.code} from remote instance'})
+    except Exception as e:
+        return jsonify({'error': f'Could not connect: {e}'})
+
+
 @bp.route('/friends/add', methods=['POST'])
 def add():
-    name  = (request.form.get('name')  or '').strip()
-    url   = (request.form.get('url')   or '').strip().rstrip('/')
-    token = (request.form.get('token') or '').strip()
+    name       = (request.form.get('name')       or '').strip()
+    url        = (request.form.get('url')        or '').strip().rstrip('/')
+    token      = (request.form.get('token')      or '').strip()
+    rider_name = (request.form.get('riderName')  or '').strip() or None
 
     if not name or not url:
         return redirect(url_for('friends.index'))
 
     db = get_db()
-    db.execute('INSERT INTO Friend (name, url, token) VALUES (?,?,?)', [name, url, token])
+    db.execute('INSERT INTO Friend (name, url, token, riderName) VALUES (?,?,?,?)',
+               [name, url, token, rider_name])
     db.commit()
     fid = db.execute('SELECT last_insert_rowid()').fetchone()[0]
 
@@ -154,10 +202,15 @@ def _do_sync(friend_id):
 
     is_incremental = bool(friend['lastSynced'])
     feed_url = friend['url'].rstrip('/') + '/api/feed'
+    params = []
+    if friend['riderName']:
+        params.append('rider=' + urllib.parse.quote(friend['riderName']))
     if is_incremental:
         # Trim to date only so we don't miss rides added on the same day as last sync
         since = friend['lastSynced'][:10]
-        feed_url += f'?since={since}'
+        params.append(f'since={since}')
+    if params:
+        feed_url += '?' + '&'.join(params)
 
     headers  = {'User-Agent': 'Headwind/1.0'}
     if friend['token']:

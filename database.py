@@ -261,6 +261,10 @@ def migrate_db():
         if col not in seg_cols:
             db.execute(f'ALTER TABLE Segment ADD COLUMN {col} {defn}')
 
+    friend_cols = {r[1] for r in db.execute('PRAGMA table_info(Friend)').fetchall()}
+    if 'riderName' not in friend_cols:
+        db.execute('ALTER TABLE Friend ADD COLUMN riderName TEXT')
+
     db.commit()
 
 

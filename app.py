@@ -172,7 +172,7 @@ def create_app():
     # ── Auth guard ───────────────────────────────────────────────
     _PUBLIC = {'login.login_page', 'login.logout', 'static',
                'auth.strava', 'auth.callback', 'webhook.event',
-               'friends.feed'}
+               'friends.feed', 'friends.riders_list'}
 
     @app.before_request
     def check_login():

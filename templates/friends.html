@@ -37,28 +37,50 @@
 <!-- Add a friend -->
 <div class="card" style="margin-bottom:1.5rem;">
   <div class="card-title">Add a Friend</div>
-  <form method="POST" action="{{ url_for('friends.add') }}">
-    <div style="display:grid; grid-template-columns:1fr 2fr 1fr auto; gap:0.75rem; align-items:end; flex-wrap:wrap;">
+
+  <!-- Step 1: connect -->
+  <div style="display:grid; grid-template-columns:2fr 1fr auto; gap:0.75rem; align-items:end;">
+    <div>
+      <label style="font-size:0.8rem; color:var(--text-muted); display:block; margin-bottom:0.3rem;">Their Base URL</label>
+      <input id="probe-url" type="url" placeholder="http://192.168.1.50:5001"
+             style="width:100%; background:var(--surface2,#0d2135); color:var(--text); border:1px solid #1e4060;
+                    border-radius:6px; padding:0.5rem 0.75rem; font-size:0.875rem;">
+      <div style="font-size:0.72rem; color:var(--text-muted); margin-top:0.25rem;">Root URL only — no path</div>
+    </div>
+    <div>
+      <label style="font-size:0.8rem; color:var(--text-muted); display:block; margin-bottom:0.3rem;">Their Feed Token</label>
+      <input id="probe-token" type="text" placeholder="paste token"
+             style="width:100%; background:var(--surface2,#0d2135); color:var(--text); border:1px solid #1e4060;
+                    border-radius:6px; padding:0.5rem 0.75rem; font-size:0.875rem;">
+    </div>
+    <button id="probe-btn" type="button" onclick="probeInstance()" class="btn btn-secondary" style="white-space:nowrap;">Connect</button>
+  </div>
+
+  <div id="probe-error" style="display:none; margin-top:0.6rem; color:#f87171; font-size:0.85rem;"></div>
+
+  <!-- Step 2: pick rider + name (hidden until probe succeeds) -->
+  <form id="add-form" method="POST" action="{{ url_for('friends.add') }}"
+        style="display:none; margin-top:1.25rem; padding-top:1.25rem; border-top:1px solid #1e4060;">
+    <input type="hidden" name="url" id="form-url">
+    <input type="hidden" name="token" id="form-token">
+    <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:0.75rem; align-items:end;">
       <div>
-        <label style="font-size:0.8rem; color:var(--text-muted); display:block; margin-bottom:0.3rem;">Name</label>
-        <input name="name" type="text" placeholder="Smithy" required
-               style="width:100%; background:var(--surface2,#0d2135); color:var(--text); border:1px solid #1e4060;
-                      border-radius:6px; padding:0.5rem 0.75rem; font-size:0.875rem;">
+        <label style="font-size:0.8rem; color:var(--text-muted); display:block; margin-bottom:0.3rem;">Rider</label>
+        <select name="riderName" id="rider-select"
+                style="width:100%; background:var(--surface2,#0d2135); color:var(--text); border:1px solid #1e4060;
+                       border-radius:6px; padding:0.5rem 0.75rem; font-size:0.875rem;">
+        </select>
       </div>
       <div>
-        <label style="font-size:0.8rem; color:var(--text-muted); display:block; margin-bottom:0.3rem;">Base URL (LAN or WAN)</label>
-        <input name="url" type="url" placeholder="http://192.168.1.50:5001" required
-               style="width:100%; background:var(--surface2,#0d2135); color:var(--text); border:1px solid #1e4060;
-                      border-radius:6px; padding:0.5rem 0.75rem; font-size:0.875rem;">
-        <div style="font-size:0.72rem; color:var(--text-muted); margin-top:0.25rem;">Root URL only — no path. e.g. <code>https://bike.example.com</code></div>
-      </div>
-      <div>
-        <label style="font-size:0.8rem; color:var(--text-muted); display:block; margin-bottom:0.3rem;">Their Token</label>
-        <input name="token" type="text" placeholder="paste their feed token"
+        <label style="font-size:0.8rem; color:var(--text-muted); display:block; margin-bottom:0.3rem;">Display Name</label>
+        <input name="name" id="form-name" type="text" placeholder="Smithy" required
                style="width:100%; background:var(--surface2,#0d2135); color:var(--text); border:1px solid #1e4060;
                       border-radius:6px; padding:0.5rem 0.75rem; font-size:0.875rem;">
       </div>
       <button type="submit" class="btn btn-primary" style="white-space:nowrap;">Add &amp; Sync</button>
+    </div>
+    <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.5rem;">
+      Same URL can be added multiple times with different riders selected.
     </div>
   </form>
 </div>
@@ -125,6 +147,66 @@
 
 {% block scripts %}
 <script>
+function probeInstance() {
+  var url   = document.getElementById('probe-url').value.trim().replace(/\/+$/, '');
+  var token = document.getElementById('probe-token').value.trim();
+  var btn   = document.getElementById('probe-btn');
+  var errEl = document.getElementById('probe-error');
+  if (!url) { errEl.textContent = 'Enter a URL first'; errEl.style.display = 'block'; return; }
+
+  btn.textContent = 'Connecting…';
+  btn.disabled = true;
+  errEl.style.display = 'none';
+  document.getElementById('add-form').style.display = 'none';
+
+  fetch('/friends/probe', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({url: url, token: token})
+  })
+  .then(r => r.json())
+  .then(data => {
+    btn.textContent = 'Connect';
+    btn.disabled = false;
+    if (data.error) {
+      errEl.textContent = data.error;
+      errEl.style.display = 'block';
+      return;
+    }
+    var riders = data.riders || [];
+    var sel = document.getElementById('rider-select');
+    sel.innerHTML = '';
+    riders.forEach(function(r) {
+      var opt = document.createElement('option');
+      opt.value = (r.name === 'Default rider') ? '' : r.name;
+      opt.textContent = r.name + (r.isDefault ? ' (default)' : '');
+      sel.appendChild(opt);
+    });
+
+    // Auto-fill display name from first rider
+    var firstName = (riders[0] && riders[0].name !== 'Default rider') ? riders[0].name : '';
+    document.getElementById('form-name').value = firstName;
+
+    // Update display name when rider selection changes
+    sel.onchange = function() {
+      var picked = riders.find(function(r) { return (r.name === 'Default rider' ? '' : r.name) === sel.value; });
+      if (picked && picked.name !== 'Default rider') {
+        document.getElementById('form-name').value = picked.name;
+      }
+    };
+
+    document.getElementById('form-url').value = url;
+    document.getElementById('form-token').value = token;
+    document.getElementById('add-form').style.display = 'block';
+  })
+  .catch(function(e) {
+    btn.textContent = 'Connect';
+    btn.disabled = false;
+    errEl.textContent = 'Connection failed: ' + e.message;
+    errEl.style.display = 'block';
+  });
+}
+
 function syncFriend(fid, btn) {
   var orig = btn.textContent;
   btn.textContent = 'Syncing…';

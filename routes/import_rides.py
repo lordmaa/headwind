@@ -61,7 +61,8 @@ def upload():
         with app.app_context():
             try:
                 if is_single:
-                    gen = _process_single_file(tmp.name, f.filename, rider_id)
+                    for item in _process_single_file(tmp.name, f.filename, rider_id):
+                        event_queue.put(item)
                 else:
                     with zipfile.ZipFile(tmp.name) as zf:
                         names = set(zf.namelist())
@@ -71,12 +72,8 @@ def upload():
                             gen = _process_strava_export(zf, names, rider_id)
                         else:
                             gen = _process_generic_zip(zf, names, rider_id)
-                    for item in gen:
-                        event_queue.put(item)
-                    event_queue.put(None)
-                    return
-                for item in gen:
-                    event_queue.put(item)
+                        for item in gen:
+                            event_queue.put(item)
             except zipfile.BadZipFile:
                 log.error('Import failed: bad zip file')
                 event_queue.put(_event({'error': 'Not a valid zip file'}))
