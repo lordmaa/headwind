@@ -4,7 +4,9 @@ import io
 import json
 import logging
 import os
+import queue
 import tempfile
+import threading
 import traceback
 import zipfile
 from datetime import datetime
@@ -50,27 +52,52 @@ def upload():
     f.save(tmp)
     tmp.close()
 
+    # Run processing in a background thread so browser disconnect can't kill the import.
+    # Events are queued and the SSE generator reads from the queue until done.
+    event_queue = queue.Queue(maxsize=200)
+    app = current_app._get_current_object()
+
+    def _worker():
+        with app.app_context():
+            try:
+                if is_single:
+                    gen = _process_single_file(tmp.name, f.filename, rider_id)
+                else:
+                    with zipfile.ZipFile(tmp.name) as zf:
+                        names = set(zf.namelist())
+                        log.warning('Import started — %d files in zip, has_csv=%s',
+                                    len(names), 'activities.csv' in names)
+                        if 'activities.csv' in names:
+                            gen = _process_strava_export(zf, names, rider_id)
+                        else:
+                            gen = _process_generic_zip(zf, names, rider_id)
+                    for item in gen:
+                        event_queue.put(item)
+                    event_queue.put(None)
+                    return
+                for item in gen:
+                    event_queue.put(item)
+            except zipfile.BadZipFile:
+                log.error('Import failed: bad zip file')
+                event_queue.put(_event({'error': 'Not a valid zip file'}))
+            except Exception as e:
+                log.error('Import failed: %s\n%s', e, traceback.format_exc())
+                event_queue.put(_event({'error': str(e)}))
+            finally:
+                os.unlink(tmp.name)
+                event_queue.put(None)  # sentinel — always signals end
+
+    threading.Thread(target=_worker, daemon=True).start()
+
     def generate():
-        try:
-            if is_single:
-                yield from _process_single_file(tmp.name, f.filename, rider_id)
-            else:
-                with zipfile.ZipFile(tmp.name) as zf:
-                    names = set(zf.namelist())
-                    log.warning('Import started — %d files in zip, has_csv=%s',
-                                len(names), 'activities.csv' in names)
-                    if 'activities.csv' in names:
-                        yield from _process_strava_export(zf, names, rider_id)
-                    else:
-                        yield from _process_generic_zip(zf, names, rider_id)
-        except zipfile.BadZipFile:
-            log.error('Import failed: bad zip file')
-            yield _event({'error': 'Not a valid zip file'})
-        except Exception as e:
-            log.error('Import failed: %s\n%s', e, traceback.format_exc())
-            yield _event({'error': str(e)})
-        finally:
-            os.unlink(tmp.name)
+        while True:
+            try:
+                item = event_queue.get(timeout=300)
+            except queue.Empty:
+                break
+            if item is None:
+                break
+            yield item
 
     return Response(
         stream_with_context(generate()),
@@ -248,6 +275,7 @@ def _process_generic_zip(zf, names, rider_id=None):
             act = parse_gpx(data) if 'gpx' in name.lower() else parse_fit(data)
             if act and act.get('startDateLocal'):
                 if db.execute('SELECT id FROM Activity WHERE id = ?', [act['id']]).fetchone():
+                    log.info('Import skip (duplicate): %s', name)
                     skipped += 1
                 else:
                     _insert(db, act, rider_id)
@@ -256,9 +284,10 @@ def _process_generic_zip(zf, names, rider_id=None):
                     db.commit()
                     imported += 1
             else:
+                log.warning('Import skip (no parseable activity): %s', name)
                 skipped += 1
         except Exception as e:
-            log.error('Parse/insert failed for %s: %s', name, e)
+            log.error('Import error for %s: %s\n%s', name, e, traceback.format_exc())
             errors += 1
 
         yield _progress(i + 1, total, imported, skipped, errors)

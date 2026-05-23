@@ -60,7 +60,11 @@ def parse_gpx(data: bytes):
         for seg in track.segments:
             points.extend(seg.points)
 
-    if not points or points[0].time is None:
+    if not points:
+        import logging; logging.getLogger(__name__).warning('parse_gpx: no track points found (route-only or empty file)')
+        return None
+    if points[0].time is None:
+        import logging; logging.getLogger(__name__).warning('parse_gpx: no timestamps in track — cannot import route-only files')
         return None
 
     start = points[0].time

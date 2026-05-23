@@ -6,7 +6,7 @@ import time
 import urllib.request
 import urllib.error
 
-from flask import Blueprint, Response, abort, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, Response, abort, jsonify, redirect, render_template, request, stream_with_context, url_for
 
 log = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ def feed():
             for row in cur:
                 yield json.dumps({'type': 'ride', **dict(row)}) + '\n'
 
-    return Response(generate(), mimetype='application/x-ndjson')
+    return Response(stream_with_context(generate()), mimetype='application/x-ndjson')
 
 
 @bp.route('/friends')
