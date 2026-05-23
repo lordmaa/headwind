@@ -38,7 +38,15 @@
           onmouseover="this.style.background='rgba(255,255,255,0.02)'"
           onmouseout="this.style.background=''">
         <td style="padding:1rem 1.25rem;">
-          <div style="font-weight:600; color:var(--text);">{{ s.name }}</div>
+          <div style="font-weight:600; color:var(--text);">
+            {{ s.name }}
+            {% if s.friend_name %}
+            <span style="font-size:0.7rem; font-weight:400; background:rgba(252,76,2,0.12);
+                         color:var(--accent); border:1px solid rgba(252,76,2,0.3);
+                         border-radius:999px; padding:0.1rem 0.45rem; margin-left:0.4rem;
+                         vertical-align:middle;">from {{ s.friend_name }}</span>
+            {% endif %}
+          </div>
           {% if s.pr_date %}
           <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.2rem;">PR set {{ s.pr_date | fmt_date }}</div>
           {% endif %}

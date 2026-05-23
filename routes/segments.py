@@ -101,11 +101,13 @@ def index():
         SELECT s.*,
                COUNT(e.id)        AS effort_count,
                MIN(e.elapsedSecs) AS best_secs,
-               MAX(CASE WHEN e.isPR=1 THEN e.activityDate END) AS pr_date
+               MAX(CASE WHEN e.isPR=1 THEN e.activityDate END) AS pr_date,
+               f.name             AS friend_name
         FROM Segment s
         LEFT JOIN SegmentEffort e ON e.segmentId = s.id
         LEFT JOIN Activity a ON a.id = e.activityId
         LEFT JOIN Rider r ON r.id = a.riderId
+        LEFT JOIN Friend f ON f.id = s.friendId
         WHERE e.id IS NULL OR r.isDefault = 1
         GROUP BY s.id
         ORDER BY s.createdAt DESC
@@ -167,7 +169,12 @@ def create():
 @bp.route('/segments/<int:sid>')
 def detail(sid):
     db  = get_db()
-    seg = query_db('SELECT * FROM Segment WHERE id=?', [sid], one=True)
+    seg = query_db('''
+        SELECT s.*, f.name AS friend_name
+        FROM Segment s
+        LEFT JOIN Friend f ON f.id = s.friendId
+        WHERE s.id=?
+    ''', [sid], one=True)
     if not seg:
         abort(404)
 

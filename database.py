@@ -255,6 +255,8 @@ def migrate_db():
     for col, defn in [
         ('polyline',       'TEXT'),
         ('elevationGainM', 'REAL'),
+        ('friendId',       'INTEGER REFERENCES Friend(id)'),
+        ('sourceSegId',    'INTEGER'),
     ]:
         if col not in seg_cols:
             db.execute(f'ALTER TABLE Segment ADD COLUMN {col} {defn}')

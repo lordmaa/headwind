@@ -1,10 +1,13 @@
+import gzip
 import json
 import logging
 import secrets
+import threading
+import time
 import urllib.request
 import urllib.error
 
-from flask import Blueprint, abort, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, Response, abort, redirect, render_template, request, url_for
 
 log = logging.getLogger(__name__)
 
@@ -24,7 +27,7 @@ def feed():
 
     rider = query_db('SELECT * FROM Rider WHERE isDefault=1', one=True)
     rides = query_db('''
-        SELECT id, name, sportType, startDate, startDateLocal, distance, movingTime,
+        SELECT id, name, type, sportType, startDate, startDateLocal, distance, movingTime,
                elapsedTime, totalElevationGain, averageSpeed, maxSpeed,
                averageHeartrate, maxHeartrate, averageWatts, weightedAvgWatts,
                averageCadence, calories, startLat, startLng, streams
@@ -32,11 +35,23 @@ def feed():
         WHERE riderId = (SELECT id FROM Rider WHERE isDefault=1)
         ORDER BY startDateLocal DESC
     ''')
+    # Only share locally-created segments (not ones imported from other friends)
+    segments = query_db('''
+        SELECT id, name, startLat, startLng, endLat, endLng,
+               distanceM, elevationGainM, polyline
+        FROM Segment
+        WHERE friendId IS NULL
+    ''')
 
-    return jsonify({
-        'name':  rider['name'] if rider else 'Unknown',
-        'rides': [dict(r) for r in rides],
-    })
+    payload = json.dumps({
+        'name':     rider['name'] if rider else 'Unknown',
+        'rides':    [dict(r) for r in rides],
+        'segments': [dict(s) for s in segments],
+    }).encode()
+    compressed = gzip.compress(payload, compresslevel=6)
+    resp = Response(compressed, content_type='application/json')
+    resp.headers['Content-Encoding'] = 'gzip'
+    return resp
 
 
 @bp.route('/friends')
@@ -82,8 +97,16 @@ def add():
     db.commit()
     fid = db.execute('SELECT last_insert_rowid()').fetchone()[0]
 
-    _do_sync(fid)
+    # Large initial syncs can take minutes — run in background so the browser doesn't hang
+    from flask import current_app
+    app = current_app._get_current_object()
+    threading.Thread(target=_bg_sync, args=(app, fid), daemon=True).start()
     return redirect(url_for('friends.index'))
+
+
+def _bg_sync(app, friend_id):
+    with app.app_context():
+        _do_sync(friend_id)
 
 
 @bp.route('/friends/<int:fid>/sync', methods=['POST'])
@@ -97,15 +120,16 @@ def delete(fid):
     db = get_db()
     friend = query_db('SELECT riderId FROM Friend WHERE id=?', [fid], one=True)
     if friend and friend['riderId']:
-        db.execute('DELETE FROM SegmentEffort WHERE segmentId IN '
-                   '(SELECT id FROM SegmentEffort e JOIN Activity a ON a.id=e.activityId '
-                   ' WHERE a.riderId=?)', [friend['riderId']])
+        db.execute('DELETE FROM SegmentEffort WHERE activityId IN '
+                   '(SELECT id FROM Activity WHERE riderId=?)', [friend['riderId']])
         db.execute('DELETE FROM Activity WHERE riderId=?', [friend['riderId']])
         db.execute('DELETE FROM Rider WHERE id=?', [friend['riderId']])
+    # Segments imported from this friend cascade-delete their efforts via ON DELETE CASCADE
+    db.execute('DELETE FROM Segment WHERE friendId=?', [fid])
     db.execute('DELETE FROM Friend WHERE id=?', [fid])
     db.commit()
 
-    # Re-run PRs now that their efforts are gone
+    # Refresh PRs for remaining segments
     for seg in query_db('SELECT id FROM Segment'):
         _refresh_prs(db, seg['id'])
     db.commit()
@@ -126,8 +150,11 @@ def _do_sync(friend_id):
     log.info('Friends sync: fetching feed for "%s" from %s', friend['name'], feed_url)
     try:
         req = urllib.request.Request(feed_url, headers=headers)
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read().decode())
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            raw = resp.read()
+            if resp.headers.get('Content-Encoding') == 'gzip':
+                raw = gzip.decompress(raw)
+            data = json.loads(raw.decode())
     except urllib.error.HTTPError as e:
         log.warning('Friends sync: HTTP %s from %s', e.code, feed_url)
         return 0, f'HTTP {e.code} from {feed_url}'
@@ -153,23 +180,25 @@ def _do_sync(friend_id):
     segments = db.execute('SELECT * FROM Segment').fetchall()
     synced   = 0
 
+    BATCH = 500  # commit every N inserts to avoid one giant transaction
     for ride in rides:
         remote_id = f"f{friend_id}_{ride['id']}"
         db.execute('''
             INSERT INTO Activity (
-                id, name, sportType, startDate, startDateLocal, distance, movingTime,
+                id, name, type, sportType, startDate, startDateLocal, distance, movingTime,
                 elapsedTime, totalElevationGain, averageSpeed, maxSpeed,
                 averageHeartrate, maxHeartrate, averageWatts, weightedAvgWatts,
                 averageCadence, calories, startLat, startLng, streams, riderId,
                 createdAt, updatedAt
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
             ON CONFLICT(id) DO UPDATE SET
                 name    = excluded.name,
                 streams = excluded.streams,
                 updatedAt = datetime('now')
         ''', [
             remote_id,
-            ride.get('name'),         ride.get('sportType'),
+            ride.get('name'),         ride.get('type') or ride.get('sportType'),
+            ride.get('sportType'),
             ride.get('startDate'),    ride.get('startDateLocal'),
             ride.get('distance'),     ride.get('movingTime'),
             ride.get('elapsedTime'),  ride.get('totalElevationGain'),
@@ -181,29 +210,98 @@ def _do_sync(friend_id):
             ride.get('streams'),      rider_id,
         ])
         synced += 1
-        if synced % 250 == 0:
+        if synced % BATCH == 0:
+            db.commit()
             log.info('Friends sync: upserted %d / %d rides for "%s"…', synced, len(rides), name)
 
     log.info('Friends sync: all %d rides upserted for "%s"', synced, name)
 
-    if segments and synced:
+    # ── Import friend's segments ──────────────────────────────────
+    remote_segs = data.get('segments', [])
+    imported_seg_ids = []  # local IDs of upserted friend segments
+    for rs in remote_segs:
+        existing = db.execute(
+            'SELECT id FROM Segment WHERE friendId=? AND sourceSegId=?',
+            [friend_id, rs['id']]
+        ).fetchone()
+        if existing:
+            db.execute('''
+                UPDATE Segment SET name=?, startLat=?, startLng=?, endLat=?, endLng=?,
+                    distanceM=?, elevationGainM=?, polyline=?
+                WHERE id=?
+            ''', [
+                rs.get('name'), rs.get('startLat'), rs.get('startLng'),
+                rs.get('endLat'), rs.get('endLng'),
+                rs.get('distanceM'), rs.get('elevationGainM'), rs.get('polyline'),
+                existing[0],
+            ])
+            imported_seg_ids.append(existing[0])
+        else:
+            db.execute('''
+                INSERT INTO Segment (name, startLat, startLng, endLat, endLng,
+                    distanceM, elevationGainM, polyline, friendId, sourceSegId)
+                VALUES (?,?,?,?,?,?,?,?,?,?)
+            ''', [
+                rs.get('name'), rs.get('startLat'), rs.get('startLng'),
+                rs.get('endLat'), rs.get('endLng'),
+                rs.get('distanceM'), rs.get('elevationGainM'), rs.get('polyline'),
+                friend_id, rs['id'],
+            ])
+            imported_seg_ids.append(db.execute('SELECT last_insert_rowid()').fetchone()[0])
+    db.commit()
+    if remote_segs:
+        log.info('Friends sync: upserted %d segments from "%s"', len(remote_segs), name)
+
+    # Reload full segment list now that friend's segments are in
+    all_segments = db.execute('SELECT * FROM Segment').fetchall()
+    affected_seg_ids = {s['id'] for s in all_segments}
+
+    # ── Scan friend's rides against all segments ──────────────────
+    if all_segments and synced:
         acts = db.execute(
             "SELECT id, startDateLocal, streams FROM Activity "
             "WHERE riderId=? AND streams IS NOT NULL AND streams NOT IN ('null', '{}')",
             [rider_id]
         ).fetchall()
-        log.info('Friends sync: scanning %d activities against %d segments for "%s"…',
-                 len(acts), len(segments), name)
+        log.info('Friends sync: scanning %d friend rides against %d segments…',
+                 len(acts), len(all_segments))
         for i, act in enumerate(acts, 1):
-            scan_activity_against_segments(db, act, segments)
-            if i % 500 == 0:
-                log.info('Friends sync: segment scan %d / %d for "%s"…', i, len(acts), name)
-        log.info('Friends sync: segment scan complete, refreshing PRs…')
-        for seg in segments:
-            _refresh_prs(db, seg['id'])
+            scan_activity_against_segments(db, act, all_segments)
+            if i % BATCH == 0:
+                db.commit()
+                log.info('Friends sync: segment scan %d / %d…', i, len(acts))
+                time.sleep(0.5)  # breathe — prevents sustained 100% CPU on low-power hardware
+        db.commit()
+
+    # ── Scan owner's rides against newly imported segments ────────
+    if imported_seg_ids:
+        new_segs = db.execute(
+            'SELECT * FROM Segment WHERE id IN ({})'.format(','.join('?' * len(imported_seg_ids))),
+            imported_seg_ids
+        ).fetchall()
+        owner = db.execute('SELECT id FROM Rider WHERE isDefault=1').fetchone()
+        if owner:
+            owner_acts = db.execute(
+                "SELECT id, startDateLocal, streams FROM Activity "
+                "WHERE riderId=? AND streams IS NOT NULL AND streams NOT IN ('null', '{}')",
+                [owner[0]]
+            ).fetchall()
+            log.info('Friends sync: scanning %d owner rides against %d new segments…',
+                     len(owner_acts), len(new_segs))
+            for i, act in enumerate(owner_acts, 1):
+                scan_activity_against_segments(db, act, new_segs)
+                if i % BATCH == 0:
+                    db.commit()
+                    time.sleep(0.5)
+            db.commit()
+
+    log.info('Friends sync: refreshing PRs…')
+    for sid in affected_seg_ids:
+        _refresh_prs(db, sid)
 
     db.execute("UPDATE Friend SET lastSynced=datetime('now'), name=? WHERE id=?",
                [friend['name'], friend_id])
     db.commit()
-    log.info('Friends sync: done — %d rides synced for "%s"', synced, name)
+    log.info('Friends sync: done — %d rides, %d segments synced for "%s"',
+             synced, len(remote_segs), name)
     return synced, None
