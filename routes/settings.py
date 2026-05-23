@@ -79,8 +79,13 @@ def index():
 
     s = query_db('SELECT * FROM Settings WHERE id=1', one=True)
     current_username = os.environ.get('APP_USERNAME', '')
+    try:
+        with open('/app/build_time.txt') as _f:
+            build_time = _f.read().strip()
+    except FileNotFoundError:
+        build_time = None
     return render_template('settings.html', s=s, openai_models=OPENAI_MODELS,
-                           current_username=current_username)
+                           current_username=current_username, build_time=build_time)
 
 
 @bp.route('/weather-backfill', methods=['POST'])

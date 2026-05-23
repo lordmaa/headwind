@@ -11,6 +11,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Stamp build time so the settings page can show it and check for updates
+RUN date -u +%Y-%m-%dT%H:%M:%SZ > /app/build_time.txt
+
 # Persistent data lives outside the image
 RUN mkdir -p /data /app/.garmin_tokens
 

@@ -308,6 +308,25 @@
       Syncs from Strava and Garmin Connect, supports FIT/GPX imports,
       and runs entirely on your network.
     </p>
+
+    <!-- Version / update check -->
+    {% if build_time %}
+    <div style="background:var(--surface2,#0d2135); border:1px solid #1e4060; border-radius:8px;
+                padding:0.65rem 0.9rem; margin-bottom:0.75rem; display:flex; align-items:center;
+                gap:0.75rem; flex-wrap:wrap;">
+      <div style="flex:1; min-width:0;">
+        <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.15rem;">Running build</div>
+        <code id="build-time-display" style="font-size:0.8rem; color:var(--text);">{{ build_time }}</code>
+      </div>
+      <div style="display:flex; align-items:center; gap:0.5rem;">
+        <span id="update-badge" style="display:none; font-size:0.75rem; font-weight:600;
+              border-radius:999px; padding:0.2rem 0.6rem; white-space:nowrap;"></span>
+        <button onclick="checkForUpdate()" id="update-btn"
+                style="font-size:0.8rem; padding:0.3rem 0.65rem;" class="btn btn-secondary">Check for update</button>
+      </div>
+    </div>
+    {% endif %}
+
     <a href="{{ url_for('about.index') }}" class="btn btn-secondary" style="font-size:0.8125rem;">View full feature list</a>
   </div>
 
@@ -316,6 +335,49 @@
 
 {% block scripts %}
 <script>
+function checkForUpdate() {
+  var btn   = document.getElementById('update-btn');
+  var badge = document.getElementById('update-badge');
+  var localStr = document.getElementById('build-time-display').textContent.trim();
+  btn.textContent = 'Checking…';
+  btn.disabled = true;
+  badge.style.display = 'none';
+
+  fetch('https://hub.docker.com/v2/repositories/lordmerchant99/bike-flask/tags/latest')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      btn.textContent = 'Check for update';
+      btn.disabled = false;
+      var hubDate   = new Date(data.last_updated);
+      var localDate = new Date(localStr);
+      if (isNaN(hubDate) || isNaN(localDate)) {
+        badge.textContent = 'Could not compare versions';
+        badge.style.background = 'rgba(100,100,100,0.15)';
+        badge.style.color = 'var(--text-muted)';
+      } else {
+        var diffMins = (hubDate - localDate) / 60000;
+        if (diffMins > 60) {
+          badge.textContent = 'Update available';
+          badge.style.background = 'rgba(251,146,60,0.15)';
+          badge.style.color = '#fb923c';
+        } else {
+          badge.textContent = 'Up to date';
+          badge.style.background = 'rgba(34,197,94,0.12)';
+          badge.style.color = '#4ade80';
+        }
+      }
+      badge.style.display = 'inline-block';
+    })
+    .catch(function() {
+      btn.textContent = 'Check for update';
+      btn.disabled = false;
+      badge.textContent = 'Check failed';
+      badge.style.background = 'rgba(100,100,100,0.15)';
+      badge.style.color = 'var(--text-muted)';
+      badge.style.display = 'inline-block';
+    });
+}
+
 function updateProvider() {
   var p = document.getElementById('providerSelect').value;
   document.getElementById('openaiFields').style.display = p === 'openai' ? 'contents' : 'none';
