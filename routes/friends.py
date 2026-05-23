@@ -16,6 +16,8 @@ from services.segments import scan_activity_against_segments, _refresh_prs
 
 bp = Blueprint('friends', __name__)
 
+BATCH = 500
+
 
 @bp.route('/api/riders')
 def riders_list():
