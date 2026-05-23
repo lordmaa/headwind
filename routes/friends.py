@@ -7,7 +7,7 @@ import time
 import urllib.request
 import urllib.error
 
-from flask import Blueprint, Response, abort, redirect, render_template, request, url_for
+from flask import Blueprint, Response, abort, jsonify, redirect, render_template, request, url_for
 
 log = logging.getLogger(__name__)
 
@@ -26,15 +26,28 @@ def feed():
         abort(403)
 
     rider = query_db('SELECT * FROM Rider WHERE isDefault=1', one=True)
-    rides = query_db('''
-        SELECT id, name, type, sportType, startDate, startDateLocal, distance, movingTime,
-               elapsedTime, totalElevationGain, averageSpeed, maxSpeed,
-               averageHeartrate, maxHeartrate, averageWatts, weightedAvgWatts,
-               averageCadence, calories, startLat, startLng, streams
-        FROM Activity
-        WHERE riderId = (SELECT id FROM Rider WHERE isDefault=1)
-        ORDER BY startDateLocal DESC
-    ''')
+    since = request.args.get('since')  # ISO date — only return rides newer than this
+    if since:
+        rides = query_db('''
+            SELECT id, name, type, sportType, startDate, startDateLocal, distance, movingTime,
+                   elapsedTime, totalElevationGain, averageSpeed, maxSpeed,
+                   averageHeartrate, maxHeartrate, averageWatts, weightedAvgWatts,
+                   averageCadence, calories, startLat, startLng, streams
+            FROM Activity
+            WHERE riderId = (SELECT id FROM Rider WHERE isDefault=1)
+              AND startDateLocal > ?
+            ORDER BY startDateLocal DESC
+        ''', [since])
+    else:
+        rides = query_db('''
+            SELECT id, name, type, sportType, startDate, startDateLocal, distance, movingTime,
+                   elapsedTime, totalElevationGain, averageSpeed, maxSpeed,
+                   averageHeartrate, maxHeartrate, averageWatts, weightedAvgWatts,
+                   averageCadence, calories, startLat, startLng, streams
+            FROM Activity
+            WHERE riderId = (SELECT id FROM Rider WHERE isDefault=1)
+            ORDER BY startDateLocal DESC
+        ''')
     # Only share locally-created segments (not ones imported from other friends)
     segments = query_db('''
         SELECT id, name, startLat, startLng, endLat, endLng,
@@ -142,7 +155,13 @@ def _do_sync(friend_id):
     if not friend:
         return 0, 'Friend not found'
 
+    is_incremental = bool(friend['lastSynced'])
     feed_url = friend['url'].rstrip('/') + '/api/feed'
+    if is_incremental:
+        # Trim to date only so we don't miss rides added on the same day as last sync
+        since = friend['lastSynced'][:10]
+        feed_url += f'?since={since}'
+
     headers  = {'User-Agent': 'Headwind/1.0'}
     if friend['token']:
         headers['X-Feed-Token'] = friend['token']
@@ -258,11 +277,21 @@ def _do_sync(friend_id):
 
     # ── Scan friend's rides against all segments ──────────────────
     if all_segments and synced:
-        acts = db.execute(
-            "SELECT id, startDateLocal, streams FROM Activity "
-            "WHERE riderId=? AND streams IS NOT NULL AND streams NOT IN ('null', '{}')",
-            [rider_id]
-        ).fetchall()
+        if is_incremental:
+            # Only scan the rides we just received — avoids rescanning entire history each sync
+            new_ids = [f"f{friend_id}_{r['id']}" for r in rides]
+            acts = db.execute(
+                'SELECT id, startDateLocal, streams FROM Activity '
+                'WHERE id IN ({}) AND streams IS NOT NULL AND streams NOT IN (\'null\', \'{{}}\')'.format(
+                    ','.join('?' * len(new_ids))),
+                new_ids
+            ).fetchall() if new_ids else []
+        else:
+            acts = db.execute(
+                "SELECT id, startDateLocal, streams FROM Activity "
+                "WHERE riderId=? AND streams IS NOT NULL AND streams NOT IN ('null', '{}')",
+                [rider_id]
+            ).fetchall()
         log.info('Friends sync: scanning %d friend rides against %d segments…',
                  len(acts), len(all_segments))
         for i, act in enumerate(acts, 1):
