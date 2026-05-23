@@ -20,7 +20,7 @@
                                 padding:0.5rem 0.9rem; font-size:0.9rem; letter-spacing:0.03em; flex:1; word-break:break-all;">
       {{ feed_token }}
     </code>
-    <button onclick="navigator.clipboard.writeText('{{ feed_token }}').then(() => { this.textContent='Copied!'; setTimeout(() => this.textContent='Copy', 1500); })"
+    <button onclick="copyToken('{{ feed_token }}', this)"
             class="btn btn-secondary" style="white-space:nowrap;">Copy</button>
   </div>
   <div style="display:flex; align-items:center; justify-content:space-between; margin-top:0.6rem; flex-wrap:wrap; gap:0.5rem;">
@@ -165,6 +165,26 @@
 
 {% block scripts %}
 <script>
+function copyToken(text, btn) {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(function() {
+      btn.textContent = 'Copied!';
+      setTimeout(function() { btn.textContent = 'Copy'; }, 1500);
+    });
+  } else {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    btn.textContent = 'Copied!';
+    setTimeout(function() { btn.textContent = 'Copy'; }, 1500);
+  }
+}
+
 function probeInstance() {
   var url   = document.getElementById('probe-url').value.trim().replace(/\/+$/, '');
   var token = document.getElementById('probe-token').value.trim();

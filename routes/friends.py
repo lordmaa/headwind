@@ -93,6 +93,7 @@ def index():
     if not feed_token:
         db = get_db()
         feed_token = secrets.token_urlsafe(24)
+        db.execute('INSERT OR IGNORE INTO Settings (id) VALUES (1)')
         db.execute('UPDATE Settings SET feedToken=? WHERE id=1', [feed_token])
         db.commit()
 
@@ -122,6 +123,7 @@ def set_sync_interval():
 @bp.route('/friends/regenerate-token', methods=['POST'])
 def regenerate_token():
     db = get_db()
+    db.execute('INSERT OR IGNORE INTO Settings (id) VALUES (1)')
     db.execute('UPDATE Settings SET feedToken=? WHERE id=1', [secrets.token_urlsafe(24)])
     db.commit()
     return redirect(url_for('friends.index'))
