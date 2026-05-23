@@ -11,6 +11,34 @@ from database import close_db, migrate_db
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s: %(message)s')
 
 
+def _friends_autosync(app):
+    import logging
+    log = logging.getLogger('friends.autosync')
+    time.sleep(30)  # let the app finish starting up
+    while True:
+        try:
+            with app.app_context():
+                from database import query_db
+                s = query_db('SELECT friendSyncInterval FROM Settings WHERE id=1', one=True)
+                interval = int(s['friendSyncInterval'] or 15) if s and s['friendSyncInterval'] else 15
+            if interval <= 0:
+                time.sleep(300)
+                continue
+            time.sleep(interval * 60)
+            with app.app_context():
+                from database import query_db as _qdb
+                from routes.friends import _do_sync
+                friends = _qdb('SELECT id FROM Friend')
+                for f in (friends or []):
+                    try:
+                        _do_sync(f['id'])
+                    except Exception as e:
+                        log.warning('Auto-sync failed for friend %s: %s', f['id'], e)
+        except Exception as e:
+            log.warning('Friends autosync loop error: %s', e)
+            time.sleep(60)
+
+
 def _mqtt_heartbeat(app):
     time.sleep(10)  # let the app finish starting up
     while True:
@@ -210,8 +238,9 @@ def create_app():
 
     # Start background threads only in the main worker process, not the reloader watcher
     if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' or not app.debug:
-        threading.Thread(target=_mqtt_heartbeat,   args=(app,), daemon=True).start()
-        threading.Thread(target=_garmin_heartbeat, args=(app,), daemon=True).start()
+        threading.Thread(target=_mqtt_heartbeat,      args=(app,), daemon=True).start()
+        threading.Thread(target=_garmin_heartbeat,    args=(app,), daemon=True).start()
+        threading.Thread(target=_friends_autosync,    args=(app,), daemon=True).start()
 
     return app
 

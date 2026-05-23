@@ -85,6 +85,24 @@
   </form>
 </div>
 
+<!-- Auto-sync interval -->
+<div class="card" style="margin-bottom:1.5rem; display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
+  <div style="flex:1; min-width:0;">
+    <div style="font-weight:600; font-size:0.875rem; margin-bottom:0.15rem;">Auto-Sync</div>
+    <div style="font-size:0.8rem; color:var(--text-muted);">Automatically pull new rides from all friends in the background.</div>
+  </div>
+  <form method="POST" action="{{ url_for('friends.set_sync_interval') }}"
+        style="display:flex; align-items:center; gap:0.6rem;">
+    <select name="interval" onchange="this.form.submit()"
+            style="background:var(--surface2,#0d2135); color:var(--text); border:1px solid #1e4060;
+                   border-radius:6px; padding:0.4rem 0.65rem; font-size:0.875rem;">
+      {% for val, label in [(0,'Off'),(15,'Every 15 min'),(30,'Every 30 min'),(60,'Every hour'),(120,'Every 2 hours')] %}
+      <option value="{{ val }}" {% if sync_interval == val %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </form>
+</div>
+
 <!-- Friends list -->
 {% if friends %}
 <div class="card" style="padding:0; overflow:hidden;">

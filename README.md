@@ -1,6 +1,18 @@
-# bike-flask
+# Headwind
 
-A self-hosted cycling dashboard built with Flask and SQLite. Syncs from Strava, supports manual FIT/GPX imports, and runs on your own hardware.
+**Your rides. Your hardware. Your friends.**
+
+Self-hosted cycling analytics with no cloud, no subscription, and no one else touching your data. Run it solo on a Raspberry Pi or connect with friends directly — instance to instance, no central server involved.
+
+## Why Headwind
+
+Most cycling apps own your data. Headwind doesn't exist in the cloud — it runs on your hardware, your network, and speaks only to services you explicitly configure.
+
+- **No subscription** — free forever, self-hosted
+- **No cloud middleman** — your rides stay on your machine
+- **No lock-in** — import from Strava, FIT/GPX files, or a full Strava export zip; export any ride as GPX
+- **P2P social** — connect directly to a friend's instance and share segment leaderboards, no central server required
+- **AI coaching** — optional, uses your own API key or a local Ollama model; nothing phoned home without your config
 
 ## Quick start
 
@@ -17,9 +29,9 @@ docker compose up -d
 # → http://localhost:5001
 ```
 
-Docker pulls the pre-built image automatically. The database is created fresh on first run and stored in a named volume so it survives restarts and upgrades.
+Docker pulls the pre-built image automatically. Data is stored as bind mounts under `/portainer/files/appdata/config/headwind` so it survives restarts and upgrades.
 
-Strava, AI coaching, MQTT, and Garmin are all optional — you can import `.fit` / `.gpx` files straight away without any API keys. The app seeds two placeholder riders on a fresh install; rename them under **Riders** in the UI.
+Strava, AI, MQTT, and Garmin are all optional — you can import `.fit` / `.gpx` files straight away without any API keys.
 
 ### Minimum `.env`
 
@@ -33,7 +45,7 @@ Everything else (Strava, OpenAI, MQTT, Garmin) is optional and documented in `.e
 
 ### Portainer
 
-Deploy as a Git stack pointing at this repo. The `.env` file is optional — set `SECRET_KEY`, `APP_USERNAME`, and `APP_PASSWORD` in Portainer's **Environment variables** section instead.
+Deploy as a Git stack pointing at this repo. Set `SECRET_KEY`, `APP_USERNAME`, and `APP_PASSWORD` in Portainer's **Environment variables** section.
 
 ### Build from source
 
@@ -54,75 +66,77 @@ python3 app.py  # port 5001
 
 ## Features
 
-### Ride Tracking
-- **Strava sync** — full activity history via OAuth, automatic webhook sync when you finish a ride
-- **File import** — drag-and-drop `.fit`, `.gpx`, or zipped Strava export; live progress stream
-- **GPX export** — download any ride as a GPX file from the ride page
-- **Multi-rider** — multiple riders share one login; each has their own profile, stats, and PRs
+### Friends — P2P between instances
+The social layer that makes Headwind different. Each instance exposes a token-authenticated feed endpoint. Add a friend's URL and token, pick which rider on their instance to follow, and their rides sync directly into your local database. Segment leaderboards update automatically to include both riders. No account, no relay server, no third party.
 
-### Ride Detail
-- Interactive Leaflet map with GPS track
-- Elevation, heart rate, power, cadence, and speed stream charts
-- Wind direction arrows overlaid on the map, colour-coded by strength
-- Segment efforts and PRs for that ride
-- Co-rider badges for others who rode the same day
-- AI coaching analysis (on-demand or auto on webhook sync)
-
-### Analytics
-- Speed over time with 20-ride rolling average
-- Monthly distance, year-on-year comparison, activity heatmap
-- Ride length distribution, rides by day of week
-- Calories over time
-- **Weather performance scatter charts** — speed vs temperature (by season), speed vs wind (by headwind/tailwind/crosswind), average speed by weather condition; each dot links to that ride
-
-### Achievements
-- Best efforts at 5, 10, 20, 30, 50, and 100 miles — fastest continuous stretch per ride
-- Year and month filter dropdowns
-- AI coaching prompt includes any records set on the current ride
+- Connect to any Headwind instance by URL + feed token
+- Multi-rider support — one URL can be added multiple times targeting different riders
+- Auto-sync every 15 minutes by default (configurable: off / 15 / 30 / 60 / 120 min)
+- Incremental — only fetches rides newer than last sync after the first full pull
+- Segments shared both ways — their segments appear on your leaderboards with attribution
+- Runs over LAN, VPN, or public WAN — your choice
 
 ### Segments
 - Define custom GPS segments on any ride map — click start, click end, name it
 - Retroactive scan against all historical rides on creation
-- Per-rider PRs, leaderboard, effort history, difficulty rating (Easy → Brutal)
-- 6-month trend charts per segment
+- Per-rider PRs with combined leaderboard across all connected instances
+- Effort history, 6-month trend charts, difficulty rating (Easy → Brutal)
 
-### Weather
-- Automatic weather fetch on every sync and file import via Open-Meteo (free, no API key)
-- Conditions stored per ride: temperature, wind speed/direction/gusts, humidity, rain, WMO code
-- Wind relation (headwind/tailwind/crosswind/calm) calculated from GPS route bearing
-- Backfill button in Settings to fetch weather for historical rides without it
+### Ride tracking
+- **Strava sync** — full activity history via OAuth, automatic webhook sync on ride finish
+- **File import** — `.fit`, `.gpx`, or full Strava export zip with live progress bar
+- **Multi-rider** — separate profiles, stats, PRs, best efforts, and trophy case per rider
+- **GPX export** — download any ride from the ride detail page
 
-### AI Coaching
-- GPT-4o / GPT-4o-mini or local Ollama model
-- Prompt includes ride stats, weather conditions, segment comparisons (vs recent/best/first effort), similar-ride history, and Garmin recovery data
-- Deliberately blunt tone — told to say when a ride was poor, not to encourage
-- Auto-generated on new rides via Strava webhook; manually triggered on older rides
+### Ride detail
+- Satellite map with elevation, HR, power, cadence, and speed stream charts
+- Wind direction overlaid on the map, colour-coded by strength
+- Segment efforts and PRs for that ride
+- Co-rider badges for others who rode the same day
+
+### Analytics
+- Speed over time with rolling average, monthly distance, year-on-year comparison
+- Ride length distribution, rides by day of week, activity heatmap
+- Weather scatter charts — speed vs temperature, speed vs wind, speed by condition
+- Per-rider switcher throughout
+
+### Trophy case
+- Badges across 8 categories: Ride Count, Distance, Elevation, Epic Rides, Speed, Climbing, Weather, Segments
+- Milestone badges link to the ride that earned them
+- Weather badges for cold, hot, rain, storms, headwinds — with personal records
+
+### Best efforts
+- Fastest continuous stretch at 5, 10, 20, 30, 50, and 100 miles per ride
+- Year and month filters; records fed into the AI coaching prompt
 
 ### Recovery (Garmin Connect)
-- Pulls resting HR, HRV, sleep score, and body battery from Garmin Connect
-- 30/60/90-day charts for each metric
-- Recovery context fed into the AI coaching prompt for the ride's date
+- Resting HR, HRV, sleep score, and body battery from Garmin Connect
+- 30/60/90-day charts; recovery data fed into AI coaching context
 
-### Home Assistant Integration
-- **17 MQTT sensors** — total rides, distance, elevation, calories, time, Everests climbed, laps of Earth, last ride details
-- **Auto-updates every 20 seconds** via background heartbeat thread
-- **Ride notifications** — tappable HA companion app notification fires when a new ride syncs, links directly to the ride page; routed per-rider (Rob → Pixel 10, Smiffy → Pixel 8)
-- Manual "Publish to HA" button in Settings
+### Weather
+- Automatic fetch on every sync and import via Open-Meteo (free, no API key)
+- Temperature, wind, humidity, rain, WMO condition code
+- Headwind/tailwind/crosswind calculated from GPS route bearing
+- Backfill button for historical rides
 
-### GPS Heatmap
-- Full-history GPS heatmap with date range filter
-- HD export at 3440×1440 PNG with CARTO dark basemap
+### AI coaching (optional)
+- GPT-4o / GPT-4o-mini or local Ollama — uses your own key, nothing phoned home by default
+- Prompt includes ride stats, weather, segment comparisons, similar-ride history, and Garmin recovery
+- Deliberately blunt tone — told to say when a ride was poor, not to encourage
+- Auto-generated on webhook sync; manually triggered on older rides
 
-### Other
-- Dashboard search and filter — by name, date range, distance, sport type
-- Dark ocean theme throughout
-- UK date format (`15 May 2026`) everywhere
-- ntfy.sh push notifications for new rides and sync errors
-- Strava webhook subscription management in Settings
+### GPS heatmap
+- Full-history heatmap with date range filter
+- HD export at 3440×1440 PNG
+
+### Home Assistant
+- 17 MQTT sensors — distance, elevation, calories, Everests climbed, laps of Earth, last ride details
+- Ride notifications via HA companion app, routed per-rider
+- Auto-updates every 20 seconds
 
 ## Stack
 
 - **Backend** — Python / Flask, SQLite
 - **Frontend** — Vanilla JS, Chart.js 4.4, Leaflet 1.9
-- **Data sources** — Strava API, Open-Meteo, Garmin Connect (unofficial)
+- **Data sources** — Strava API, Open-Meteo, Garmin Connect
 - **Integrations** — Home Assistant via MQTT, ntfy.sh

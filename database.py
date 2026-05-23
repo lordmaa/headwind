@@ -224,7 +224,8 @@ def migrate_db():
         ('garminEmail',      'TEXT'),
         ('garminPassword',   'TEXT'),
         ('garminSyncHours',  'INTEGER DEFAULT 2'),
-        ('feedToken',        'TEXT'),
+        ('feedToken',            'TEXT'),
+        ('friendSyncInterval',   'INTEGER DEFAULT 15'),
     ]:
         if col not in settings_cols:
             db.execute(f'ALTER TABLE Settings ADD COLUMN {col} {defn}')

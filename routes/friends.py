@@ -86,8 +86,9 @@ def feed():
 
 @bp.route('/friends')
 def index():
-    settings = query_db('SELECT feedToken FROM Settings WHERE id=1', one=True)
+    settings = query_db('SELECT feedToken, friendSyncInterval FROM Settings WHERE id=1', one=True)
     feed_token = settings['feedToken'] if settings else None
+    sync_interval = settings['friendSyncInterval'] if settings and settings['friendSyncInterval'] is not None else 15
 
     if not feed_token:
         db = get_db()
@@ -102,7 +103,20 @@ def index():
         ORDER BY f.name
     ''')
 
-    return render_template('friends.html', friends=friends, feed_token=feed_token)
+    return render_template('friends.html', friends=friends, feed_token=feed_token,
+                           sync_interval=sync_interval)
+
+
+@bp.route('/friends/sync-interval', methods=['POST'])
+def set_sync_interval():
+    try:
+        interval = int(request.form.get('interval', 15))
+    except ValueError:
+        interval = 15
+    db = get_db()
+    db.execute('UPDATE Settings SET friendSyncInterval=? WHERE id=1', [interval])
+    db.commit()
+    return redirect(url_for('friends.index'))
 
 
 @bp.route('/friends/regenerate-token', methods=['POST'])
