@@ -521,6 +521,28 @@ def edit(rid):
     return redirect(url_for('riders.detail', rid=rid))
 
 
+@bp.route('/riders/<int:rid>/delete', methods=['POST'])
+def delete(rid):
+    db  = get_db()
+    rider = db.execute('SELECT isDefault FROM Rider WHERE id=?', [rid]).fetchone()
+    if not rider:
+        abort(404)
+    if rider['isDefault']:
+        abort(400)  # never delete the owner
+
+    db.execute('DELETE FROM SegmentEffort WHERE segmentId IN '
+               '(SELECT e.segmentId FROM SegmentEffort e '
+               ' JOIN Activity a ON a.id=e.activityId WHERE a.riderId=?)', [rid])
+    db.execute('DELETE FROM BestEffort WHERE activityId IN '
+               '(SELECT id FROM Activity WHERE riderId=?)', [rid])
+    db.execute('DELETE FROM RideMemory WHERE rideId IN '
+               '(SELECT id FROM Activity WHERE riderId=?)', [rid])
+    db.execute('DELETE FROM Activity WHERE riderId=?', [rid])
+    db.execute('DELETE FROM Rider WHERE id=?', [rid])
+    db.commit()
+    return redirect(url_for('riders.index'))
+
+
 @bp.route('/riders/create', methods=['POST'])
 def create():
     name = (request.form.get('name') or '').strip() or 'New Rider'
