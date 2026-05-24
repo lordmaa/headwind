@@ -275,7 +275,7 @@ def get_db():
         g.db = sqlite3.connect(
             current_app.config['DATABASE'],
             detect_types=sqlite3.PARSE_DECLTYPES,
-            timeout=30,
+            timeout=60,
         )
         g.db.row_factory = sqlite3.Row
         g.db.execute('PRAGMA journal_mode = WAL')

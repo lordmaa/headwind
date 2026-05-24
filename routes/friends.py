@@ -16,7 +16,7 @@ from services.segments import scan_activity_against_segments, _refresh_prs
 
 bp = Blueprint('friends', __name__)
 
-BATCH = 500
+BATCH = 50
 
 
 @bp.route('/api/riders')
@@ -334,7 +334,7 @@ def _do_sync(friend_id):
                     obj.get('startDate'),         obj.get('startDateLocal'),
                     obj.get('distance'),          obj.get('movingTime'),
                     obj.get('elapsedTime'),       obj.get('totalElevationGain'),
-                    obj.get('averageSpeed'),      obj.get('maxSpeed'),
+                    obj.get('averageSpeed'),      obj.get('maxSpeed') or 0,
                     obj.get('averageHeartrate'),  obj.get('maxHeartrate'),
                     obj.get('averageWatts'),      obj.get('weightedAvgWatts'),
                     obj.get('averageCadence'),    obj.get('calories'),

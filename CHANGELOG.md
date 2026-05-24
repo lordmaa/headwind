@@ -2,6 +2,13 @@
 
 All notable changes to Headwind are documented here.
 
+## [1.0.8] - 2026-05-23
+
+### Fixed
+- Friend sync: maxSpeed null from Garmin-imported rides no longer crashes insert (falls back to 0)
+- Friend sync: commit every 50 rides instead of 500 — releases SQLite write lock more often, reducing contention with concurrent Garmin sync thread
+- SQLite busy timeout increased from 30 s → 60 s
+
 ## [1.0.7] - 2026-05-23
 
 ### Fixed
