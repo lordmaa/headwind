@@ -26,4 +26,3 @@ __pycache__/
 CLAUDE.md
 AGENTS.md
 backfill_weather.py
-garmin_setup.py
