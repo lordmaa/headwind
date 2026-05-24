@@ -2,6 +2,13 @@
 
 All notable changes to Headwind are documented here.
 
+## [1.0.3] - 2026-05-23
+
+### Fixed
+- Weather data now included in the P2P friend feed — no local backfill needed for friend rides
+- Weather backfill batch reduced to 20 rides per request, preventing gunicorn worker timeout on Pi hardware
+- SQLite busy timeout set to 30 s — background auto-sync and foreground requests no longer race to "database is locked"
+
 ## [1.0.2] - 2026-05-23
 
 ### Fixed

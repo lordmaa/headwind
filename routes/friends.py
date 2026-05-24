@@ -65,7 +65,9 @@ def feed():
                     SELECT id, name, type, sportType, startDate, startDateLocal, distance, movingTime,
                            elapsedTime, totalElevationGain, averageSpeed, maxSpeed,
                            averageHeartrate, maxHeartrate, averageWatts, weightedAvgWatts,
-                           averageCadence, calories, startLat, startLng, streams
+                           averageCadence, calories, startLat, startLng, streams,
+                           weatherTempC, weatherWindKph, weatherGustKph, weatherWindDir,
+                           weatherHumidity, weatherRainMm, weatherCode, weatherSummary, weatherWindRel
                     FROM Activity WHERE riderId=? AND startDateLocal > ? ORDER BY startDateLocal DESC
                 ''', [owner_id, since])
             else:
@@ -73,7 +75,9 @@ def feed():
                     SELECT id, name, type, sportType, startDate, startDateLocal, distance, movingTime,
                            elapsedTime, totalElevationGain, averageSpeed, maxSpeed,
                            averageHeartrate, maxHeartrate, averageWatts, weightedAvgWatts,
-                           averageCadence, calories, startLat, startLng, streams
+                           averageCadence, calories, startLat, startLng, streams,
+                           weatherTempC, weatherWindKph, weatherGustKph, weatherWindDir,
+                           weatherHumidity, weatherRainMm, weatherCode, weatherSummary, weatherWindRel
                     FROM Activity WHERE riderId=? ORDER BY startDateLocal DESC
                 ''', [owner_id])
             for row in cur:
@@ -311,23 +315,36 @@ def _do_sync(friend_id):
                         elapsedTime, totalElevationGain, averageSpeed, maxSpeed,
                         averageHeartrate, maxHeartrate, averageWatts, weightedAvgWatts,
                         averageCadence, calories, startLat, startLng, streams, rawData, riderId,
+                        weatherTempC, weatherWindKph, weatherGustKph, weatherWindDir,
+                        weatherHumidity, weatherRainMm, weatherCode, weatherSummary, weatherWindRel,
                         createdAt, updatedAt
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
                     ON CONFLICT(id) DO UPDATE SET
-                        name=excluded.name, streams=excluded.streams, updatedAt=datetime('now')
+                        name=excluded.name, streams=excluded.streams,
+                        weatherTempC=excluded.weatherTempC, weatherWindKph=excluded.weatherWindKph,
+                        weatherGustKph=excluded.weatherGustKph, weatherWindDir=excluded.weatherWindDir,
+                        weatherHumidity=excluded.weatherHumidity, weatherRainMm=excluded.weatherRainMm,
+                        weatherCode=excluded.weatherCode, weatherSummary=excluded.weatherSummary,
+                        weatherWindRel=excluded.weatherWindRel,
+                        updatedAt=datetime('now')
                 ''', [
                     remote_id,
-                    obj.get('name'),          obj.get('sportType'),
+                    obj.get('name'),             obj.get('sportType'),
                     obj.get('sportType'),
-                    obj.get('startDate'),     obj.get('startDateLocal'),
-                    obj.get('distance'),      obj.get('movingTime'),
-                    obj.get('elapsedTime'),   obj.get('totalElevationGain'),
-                    obj.get('averageSpeed'),  obj.get('maxSpeed'),
-                    obj.get('averageHeartrate'), obj.get('maxHeartrate'),
-                    obj.get('averageWatts'),     obj.get('weightedAvgWatts'),
-                    obj.get('averageCadence'),   obj.get('calories'),
-                    obj.get('startLat'),      obj.get('startLng'),
-                    obj.get('streams'),       '{}', rider_id,
+                    obj.get('startDate'),         obj.get('startDateLocal'),
+                    obj.get('distance'),          obj.get('movingTime'),
+                    obj.get('elapsedTime'),       obj.get('totalElevationGain'),
+                    obj.get('averageSpeed'),      obj.get('maxSpeed'),
+                    obj.get('averageHeartrate'),  obj.get('maxHeartrate'),
+                    obj.get('averageWatts'),      obj.get('weightedAvgWatts'),
+                    obj.get('averageCadence'),    obj.get('calories'),
+                    obj.get('startLat'),          obj.get('startLng'),
+                    obj.get('streams'),           '{}', rider_id,
+                    obj.get('weatherTempC'),      obj.get('weatherWindKph'),
+                    obj.get('weatherGustKph'),    obj.get('weatherWindDir'),
+                    obj.get('weatherHumidity'),   obj.get('weatherRainMm'),
+                    obj.get('weatherCode'),       obj.get('weatherSummary'),
+                    obj.get('weatherWindRel'),
                 ])
                 new_ride_ids.append(remote_id)
                 synced += 1

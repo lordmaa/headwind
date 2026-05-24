@@ -122,7 +122,7 @@ def weather_backfill():
         WHERE startLat IS NOT NULL AND startLng IS NOT NULL
           AND weatherSummary IS NULL
         ORDER BY startDateLocal DESC
-        LIMIT 100
+        LIMIT 20
     ''').fetchall()
 
     done, failed = 0, 0
