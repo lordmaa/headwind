@@ -5,14 +5,11 @@ from datetime import date, timedelta
 from pathlib import Path
 
 # Activity type keys that have meaningful GPS data worth importing
-_OUTDOOR_TYPES = {
-    'cycling', 'road_biking', 'mountain_biking', 'gravel_cycling',
-    'indoor_cycling', 'virtual_ride', 'e_bike_fitness', 'e_bike_mountain',
-    'running', 'trail_running', 'ultra_run',
-    'walking', 'hiking',
-    'open_water_swimming', 'lap_swimming',
-    'kayaking', 'rowing', 'paddling',
-    'multisport', 'triathlon',
+# Activity types with no GPS data that aren't worth importing
+_SKIP_TYPES = {
+    'strength_training', 'yoga', 'fitness_equipment', 'elliptical',
+    'stair_climbing', 'indoor_rowing', 'pilates', 'barre', 'floor_climbing',
+    'breathwork', 'meditation',
 }
 
 TOKEN_DIR = Path(__file__).parent.parent / '.garmin_tokens'
@@ -280,8 +277,8 @@ def sync_garmin_activities(email, password, rider_id):
                 done = True
                 break
 
-            # Skip gym/yoga/strength activities that have no useful GPS data
-            if type_key and type_key not in _OUTDOOR_TYPES:
+            # Skip activities with no GPS (gym, yoga, strength, etc.)
+            if type_key in _SKIP_TYPES:
                 skipped += 1
                 continue
 

@@ -2,6 +2,11 @@
 
 All notable changes to Headwind are documented here.
 
+## [1.0.7] - 2026-05-23
+
+### Fixed
+- Garmin import now uses a blacklist (skip gym/yoga/strength) instead of a whitelist — walks, hikes, and any other outdoor type with an unusual Garmin typeKey are no longer missed
+
 ## [1.0.6] - 2026-05-23
 
 ### Fixed
