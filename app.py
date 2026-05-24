@@ -64,8 +64,14 @@ def _garmin_heartbeat(app):
                 s = query_db('SELECT garminEmail, garminPassword, garminSyncHours FROM Settings WHERE id=1', one=True)
                 if s and s['garminEmail'] and s['garminPassword']:
                     interval_hours = s['garminSyncHours'] or 2
-                    from services.garmin import sync_garmin, fetch_ride_hr, _client
+                    from services.garmin import sync_garmin, sync_garmin_activities, fetch_ride_hr, _client
                     sync_garmin(s['garminEmail'], s['garminPassword'], days=14)
+
+                    # Pull new Garmin activities (incremental — only since last sync date)
+                    rider = query_db('SELECT id FROM Rider WHERE isDefault=1', one=True)
+                    if rider:
+                        for _ in sync_garmin_activities(s['garminEmail'], s['garminPassword'], rider['id']):
+                            pass
 
                     # Backfill HR for owner's recent rides where Strava had no HR data
                     missing = query_db('''

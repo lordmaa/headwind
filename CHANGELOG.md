@@ -2,6 +2,11 @@
 
 All notable changes to Headwind are documented here.
 
+## [1.0.5] - 2026-05-23
+
+### Added
+- Garmin activities now auto-sync on the same schedule as recovery data — no manual trigger needed after first sync
+
 ## [1.0.4] - 2026-05-23
 
 ### Added
