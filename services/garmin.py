@@ -325,17 +325,27 @@ def sync_garmin_activities(email, password, rider_id):
                 dist /= 1000
                 parsed['distance'] = dist
 
+            # Derive maxSpeed from velocity stream if available (schema requires it)
+            max_speed = 0.0
+            try:
+                import json as _j
+                spd_data = (_j.loads(parsed['streams']).get('velocity_smooth') or {}).get('data') if parsed.get('streams') else None
+                if spd_data:
+                    max_speed = max(spd_data)
+            except Exception:
+                pass
+
             try:
                 db.execute('''
                     INSERT INTO Activity (
                         id, name, type, sportType,
                         startDate, startDateLocal,
                         distance, movingTime, elapsedTime, totalElevationGain,
-                        averageSpeed, averageHeartrate, averageWatts,
+                        averageSpeed, maxSpeed, averageHeartrate, averageWatts,
                         averageCadence, calories,
                         startLat, startLng, streams, rawData, riderId,
                         createdAt, updatedAt
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
                     ON CONFLICT(id) DO NOTHING
                 ''', [
                     db_id, name, sport_type, sport_type,
@@ -345,6 +355,7 @@ def sync_garmin_activities(email, password, rider_id):
                     parsed.get('elapsedTime'),
                     parsed.get('totalElevationGain'),
                     parsed.get('averageSpeed'),
+                    max_speed,
                     parsed.get('averageHeartrate'),
                     parsed.get('averageWatts'),
                     parsed.get('averageCadence'),

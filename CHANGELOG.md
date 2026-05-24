@@ -2,6 +2,11 @@
 
 All notable changes to Headwind are documented here.
 
+## [1.0.6] - 2026-05-23
+
+### Fixed
+- Garmin activity import no longer fails with NOT NULL constraint on maxSpeed — value derived from velocity stream, falls back to 0
+
 ## [1.0.5] - 2026-05-23
 
 ### Added
