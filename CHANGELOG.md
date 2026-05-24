@@ -2,6 +2,11 @@
 
 All notable changes to Headwind are documented here.
 
+## [1.0.9] - 2026-05-23
+
+### Fixed
+- Friend sync and Garmin import: all NOT NULL numeric columns (distance, movingTime, elapsedTime, totalElevationGain, averageSpeed) now fall back to 0 instead of crashing on null values from walking/non-GPS activities
+
 ## [1.0.8] - 2026-05-23
 
 ### Fixed
