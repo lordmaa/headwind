@@ -427,39 +427,36 @@ function mqttPublish() {
 function weatherBackfill() {
   var btn = document.getElementById('backfillBtn');
   var status = document.getElementById('backfillStatus');
-  var totalDone = 0, totalFailed = 0;
   btn.disabled = true;
+  status.textContent = 'Starting…';
+  status.style.color = 'var(--text-muted)';
 
-  function runBatch() {
-    status.textContent = 'Fetching… ' + (totalDone ? totalDone + ' done so far' : '');
-    status.style.color = 'var(--text-muted)';
+  function poll() {
     fetch('/settings/weather-backfill', { method: 'POST' })
-      .then(r => r.json())
-      .then(d => {
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
         if (d.error) {
           status.textContent = 'Error: ' + d.error;
           status.style.color = 'var(--danger)';
           btn.disabled = false;
           return;
         }
-        totalDone   += d.done;
-        totalFailed += d.failed || 0;
         if (d.remaining > 0) {
-          status.textContent = totalDone + ' done, ' + d.remaining + ' remaining…';
-          setTimeout(runBatch, 500);
+          status.textContent = 'Running… ' + d.done + ' done, ' + d.remaining + ' remaining';
+          setTimeout(poll, 2000);
         } else {
-          status.textContent = '✓ All done — ' + totalDone + ' updated' + (totalFailed ? ', ' + totalFailed + ' failed' : '');
+          status.textContent = '✓ All done — ' + d.done + ' updated' + (d.failed ? ', ' + d.failed + ' failed' : '');
           status.style.color = 'var(--success)';
           btn.disabled = false;
         }
       })
-      .catch(() => {
-        status.textContent = 'Request failed after ' + totalDone + ' updated';
-        status.style.color = 'var(--danger)';
+      .catch(function() {
+        status.textContent = 'Backfill running in background — refresh to check progress';
+        status.style.color = 'var(--text-muted)';
         btn.disabled = false;
       });
   }
-  runBatch();
+  poll();
 }
 
 function garminSync() {

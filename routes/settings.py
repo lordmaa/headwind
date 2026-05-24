@@ -2,9 +2,13 @@ import os
 import shutil
 import sqlite3
 import tempfile
+import threading as _threading
 import urllib.request
 import zipfile
 from pathlib import Path
+
+_backfill_lock  = _threading.Lock()
+_backfill_state = {'running': False, 'done': 0, 'failed': 0}
 
 from dotenv import load_dotenv, set_key
 from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, send_file
@@ -111,37 +115,67 @@ def version_check():
 
 @bp.route('/weather-backfill', methods=['POST'])
 def weather_backfill():
-    from flask import jsonify
+    from flask import current_app
     from database import get_db
-    from services.weather import fetch_weather, save_weather
 
     db = get_db()
-    rows = db.execute('''
-        SELECT id, startLat, startLng, startDateLocal, streams
-        FROM Activity
-        WHERE startLat IS NOT NULL AND startLng IS NOT NULL
-          AND weatherSummary IS NULL
-        ORDER BY startDateLocal DESC
-        LIMIT 20
-    ''').fetchall()
 
-    done, failed = 0, 0
-    for r in rows:
-        try:
-            w = fetch_weather(r['startLat'], r['startLng'], r['startDateLocal'], r['streams'])
-            if w:
-                save_weather(db, r['id'], w)
-                done += 1
-        except Exception:
-            failed += 1
+    with _backfill_lock:
+        if _backfill_state['running']:
+            remaining = db.execute('''
+                SELECT COUNT(*) FROM Activity
+                WHERE startLat IS NOT NULL AND startLng IS NOT NULL AND weatherSummary IS NULL
+            ''').fetchone()[0]
+            return jsonify(done=_backfill_state['done'], failed=_backfill_state['failed'],
+                           remaining=remaining, running=True)
 
-    db.commit()
-    remaining = db.execute('''
-        SELECT COUNT(*) FROM Activity
-        WHERE startLat IS NOT NULL AND startLng IS NOT NULL AND weatherSummary IS NULL
-    ''').fetchone()[0]
+        remaining = db.execute('''
+            SELECT COUNT(*) FROM Activity
+            WHERE startLat IS NOT NULL AND startLng IS NOT NULL AND weatherSummary IS NULL
+        ''').fetchone()[0]
 
-    return jsonify(done=done, failed=failed, remaining=remaining)
+        if remaining == 0:
+            return jsonify(done=_backfill_state['done'], failed=_backfill_state['failed'], remaining=0)
+
+        _backfill_state['running'] = True
+        _backfill_state['done']    = 0
+        _backfill_state['failed']  = 0
+
+    app = current_app._get_current_object()
+
+    def _run():
+        from services.weather import fetch_weather, save_weather
+        with app.app_context():
+            inner_db = get_db()
+            try:
+                while True:
+                    rows = inner_db.execute('''
+                        SELECT id, startLat, startLng, startDateLocal, streams
+                        FROM Activity
+                        WHERE startLat IS NOT NULL AND startLng IS NOT NULL
+                          AND weatherSummary IS NULL
+                        ORDER BY startDateLocal DESC
+                        LIMIT 20
+                    ''').fetchall()
+                    if not rows:
+                        break
+                    for r in rows:
+                        try:
+                            w = fetch_weather(r['startLat'], r['startLng'], r['startDateLocal'], r['streams'])
+                            if w:
+                                save_weather(inner_db, r['id'], w)
+                                with _backfill_lock:
+                                    _backfill_state['done'] += 1
+                        except Exception:
+                            with _backfill_lock:
+                                _backfill_state['failed'] += 1
+                    inner_db.commit()
+            finally:
+                with _backfill_lock:
+                    _backfill_state['running'] = False
+
+    _threading.Thread(target=_run, daemon=True).start()
+    return jsonify(done=0, failed=0, remaining=remaining, started=True)
 
 
 @bp.route('/password', methods=['POST'])

@@ -2,6 +2,11 @@
 
 All notable changes to Headwind are documented here.
 
+## [1.0.10] - 2026-05-23
+
+### Fixed
+- Weather backfill now runs in a background thread — clicking "Backfill All Weather" returns immediately and polls progress every 2 s; navigating away no longer aborts the backfill or locks you into the settings page
+
 ## [1.0.9] - 2026-05-23
 
 ### Fixed
