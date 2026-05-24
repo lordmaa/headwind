@@ -2,6 +2,12 @@
 
 All notable changes to Headwind are documented here.
 
+## [1.0.4] - 2026-05-23
+
+### Added
+- Garmin Connect activity import — pulls full FIT files (GPS, HR, power, cadence) for all outdoor activity types; incremental after first sync; weather fetched automatically on import
+- "Sync Activities" button in Settings alongside the existing recovery sync button
+
 ## [1.0.3] - 2026-05-23
 
 ### Fixed

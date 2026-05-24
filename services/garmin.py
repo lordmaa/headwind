@@ -1,6 +1,19 @@
+import io
 import json
+import zipfile
 from datetime import date, timedelta
 from pathlib import Path
+
+# Activity type keys that have meaningful GPS data worth importing
+_OUTDOOR_TYPES = {
+    'cycling', 'road_biking', 'mountain_biking', 'gravel_cycling',
+    'indoor_cycling', 'virtual_ride', 'e_bike_fitness', 'e_bike_mountain',
+    'running', 'trail_running', 'ultra_run',
+    'walking', 'hiking',
+    'open_water_swimming', 'lap_swimming',
+    'kayaking', 'rowing', 'paddling',
+    'multisport', 'triathlon',
+}
 
 TOKEN_DIR = Path(__file__).parent.parent / '.garmin_tokens'
 
@@ -211,3 +224,165 @@ def sync_garmin(email, password, days=7):
 
     db.commit()
     return synced
+
+
+def sync_garmin_activities(email, password, rider_id):
+    """
+    Generator: pull activities from Garmin Connect, download FIT files, parse and insert.
+    Yields dicts: {'msg': str} | {'imported': int, 'skipped': int} | {'done': True, ...}
+    Incremental — stores garminActivitySyncDate in Settings so repeated calls only fetch new rides.
+    """
+    import logging
+    from database import get_db
+    from services.parser import parse_fit, _map_sport
+    from services.weather import fetch_weather, save_weather
+
+    log = logging.getLogger(__name__)
+
+    api = _client(email, password)
+    db  = get_db()
+
+    s = db.execute('SELECT garminActivitySyncDate FROM Settings WHERE id=1').fetchone()
+    since = s['garminActivitySyncDate'] if s and s['garminActivitySyncDate'] else None
+
+    yield {'msg': 'Connected to Garmin Connect' + (f' — fetching rides since {since}' if since else ' — full history sync')}
+
+    imported = 0
+    skipped  = 0
+    newest   = since  # track newest date seen to update the cursor
+
+    offset = 0
+    limit  = 100
+    done   = False
+
+    while not done:
+        try:
+            activities = api.get_activities(start=offset, limit=limit)
+        except Exception as e:
+            yield {'error': f'Garmin API error: {e}'}
+            return
+
+        if not activities:
+            break
+
+        for a in activities:
+            activity_id  = str(a.get('activityId', ''))
+            type_key     = ((a.get('activityType') or {}).get('typeKey') or '').lower()
+            start_local  = (a.get('startTimeLocal') or '')[:19].replace(' ', 'T')
+            start_date   = start_local[:10]
+
+            # Track newest date for next incremental sync cursor
+            if start_date and (newest is None or start_date > newest):
+                newest = start_date
+
+            # Stop when we reach rides we already have (activities are newest-first)
+            if since and start_date <= since:
+                done = True
+                break
+
+            # Skip gym/yoga/strength activities that have no useful GPS data
+            if type_key and type_key not in _OUTDOOR_TYPES:
+                skipped += 1
+                continue
+
+            db_id = f'garmin_{activity_id}'
+            if db.execute('SELECT id FROM Activity WHERE id=?', [db_id]).fetchone():
+                skipped += 1
+                continue
+
+            # Download FIT (ORIGINAL format = zip containing <id>_ACTIVITY.fit)
+            try:
+                zip_bytes = api.download_activity(activity_id, dl_fmt=api.ActivityDownloadFormat.ORIGINAL)
+                with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+                    fit_name = next((n for n in zf.namelist() if n.lower().endswith('.fit')), None)
+                    if not fit_name:
+                        skipped += 1
+                        continue
+                    fit_bytes = zf.read(fit_name)
+            except Exception as e:
+                log.warning('Garmin activity %s download failed: %s', activity_id, e)
+                skipped += 1
+                continue
+
+            try:
+                parsed = parse_fit(fit_bytes)
+            except Exception as e:
+                log.warning('Garmin activity %s parse failed: %s', activity_id, e)
+                parsed = None
+
+            if not parsed:
+                skipped += 1
+                continue
+
+            # Prefer API summary for name and sport; FIT has accurate streams
+            sport_type  = _map_sport(type_key) if type_key else parsed.get('sportType', 'Ride')
+            name        = a.get('activityName') or parsed.get('name') or 'Garmin Activity'
+            start_utc   = (a.get('startTimeGMT') or start_local or '').replace(' ', 'T')
+
+            # Sanity check: Garmin FIT files from very old devices may give distance in mm
+            dist = parsed.get('distance') or 0
+            if dist > 800_000:  # >800 km → probably mm
+                dist /= 1000
+                parsed['distance'] = dist
+
+            try:
+                db.execute('''
+                    INSERT INTO Activity (
+                        id, name, type, sportType,
+                        startDate, startDateLocal,
+                        distance, movingTime, elapsedTime, totalElevationGain,
+                        averageSpeed, averageHeartrate, averageWatts,
+                        averageCadence, calories,
+                        startLat, startLng, streams, rawData, riderId,
+                        createdAt, updatedAt
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
+                    ON CONFLICT(id) DO NOTHING
+                ''', [
+                    db_id, name, sport_type, sport_type,
+                    start_utc, start_local,
+                    parsed.get('distance'),
+                    parsed.get('movingTime'),
+                    parsed.get('elapsedTime'),
+                    parsed.get('totalElevationGain'),
+                    parsed.get('averageSpeed'),
+                    parsed.get('averageHeartrate'),
+                    parsed.get('averageWatts'),
+                    parsed.get('averageCadence'),
+                    parsed.get('calories'),
+                    parsed.get('startLat'),
+                    parsed.get('startLng'),
+                    parsed.get('streams'),
+                    '{}',
+                    rider_id,
+                ])
+            except Exception as e:
+                log.warning('Garmin activity %s insert failed: %s', activity_id, e)
+                skipped += 1
+                continue
+
+            if parsed.get('startLat') and parsed.get('startLng') and start_local:
+                try:
+                    w = fetch_weather(parsed['startLat'], parsed['startLng'], start_local, parsed.get('streams'))
+                    if w:
+                        save_weather(db, db_id, w)
+                except Exception:
+                    pass
+
+            imported += 1
+            if imported % 20 == 0:
+                db.commit()
+                yield {'imported': imported, 'skipped': skipped}
+
+        if not done and len(activities) < limit:
+            break
+        offset += limit
+
+    db.commit()
+
+    # Save newest date as next incremental cursor
+    if newest:
+        db.execute('INSERT OR IGNORE INTO Settings (id) VALUES (1)')
+        db.execute('UPDATE Settings SET garminActivitySyncDate=? WHERE id=1', [newest])
+        db.commit()
+
+    yield {'done': True, 'imported': imported, 'skipped': skipped}

@@ -174,9 +174,12 @@
       <div style="display:flex; gap:0.75rem; margin-top:1.25rem; align-items:center; flex-wrap:wrap;">
         <button type="submit" class="btn btn-primary">Save</button>
         <button type="button" class="btn btn-secondary" onclick="garminSync()" id="garminBtn"
-                {% if not s or not s.garminEmail %}disabled{% endif %}>Sync Now</button>
+                {% if not s or not s.garminEmail %}disabled{% endif %}>Sync Recovery</button>
+        <button type="button" class="btn btn-secondary" onclick="garminActivitySync()" id="garminActivityBtn"
+                {% if not s or not s.garminEmail %}disabled{% endif %}>Sync Activities</button>
         <span id="garminStatus" style="font-size:0.8125rem; color:var(--text-muted);"></span>
       </div>
+      <div id="garminActivityStatus" style="margin-top:0.5rem; font-size:0.8125rem; color:var(--text-muted); display:none;"></div>
     </form>
 
     <!-- Strava Webhook -->
@@ -482,6 +485,42 @@ function garminSync() {
       status.style.color = 'var(--danger)';
       btn.disabled = false;
     });
+}
+
+function garminActivitySync() {
+  var btn    = document.getElementById('garminActivityBtn');
+  var status = document.getElementById('garminActivityStatus');
+  btn.disabled = true;
+  status.style.display = 'block';
+  status.style.color   = 'var(--text-muted)';
+  status.textContent   = 'Connecting to Garmin…';
+
+  var es = new EventSource('/garmin/sync-activities');
+  es.onmessage = function(e) {
+    var d = JSON.parse(e.data);
+    if (d.error) {
+      status.textContent = 'Error: ' + d.error;
+      status.style.color = 'var(--danger)';
+      btn.disabled = false;
+      es.close();
+    } else if (d.done) {
+      status.textContent = '✓ Imported ' + d.imported + ' activities' + (d.skipped ? ', ' + d.skipped + ' skipped' : '');
+      status.style.color = 'var(--success)';
+      btn.disabled = false;
+      es.close();
+    } else if (d.msg) {
+      status.textContent = d.msg;
+    } else if (d.imported !== undefined) {
+      status.textContent = 'Importing… ' + d.imported + ' done, ' + d.skipped + ' skipped';
+    }
+  };
+  es.onerror = function() {
+    if (es.readyState === EventSource.CLOSED) return;
+    status.textContent = 'Connection lost';
+    status.style.color = 'var(--danger)';
+    btn.disabled = false;
+    es.close();
+  };
 }
 
 function manageWebhook(action) {
