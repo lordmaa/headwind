@@ -138,6 +138,7 @@
 
 <!-- Search / Filter -->
 <form method="GET" action="/dashboard" class="card" style="margin-bottom:1rem; padding:0.875rem 1.25rem;">
+  {% if not active_rider.isDefault %}<input type="hidden" name="rider" value="{{ active_rider.id }}">{% endif %}
   <div style="display:flex; flex-wrap:wrap; gap:0.6rem; align-items:flex-end;">
     <div style="flex:2; min-width:140px;">
       <label style="font-size:0.75rem; color:var(--text-muted); display:block; margin-bottom:0.25rem;">Name</label>
@@ -176,7 +177,7 @@
     <div style="display:flex; gap:0.4rem; padding-bottom:0.05rem;">
       <button type="submit" class="btn btn-primary" style="padding:0.35rem 0.9rem; font-size:0.875rem;">Search</button>
       {% if is_filtered %}
-      <a href="/dashboard" class="btn btn-secondary" style="padding:0.35rem 0.75rem; font-size:0.875rem;">✕ Clear</a>
+      <a href="/dashboard{% if not active_rider.isDefault %}?rider={{ active_rider.id }}{% endif %}" class="btn btn-secondary" style="padding:0.35rem 0.75rem; font-size:0.875rem;">✕ Clear</a>
       {% endif %}
     </div>
   </div>

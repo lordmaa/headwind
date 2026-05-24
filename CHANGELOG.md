@@ -6,6 +6,7 @@ All notable changes to Headwind are documented here.
 
 ### Fixed
 - Weather backfill now runs in a background thread — clicking "Backfill All Weather" returns immediately and polls progress every 2 s; navigating away no longer aborts the backfill or locks you into the settings page
+- Dashboard search and Clear now preserve the active rider — searching a friend's rides no longer redirects back to your own dashboard
 
 ## [1.0.9] - 2026-05-23
 
