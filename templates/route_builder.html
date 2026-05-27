@@ -1,0 +1,500 @@
+{% extends 'base.html' %}
+
+{% block title %}Route Planner{% endblock %}
+{% block page_title %}Route Planner{% endblock %}
+
+{% block head %}
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    #plannerWrap { position: relative; }
+    #plannerMap  { height: calc(100vh - 130px); width: 100%; border-radius: 10px; cursor: crosshair; }
+
+    #routePanel {
+      position: absolute; top: 1rem; left: 1rem; z-index: 1000;
+      width: 264px;
+      background: rgba(7,20,33,0.92); border: 1px solid #1e4060;
+      border-radius: 8px; padding: 0.75rem;
+      backdrop-filter: blur(6px);
+      display: flex; flex-direction: column; gap: 0.55rem;
+      max-height: calc(100vh - 160px);
+      overflow: hidden;
+    }
+
+    .panel-hint {
+      font-size: 0.75rem; color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .panel-divider { border-top: 1px solid #1e4060; margin: 0.1rem 0; }
+
+    .stat-row {
+      display: flex; gap: 1rem;
+    }
+    .stat { display: flex; flex-direction: column; }
+    .stat-val { font-size: 1.1rem; font-weight: 600; color: var(--text); line-height: 1.2; }
+    .stat-lbl { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+
+    .btn-row  { display: flex; gap: 0.4rem; }
+    .btn-row.col { flex-direction: column; }
+
+    .panel-btn {
+      flex: 1; padding: 0.35rem 0.5rem;
+      border-radius: 6px; border: 1px solid #1e4060;
+      font-size: 0.8rem; cursor: pointer;
+      transition: background 0.12s, color 0.12s, border-color 0.12s;
+      white-space: nowrap;
+    }
+    .panel-btn.secondary {
+      background: transparent; color: var(--text-muted);
+    }
+    .panel-btn.secondary:hover:not(:disabled) {
+      background: #0e2437; color: var(--text);
+    }
+    .panel-btn.primary {
+      background: var(--accent); color: #fff; border-color: var(--accent);
+    }
+    .panel-btn.primary:hover:not(:disabled) { opacity: 0.88; }
+    .panel-btn:disabled { opacity: 0.38; cursor: default; }
+
+    .save-input {
+      width: 100%; box-sizing: border-box;
+      background: #071525; color: var(--text);
+      border: 1px solid #1e4060; border-radius: 6px;
+      padding: 0.3rem 0.5rem; font-size: 0.82rem;
+      color-scheme: dark;
+    }
+    .save-input:focus { outline: none; border-color: var(--accent); }
+
+    .section-title {
+      font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--text-muted); font-weight: 600;
+    }
+
+    #routeList {
+      overflow-y: auto; flex: 1;
+      display: flex; flex-direction: column; gap: 0.35rem;
+      min-height: 0;
+    }
+
+    .route-row {
+      display: flex; align-items: center; gap: 0.4rem;
+      padding: 0.4rem 0.5rem; border-radius: 6px;
+      border: 1px solid #1a3550;
+      transition: background 0.1s;
+    }
+    .route-row:hover { background: #0b1e30; }
+
+    .route-info {
+      flex: 1; cursor: pointer; min-width: 0;
+    }
+    .route-name {
+      font-size: 0.82rem; color: var(--text);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .route-meta {
+      font-size: 0.7rem; color: var(--text-muted); margin-top: 0.1rem;
+    }
+
+    .route-actions { display: flex; gap: 0.25rem; flex-shrink: 0; }
+
+    .icon-btn {
+      background: transparent; border: 1px solid #1e4060;
+      border-radius: 4px; padding: 0.15rem 0.4rem;
+      font-size: 0.75rem; color: var(--text-muted);
+      cursor: pointer; text-decoration: none; line-height: 1.6;
+      transition: background 0.1s, color 0.1s;
+    }
+    .icon-btn:hover { background: #0e2437; color: var(--text); }
+    .icon-btn.danger:hover { border-color: #c0392b; color: #e74c3c; background: rgba(192,57,43,0.12); }
+
+    .empty-hint { font-size: 0.78rem; color: var(--text-muted); padding: 0.25rem 0; }
+
+    /* Leaflet marker override */
+    .wp-icon { background: none !important; border: none !important; }
+    .wp-dot {
+      width: 12px; height: 12px;
+      background: var(--accent); border: 2px solid rgba(255,255,255,0.85);
+      border-radius: 50%;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.55);
+    }
+    .wp-dot.start { background: #27ae60; width: 14px; height: 14px; margin: -1px; }
+    .wp-dot.end   { background: #e74c3c; width: 14px; height: 14px; margin: -1px; }
+
+    #exportSpinner { display: none; font-size: 0.78rem; color: var(--text-muted); text-align: center; }
+
+    .layer-btn {
+      font-size: 0.72rem; padding: 0.18rem 0.45rem;
+      border-radius: 999px; border: 1px solid #1e4060;
+      background: transparent; color: var(--text-muted);
+      cursor: pointer; transition: background 0.12s, color 0.12s, border-color 0.12s;
+      white-space: nowrap;
+    }
+    .layer-btn:hover  { background: #0e2437; color: var(--text); }
+    .layer-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  </style>
+{% endblock %}
+
+{% block content %}
+<div id="plannerWrap">
+  <div id="routePanel">
+
+    <div class="panel-hint">Click the map to add waypoints &middot; drag to adjust</div>
+
+    <div style="display:flex; gap:0.3rem; flex-wrap:wrap;">
+      <button class="layer-btn active" id="layer-dark"     onclick="setLayer('dark',     this)">Dark</button>
+      <button class="layer-btn"        id="layer-light"    onclick="setLayer('light',    this)">Light</button>
+      <button class="layer-btn"        id="layer-sat"      onclick="setLayer('sat',      this)">Satellite</button>
+      <button class="layer-btn"        id="layer-satlabel" onclick="setLayer('satlabel', this)">Sat + Labels</button>
+    </div>
+
+    <div class="panel-divider"></div>
+
+    <div class="stat-row">
+      <div class="stat">
+        <span class="stat-val" id="statDist">&mdash;</span>
+        <span class="stat-lbl">distance</span>
+      </div>
+      <div class="stat">
+        <span class="stat-val" id="statWpts">0</span>
+        <span class="stat-lbl">waypoints</span>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="panel-btn secondary" id="btnUndo"  onclick="undo()"     disabled>&#x21A9; Undo</button>
+      <button class="panel-btn secondary" id="btnClear" onclick="clearAll()" disabled>&#x2715; Clear</button>
+    </div>
+
+    <!-- Save / Export actions -->
+    <div id="saveActions" class="btn-row col">
+      <button class="panel-btn primary"    id="btnSave"   onclick="showSaveForm()" disabled>Save Route</button>
+      <button class="panel-btn secondary"  id="btnExport" onclick="exportGPX()"   disabled>&#x2193; Export GPX</button>
+    </div>
+
+    <!-- Inline save form -->
+    <div id="saveForm" style="display:none;" class="btn-row col">
+      <input type="text" id="saveInput" class="save-input" placeholder="Route name&hellip;" maxlength="100">
+      <div class="btn-row">
+        <button class="panel-btn primary"   onclick="confirmSave()">Save</button>
+        <button class="panel-btn secondary" onclick="hideSaveForm()">Cancel</button>
+      </div>
+    </div>
+
+    <div id="exportSpinner">Fetching elevation&hellip;</div>
+
+    <div class="panel-divider"></div>
+
+    <div class="section-title">Saved Routes</div>
+    <div id="routeList"><div class="empty-hint">No saved routes yet.</div></div>
+
+  </div>
+
+  <div id="plannerMap"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Map setup ─────────────────────────────────────────────────────
+var map = L.map('plannerMap', { zoomControl: false })
+           .setView([{{ default_lat }}, {{ default_lng }}], 11);
+
+L.control.zoom({ position: 'topright' }).addTo(map);
+
+var TILE_DEFS = {
+  dark:     [{ url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',  opts: { attribution: '&copy; CARTO', subdomains: 'abcd', maxZoom: 19 } }],
+  light:    [{ url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', opts: { attribution: '&copy; CARTO', subdomains: 'abcd', maxZoom: 19 } }],
+  sat:      [{ url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',                  opts: { attribution: '&copy; Esri', maxZoom: 19 } }],
+  satlabel: [
+    { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',                  opts: { maxZoom: 19 } },
+    { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', opts: { maxZoom: 19 } },
+  ],
+};
+
+var activeTileLayers = [];
+
+function setLayer(key, btn) {
+  activeTileLayers.forEach(function(l) { map.removeLayer(l); });
+  activeTileLayers = [];
+  (TILE_DEFS[key] || TILE_DEFS.dark).forEach(function(def) {
+    activeTileLayers.push(L.tileLayer(def.url, def.opts).addTo(map));
+  });
+  // Keep markers and polyline on top
+  markers.forEach(function(m) { m.addTo(map); });
+  if (polyline) polyline.addTo(map);
+  document.querySelectorAll('.layer-btn').forEach(function(b) { b.classList.remove('active'); });
+  if (btn) btn.classList.add('active');
+}
+
+setLayer('dark', document.getElementById('layer-dark'));
+
+// ── State ─────────────────────────────────────────────────────────
+var waypoints  = [];   // [{lat, lng}, ...]
+var markers    = [];   // L.Marker[]
+var polyline   = null;
+var savedRoutes = [];
+var clickTimer  = null;
+
+// ── Icons ─────────────────────────────────────────────────────────
+function makeIcon(type) {
+  var cls = 'wp-dot' + (type === 'start' ? ' start' : type === 'end' ? ' end' : '');
+  return L.divIcon({
+    className: 'wp-icon',
+    html: '<div class="' + cls + '"></div>',
+    iconSize:   [14, 14],
+    iconAnchor: [7, 7],
+  });
+}
+
+function refreshIcons() {
+  markers.forEach(function(m, i) {
+    var type = i === 0 ? 'start' : (i === markers.length - 1 ? 'end' : '');
+    m.setIcon(makeIcon(type));
+  });
+}
+
+// ── Click to add waypoint (dblclick guard) ────────────────────────
+map.on('click', function(e) {
+  clickTimer = setTimeout(function() { addWaypoint(e.latlng); }, 200);
+});
+map.on('dblclick', function() { clearTimeout(clickTimer); });
+
+function addWaypoint(latlng) {
+  var wp  = { lat: latlng.lat, lng: latlng.lng };
+  var idx = waypoints.length;
+  waypoints.push(wp);
+
+  var m = L.marker(latlng, { draggable: true, icon: makeIcon('') }).addTo(map);
+  m._wpIdx = idx;
+  m.on('drag', function(e) {
+    waypoints[m._wpIdx] = { lat: e.latlng.lat, lng: e.latlng.lng };
+    refreshPolyline();
+    refreshStats();
+  });
+  markers.push(m);
+
+  refreshIcons();
+  refreshPolyline();
+  refreshStats();
+}
+
+// ── Undo / Clear ──────────────────────────────────────────────────
+function undo() {
+  if (!waypoints.length) return;
+  waypoints.pop();
+  map.removeLayer(markers.pop());
+  refreshIcons();
+  refreshPolyline();
+  refreshStats();
+}
+
+function clearAll() {
+  if (waypoints.length && !confirm('Clear all waypoints?')) return;
+  waypoints = [];
+  markers.forEach(function(m) { map.removeLayer(m); });
+  markers = [];
+  refreshPolyline();
+  refreshStats();
+}
+
+// ── Polyline ──────────────────────────────────────────────────────
+function refreshPolyline() {
+  if (polyline) { map.removeLayer(polyline); polyline = null; }
+  if (waypoints.length >= 2) {
+    polyline = L.polyline(
+      waypoints.map(function(w) { return [w.lat, w.lng]; }),
+      { color: '#fc4c02', weight: 3, opacity: 0.9 }
+    ).addTo(map);
+  }
+}
+
+// ── Distance (Haversine, miles) ───────────────────────────────────
+function haversineMi(lat1, lng1, lat2, lng2) {
+  var R    = 3958.8;
+  var rad  = Math.PI / 180;
+  var phi1 = lat1 * rad, phi2 = lat2 * rad;
+  var dphi = (lat2 - lat1) * rad, dlam = (lng2 - lng1) * rad;
+  var a = Math.sin(dphi / 2) * Math.sin(dphi / 2) +
+          Math.cos(phi1) * Math.cos(phi2) * Math.sin(dlam / 2) * Math.sin(dlam / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function totalMiles() {
+  var d = 0;
+  for (var i = 1; i < waypoints.length; i++) {
+    d += haversineMi(
+      waypoints[i-1].lat, waypoints[i-1].lng,
+      waypoints[i].lat,   waypoints[i].lng
+    );
+  }
+  return d;
+}
+
+function refreshStats() {
+  var mi  = totalMiles();
+  var has = waypoints.length >= 2;
+  document.getElementById('statDist').textContent = has ? mi.toFixed(1) + ' mi' : '—';
+  document.getElementById('statWpts').textContent = waypoints.length;
+  document.getElementById('btnUndo').disabled   = waypoints.length === 0;
+  document.getElementById('btnClear').disabled  = waypoints.length === 0;
+  document.getElementById('btnSave').disabled   = !has;
+  document.getElementById('btnExport').disabled = !has;
+}
+
+// ── Save flow ─────────────────────────────────────────────────────
+function showSaveForm() {
+  document.getElementById('saveActions').style.display = 'none';
+  document.getElementById('saveForm').style.display    = 'flex';
+  document.getElementById('saveInput').value = '';
+  document.getElementById('saveInput').focus();
+}
+
+function hideSaveForm() {
+  document.getElementById('saveForm').style.display    = 'none';
+  document.getElementById('saveActions').style.display = 'flex';
+}
+
+document.getElementById('saveInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter')  confirmSave();
+  if (e.key === 'Escape') hideSaveForm();
+});
+
+function confirmSave() {
+  var name = document.getElementById('saveInput').value.trim() || 'My Route';
+  fetch('/planner/routes', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ name: name, waypoints: waypoints }),
+  })
+  .then(function(r) { return r.json(); })
+  .then(function() {
+    hideSaveForm();
+    loadSavedRoutes();
+  });
+}
+
+// ── Export GPX ────────────────────────────────────────────────────
+function exportGPX() {
+  var name = document.getElementById('saveInput') && document.getElementById('saveInput').value.trim();
+  name = name || prompt('Name for this GPX file:', 'My Route') || 'My Route';
+
+  var btn     = document.getElementById('btnExport');
+  var spinner = document.getElementById('exportSpinner');
+  btn.disabled     = true;
+  spinner.style.display = 'block';
+
+  fetch('/planner/export', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ name: name, waypoints: waypoints }),
+  })
+  .then(function(r) {
+    if (!r.ok) throw new Error('Export failed');
+    return r.blob();
+  })
+  .then(function(blob) {
+    var url = URL.createObjectURL(blob);
+    var a   = document.createElement('a');
+    a.href  = url;
+    a.download = name.replace(/ /g, '_') + '.gpx';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function() { URL.revokeObjectURL(url); }, 2000);
+  })
+  .catch(function() { alert('Export failed — check the console.'); })
+  .finally(function() {
+    spinner.style.display = 'none';
+    refreshStats();
+  });
+}
+
+// ── Saved routes ──────────────────────────────────────────────────
+function escapeHtml(s) {
+  var d = document.createElement('div');
+  d.appendChild(document.createTextNode(s));
+  return d.innerHTML;
+}
+
+function loadSavedRoutes() {
+  fetch('/planner/routes')
+    .then(function(r) { return r.json(); })
+    .then(function(routes) {
+      savedRoutes = routes;
+      renderSavedRoutes();
+    });
+}
+
+function renderSavedRoutes() {
+  var el = document.getElementById('routeList');
+  if (!savedRoutes.length) {
+    el.innerHTML = '<div class="empty-hint">No saved routes yet.</div>';
+    return;
+  }
+  el.innerHTML = savedRoutes.map(function(r) {
+    return '<div class="route-row" data-id="' + r.id + '">' +
+      '<div class="route-info" onclick="loadSaved(' + r.id + ')" title="Load onto map">' +
+        '<div class="route-name">' + escapeHtml(r.name) + '</div>' +
+        '<div class="route-meta">' + r.distMi + ' mi &middot; ' + r.count + ' wpts</div>' +
+      '</div>' +
+      '<div class="route-actions">' +
+        '<a href="/planner/routes/' + r.id + '/export.gpx" class="icon-btn" title="Download GPX">&#x2193;</a>' +
+        '<button class="icon-btn danger" onclick="deleteRoute(' + r.id + ')" title="Delete">&#x2715;</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function loadSaved(id) {
+  fetch('/planner/routes/' + id)
+    .then(function(r) { return r.json(); })
+    .then(function(route) {
+      if (waypoints.length && !confirm('Replace current route with "' + route.name + '"?')) return;
+
+      // Clear current
+      waypoints = [];
+      markers.forEach(function(m) { map.removeLayer(m); });
+      markers = [];
+      if (polyline) { map.removeLayer(polyline); polyline = null; }
+
+      // Place saved waypoints
+      route.waypoints.forEach(function(wp) {
+        var idx = waypoints.length;
+        waypoints.push(wp);
+        var m = L.marker(L.latLng(wp.lat, wp.lng), { draggable: true, icon: makeIcon('') }).addTo(map);
+        m._wpIdx = idx;
+        m.on('drag', function(e) {
+          waypoints[m._wpIdx] = { lat: e.latlng.lat, lng: e.latlng.lng };
+          refreshPolyline();
+          refreshStats();
+        });
+        markers.push(m);
+      });
+
+      refreshIcons();
+      refreshPolyline();
+      refreshStats();
+
+      if (route.waypoints.length) {
+        map.fitBounds(
+          L.latLngBounds(route.waypoints.map(function(w) { return [w.lat, w.lng]; })),
+          { padding: [40, 40] }
+        );
+      }
+    });
+}
+
+function deleteRoute(id) {
+  var route = savedRoutes.find(function(r) { return r.id === id; });
+  var name  = route ? route.name : 'this route';
+  if (!confirm('Delete "' + name + '"?')) return;
+  fetch('/planner/routes/' + id, { method: 'DELETE' })
+    .then(function() { loadSavedRoutes(); });
+}
+
+// ── Init ──────────────────────────────────────────────────────────
+refreshStats();
+loadSavedRoutes();
+</script>
+{% endblock %}

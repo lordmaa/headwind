@@ -36,6 +36,10 @@
          class="nav-item {% if request.blueprint == 'heatmap' %}active{% endif %}">
         Heatmap
       </a>
+      <a href="{{ url_for('route_builder.index') }}"
+         class="nav-item {% if request.blueprint == 'route_builder' %}active{% endif %}">
+        Planner
+      </a>
       <a href="{{ url_for('ai_page.index') }}"
          class="nav-item {% if request.blueprint == 'ai_page' %}active{% endif %}">
         AI Coach

@@ -202,7 +202,8 @@ def create_app():
     from routes.about         import bp as about_bp
     from routes.setup         import bp as setup_bp
     from routes.friends       import bp as friends_bp
-    from routes.nutrition     import bp as nutrition_bp
+    from routes.nutrition      import bp as nutrition_bp
+    from routes.route_builder  import bp as route_builder_bp
 
     # ── Auth guard ───────────────────────────────────────────────
     _PUBLIC = {'login.login_page', 'login.logout', 'static',
@@ -243,6 +244,7 @@ def create_app():
     app.register_blueprint(setup_bp)
     app.register_blueprint(friends_bp)
     app.register_blueprint(nutrition_bp)
+    app.register_blueprint(route_builder_bp)
 
     threading.Thread(target=_mqtt_heartbeat,   args=(app,), daemon=True).start()
     threading.Thread(target=_garmin_heartbeat, args=(app,), daemon=True).start()

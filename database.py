@@ -302,6 +302,15 @@ def migrate_db():
     if 'riderName' not in friend_cols:
         db.execute('ALTER TABLE Friend ADD COLUMN riderName TEXT')
 
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS PlannedRoute (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            name      TEXT NOT NULL,
+            waypoints TEXT NOT NULL,
+            createdAt TEXT DEFAULT (datetime('now'))
+        )
+    ''')
+
     db.commit()
 
 

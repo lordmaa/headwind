@@ -2,6 +2,13 @@
 
 All notable changes to Headwind are documented here.
 
+## [1.0.11] - 2026-05-27
+
+### Added
+- Route Planner (`/planner`) — interactive Leaflet map to draw routes by clicking waypoints; draggable markers; live distance in miles; dark/light/satellite/sat+labels layer switcher
+- Save named routes to DB (`PlannedRoute` table); load, download, or delete from the sidebar
+- GPX export (`<rte>` format) with elevation data fetched from Open-Meteo — ready to load onto Garmin/Wahoo
+
 ## [1.0.10] - 2026-05-23
 
 ### Fixed
