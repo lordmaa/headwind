@@ -36,10 +36,10 @@ def _process_new_activity(app, activity_id):
                     log.warning('Webhook: Garmin sync complete for activity %s', activity_id)
 
                     # Enrich with Garmin HR if Strava didn't capture it
-                    if not activity.get('averageHeartrate') and activity.get('startDate') and activity.get('elapsedTime'):
+                    if not activity['averageHeartrate'] and activity['startDate'] and activity['elapsedTime']:
                         try:
                             garmin_api = _client(s['garminEmail'], s['garminPassword'])
-                            streams = json.loads(activity['streams']) if activity.get('streams') else {}
+                            streams = json.loads(activity['streams']) if activity['streams'] else {}
                             time_stream = (streams.get('time') or {}).get('data')
                             hr = fetch_ride_hr(garmin_api, activity['startDate'], activity['elapsedTime'], time_stream)
                             if hr:

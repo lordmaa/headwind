@@ -44,6 +44,10 @@
          class="nav-item {% if request.blueprint == 'garmin_page' %}active{% endif %}">
         Recovery
       </a>
+      <a href="{{ url_for('nutrition.index') }}"
+         class="nav-item {% if request.blueprint == 'nutrition' %}active{% endif %}">
+        Nutrition
+      </a>
       <a href="{{ url_for('riders.index') }}"
          class="nav-item {% if request.blueprint == 'riders' %}active{% endif %}">
         Riders

@@ -1,0 +1,780 @@
+{% extends 'base.html' %}
+{% block title %}Nutrition{% endblock %}
+{% block page_title %}Nutrition{% endblock %}
+
+{% block head %}
+  <link rel="manifest" href="/static/nutrition-manifest.json">
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    /* ── Progress bars ───────────────────────────────── */
+    .nu-prog-wrap { margin-top:0.4rem; }
+    .nu-prog-bg {
+      height:7px; background:var(--border); border-radius:4px; overflow:hidden;
+    }
+    .nu-prog-fill {
+      height:100%; border-radius:4px; transition:width 0.35s;
+      background:var(--accent);
+    }
+    .nu-prog-fill.over   { background:var(--danger); }
+    .nu-prog-fill.nearly { background:var(--warning); }
+    .nu-prog-label {
+      display:flex; justify-content:space-between;
+      font-size:0.75rem; color:var(--text-muted); margin-top:0.25rem;
+    }
+
+    /* ── Calorie card ────────────────────────────────── */
+    .nu-cal-card { margin-bottom:1rem; }
+    .nu-cal-main {
+      display:grid; grid-template-columns:1fr auto;
+      align-items:start; gap:0.5rem; margin-bottom:0.5rem;
+    }
+    .nu-cal-eaten  { font-size:2rem; font-weight:700; line-height:1; }
+    .nu-cal-goal   { font-size:0.85rem; color:var(--text-muted); margin-top:0.25rem; }
+    .nu-cal-burned {
+      text-align:right; font-size:0.8rem; color:var(--text-muted);
+    }
+    .nu-cal-burned strong { color:var(--text); display:block; font-size:1rem; }
+    .nu-net {
+      margin-top:0.5rem; font-size:0.85rem; font-weight:600;
+      padding:0.35rem 0.6rem; border-radius:6px; display:inline-block;
+    }
+    .nu-net.deficit { background:rgba(16,185,129,0.15); color:var(--success); }
+    .nu-net.surplus { background:rgba(239,68,68,0.15);  color:var(--danger); }
+    .nu-net.neutral { background:var(--border);          color:var(--text-muted); }
+
+    /* ── Macro row ───────────────────────────────────── */
+    .nu-macro-grid {
+      display:grid; grid-template-columns:repeat(3,1fr);
+      gap:0.75rem; margin-bottom:1rem;
+    }
+    @media (max-width:480px) { .nu-macro-grid { grid-template-columns:1fr; } }
+    .nu-macro-val  { font-size:1.2rem; font-weight:700; line-height:1.1; }
+    .nu-macro-lbl  { font-size:0.75rem; color:var(--text-muted); margin-top:0.15rem; }
+
+    /* ── Hydration card ──────────────────────────────── */
+    .nu-water-card { margin-bottom:1rem; }
+    .nu-water-top {
+      display:flex; align-items:center; justify-content:space-between;
+      margin-bottom:0.5rem;
+    }
+    .nu-water-total { font-size:1.5rem; font-weight:700; }
+    .nu-water-goal  { font-size:0.8rem; color:var(--text-muted); }
+    .nu-water-btns  { display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.6rem; }
+    .nu-water-btns .btn { flex:1; justify-content:center; min-width:80px; }
+
+    /* ── Actions row ─────────────────────────────────── */
+    .nu-actions { display:flex; gap:0.5rem; margin-bottom:1rem; }
+
+    /* ── Log entries ─────────────────────────────────── */
+    .nu-log-empty { color:var(--text-muted); padding:1.5rem 0; text-align:center; font-size:0.9rem; }
+    .nu-entry {
+      display:flex; align-items:center; gap:0.75rem;
+      padding:0.6rem 0; border-bottom:1px solid var(--border);
+    }
+    .nu-entry:last-child { border-bottom:none; }
+    .nu-entry-name  { flex:1; font-size:0.9rem; min-width:0; }
+    .nu-entry-meta  { font-size:0.75rem; color:var(--text-muted); margin-top:0.1rem; }
+    .nu-entry-kcal  { font-size:0.95rem; font-weight:700; color:var(--accent); white-space:nowrap; }
+    .btn-del {
+      background:none; border:none; color:var(--text-muted); font-size:1rem;
+      cursor:pointer; padding:0.2rem 0.4rem; border-radius:4px; flex-shrink:0;
+    }
+    .btn-del:hover { color:var(--danger); background:rgba(239,68,68,0.1); }
+
+    /* ── Modals ──────────────────────────────────────── */
+    .modal-backdrop {
+      display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7);
+      z-index:200; align-items:center; justify-content:center; padding:1rem;
+    }
+    .modal-backdrop.open { display:flex; }
+    .modal-panel {
+      background:var(--card-bg); border:1px solid var(--border); border-radius:0.5rem;
+      width:100%; max-width:460px; max-height:90vh; overflow-y:auto; padding:1.25rem;
+    }
+    .modal-header {
+      display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;
+    }
+    .modal-header h2 { font-size:1rem; font-weight:600; margin:0; }
+    .btn-close {
+      background:none; border:none; color:var(--text-muted); font-size:1.4rem;
+      cursor:pointer; line-height:1; padding:0.1rem 0.3rem; border-radius:4px;
+    }
+    .btn-close:hover { color:var(--text); }
+    .modal-btns { display:flex; gap:0.5rem; margin-top:1rem; }
+    .modal-btns .btn { flex:1; justify-content:center; }
+
+    #scannerView { border-radius:0.375rem; overflow:hidden; background:#000; margin-bottom:0.75rem; }
+    #scannerView video { width:100%; display:block; }
+    #scanHint { font-size:0.8rem; color:var(--text-muted); text-align:center; margin-bottom:0.75rem; }
+    .confirm-area { display:none; }
+    .product-name  { font-weight:600; font-size:1rem; margin-bottom:0.15rem; }
+    .product-brand { font-size:0.8rem; color:var(--text-muted); margin-bottom:1rem; }
+    .serving-row   { display:flex; align-items:center; gap:0.5rem; margin-bottom:0.6rem; }
+    .serving-row label { font-size:0.85rem; color:var(--text-muted); flex:0 0 4.5rem; margin:0; font-weight:400; }
+    .serving-row input { flex:1; }
+    .serving-unit { font-size:0.85rem; color:var(--text-muted); }
+    .total-kcal { font-size:1.1rem; font-weight:700; color:var(--accent); margin:0.5rem 0 1rem; }
+
+    .form-row { display:grid; grid-template-columns:1fr 1fr; gap:0.75rem; }
+    @media (max-width:480px) { .form-row { grid-template-columns:1fr; } }
+
+    /* ── Search results ──────────────────────────────── */
+    .search-result {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:0.55rem 0; border-bottom:1px solid var(--border); gap:0.5rem;
+      cursor:pointer;
+    }
+    .search-result:last-child { border-bottom:none; }
+    .search-result:hover { background:rgba(255,255,255,0.03); border-radius:4px; padding-left:0.3rem; }
+    .search-result-name { font-size:0.875rem; font-weight:500; }
+    .search-result-meta { font-size:0.75rem; color:var(--text-muted); margin-top:0.1rem; }
+    .search-result-kcal { font-size:0.875rem; font-weight:700; color:var(--accent); white-space:nowrap; }
+    .search-empty { color:var(--text-muted); text-align:center; padding:1.5rem 0; font-size:0.875rem; }
+    .search-loading { color:var(--text-muted); text-align:center; padding:1rem 0; font-size:0.875rem; }
+  </style>
+{% endblock %}
+
+{% block topbar_actions %}
+<div style="display:flex; align-items:center; gap:0.5rem;">
+  <div style="display:flex; align-items:center; gap:0.4rem;">
+    <button class="btn btn-secondary" style="padding:0.3rem 0.6rem; font-size:0.85rem;" id="prevDay">&#8592;</button>
+    <span id="dateLabel" style="font-size:0.85rem; color:var(--text-muted); min-width:5rem; text-align:center;"></span>
+    <button class="btn btn-secondary" style="padding:0.3rem 0.6rem; font-size:0.85rem;" id="nextDay">&#8594;</button>
+  </div>
+  <button class="btn btn-secondary" style="padding:0.3rem 0.6rem; font-size:0.85rem;" id="btnGoals" title="Set daily goals">Goals</button>
+</div>
+{% endblock %}
+
+{% block content %}
+
+<!-- Calories -->
+<div class="card nu-cal-card">
+  <div class="card-title">Calories</div>
+  <div class="nu-cal-main">
+    <div>
+      <div class="nu-cal-eaten"><span id="calEaten">0</span> <span style="font-size:1rem; font-weight:400; color:var(--text-muted);">kcal</span></div>
+      <div class="nu-cal-goal" id="calGoalLbl"></div>
+    </div>
+    <div class="nu-cal-burned">
+      <strong id="calBurned">—</strong>
+      <span id="calBurnedSrc">burned</span>
+    </div>
+  </div>
+  <div class="nu-prog-wrap" id="calProgWrap" style="display:none;">
+    <div class="nu-prog-bg"><div class="nu-prog-fill" id="calProgFill" style="width:0%"></div></div>
+    <div class="nu-prog-label"><span id="calProgPct"></span><span id="calProgRem"></span></div>
+  </div>
+  <div id="netBadge" style="margin-top:0.5rem; display:none;"></div>
+</div>
+
+<!-- Macros -->
+<div class="nu-macro-grid">
+  <div class="stat-card">
+    <div class="nu-macro-val" id="macroProtein">0g</div>
+    <div class="nu-macro-lbl">Protein</div>
+    <div class="nu-prog-wrap" id="protProgWrap" style="display:none;">
+      <div class="nu-prog-bg"><div class="nu-prog-fill" id="protProgFill" style="width:0%"></div></div>
+      <div class="nu-prog-label"><span></span><span id="protProgGoal"></span></div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="nu-macro-val" id="macroCarbsVal">0g</div>
+    <div class="nu-macro-lbl">Carbs</div>
+    <div class="nu-prog-wrap" id="carbProgWrap" style="display:none;">
+      <div class="nu-prog-bg"><div class="nu-prog-fill" id="carbProgFill" style="width:0%"></div></div>
+      <div class="nu-prog-label"><span></span><span id="carbProgGoal"></span></div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="nu-macro-val" id="macroFatVal">0g</div>
+    <div class="nu-macro-lbl">Fat</div>
+    <div class="nu-prog-wrap" id="fatProgWrap" style="display:none;">
+      <div class="nu-prog-bg"><div class="nu-prog-fill" id="fatProgFill" style="width:0%"></div></div>
+      <div class="nu-prog-label"><span></span><span id="fatProgGoal"></span></div>
+    </div>
+  </div>
+</div>
+
+<!-- Hydration -->
+<div class="card nu-water-card">
+  <div class="card-title">Hydration 💧</div>
+  <div class="nu-water-top">
+    <div>
+      <div class="nu-water-total"><span id="waterTotal">0</span> ml</div>
+      <div class="nu-water-goal" id="waterGoalLbl"></div>
+    </div>
+  </div>
+  <div class="nu-prog-wrap" id="waterProgWrap" style="display:none;">
+    <div class="nu-prog-bg"><div class="nu-prog-fill" id="waterProgFill" style="width:0%; background:#60a5fa;"></div></div>
+    <div class="nu-prog-label"><span id="waterProgPct"></span><span id="waterProgRem"></span></div>
+  </div>
+  <div class="nu-water-btns">
+    <button class="btn btn-secondary" data-ml="100">+100ml</button>
+    <button class="btn btn-secondary" data-ml="250">+250ml</button>
+    <button class="btn btn-secondary" data-ml="500">+500ml</button>
+    <button class="btn btn-secondary" id="undoWater" style="color:var(--text-muted);">Undo last</button>
+  </div>
+</div>
+
+<!-- Actions -->
+<div class="nu-actions">
+  <button class="btn btn-primary" id="btnScan">
+    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2"/>
+      <line x1="7" y1="12" x2="17" y2="12"/>
+    </svg>
+    Scan
+  </button>
+  <button class="btn btn-secondary" id="btnSearch">🔍 Search</button>
+  <button class="btn btn-secondary" id="btnManual">+ Manual</button>
+</div>
+
+<!-- Food log -->
+<div class="card">
+  <div class="card-title">Food log</div>
+  <div id="logList"><div class="nu-log-empty">Nothing logged yet.</div></div>
+</div>
+
+
+<!-- ── Scanner modal ──────────────────────────────────── -->
+<div class="modal-backdrop" id="scanModal">
+  <div class="modal-panel">
+    <div class="modal-header">
+      <h2 id="scanModalTitle">Scan a barcode</h2>
+      <button class="btn-close" id="closeScan">&times;</button>
+    </div>
+    <div id="scannerView"></div>
+    <p id="scanHint">Point camera at barcode (EAN-13 / UPC)</p>
+    <div class="confirm-area" id="confirmArea">
+      <div class="product-name" id="pName"></div>
+      <div class="product-brand" id="pBrand"></div>
+      <div class="serving-row">
+        <label>Serving</label>
+        <input type="number" id="servingG" min="1" max="9999" step="1" placeholder="grams">
+        <span class="serving-unit">g</span>
+      </div>
+      <div class="serving-row">
+        <label>Quantity</label>
+        <input type="number" id="servingQty" min="0.5" max="20" step="0.5" value="1">
+        <span class="serving-unit">servings</span>
+      </div>
+      <div class="total-kcal" id="totalKcal"></div>
+      <div class="modal-btns">
+        <button class="btn btn-secondary" id="btnRescan">Rescan</button>
+        <button class="btn btn-primary" id="btnLog">Log it</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Manual entry modal ─────────────────────────────── -->
+<div class="modal-backdrop" id="manualModal">
+  <div class="modal-panel">
+    <div class="modal-header">
+      <h2>Manual entry</h2>
+      <button class="btn-close" id="closeManual">&times;</button>
+    </div>
+    <div class="form-group">
+      <label>Food name *</label>
+      <input type="text" id="mName" placeholder="e.g. Banana, Chicken breast">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Calories (kcal) *</label>
+        <input type="number" id="mKcal" min="0" placeholder="e.g. 90">
+      </div>
+      <div class="form-group">
+        <label>Serving (g)</label>
+        <input type="number" id="mServingG" min="0" placeholder="optional">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Protein (g)</label>
+        <input type="number" id="mProtein" min="0" step="0.1" placeholder="optional">
+      </div>
+      <div class="form-group">
+        <label>Carbs (g)</label>
+        <input type="number" id="mCarbs" min="0" step="0.1" placeholder="optional">
+      </div>
+    </div>
+    <div class="form-group" style="max-width:50%;">
+      <label>Fat (g)</label>
+      <input type="number" id="mFat" min="0" step="0.1" placeholder="optional">
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-secondary" id="cancelManual">Cancel</button>
+      <button class="btn btn-primary" id="saveManual">Log it</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Goals modal ────────────────────────────────────── -->
+<div class="modal-backdrop" id="goalsModal">
+  <div class="modal-panel">
+    <div class="modal-header">
+      <h2>Daily goals</h2>
+      <button class="btn-close" id="closeGoals">&times;</button>
+    </div>
+    <div class="form-group">
+      <label>Calories (kcal)</label>
+      <input type="number" id="gCal" min="0" placeholder="e.g. 2000">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Protein (g)</label>
+        <input type="number" id="gProtein" min="0" placeholder="e.g. 150">
+      </div>
+      <div class="form-group">
+        <label>Carbs (g)</label>
+        <input type="number" id="gCarbs" min="0" placeholder="e.g. 200">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Fat (g)</label>
+        <input type="number" id="gFat" min="0" placeholder="e.g. 65">
+      </div>
+      <div class="form-group">
+        <label>Water (ml)</label>
+        <input type="number" id="gWater" min="0" placeholder="e.g. 2500">
+      </div>
+    </div>
+    <p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:0.5rem;">Leave blank to hide progress bars for that target.</p>
+    <div class="modal-btns">
+      <button class="btn btn-secondary" id="cancelGoals">Cancel</button>
+      <button class="btn btn-primary" id="saveGoals">Save goals</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Search modal ───────────────────────────────────── -->
+<div class="modal-backdrop" id="searchModal">
+  <div class="modal-panel">
+    <div class="modal-header">
+      <h2>Search food</h2>
+      <button class="btn-close" id="closeSearch">&times;</button>
+    </div>
+    <div style="display:flex; gap:0.5rem; margin-bottom:0.75rem;">
+      <input type="text" id="searchInput" placeholder="e.g. Weetabix, chicken breast, banana…" style="flex:1;">
+      <button class="btn btn-primary" id="doSearch">Search</button>
+    </div>
+    <div id="searchResults"></div>
+  </div>
+</div>
+
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────
+let currentDate = new Date();
+currentDate.setHours(12, 0, 0, 0);
+let scanner = null;
+let pendingProduct = null;
+let lastWaterId = null;
+let goals = {};
+let pollTimer = null;
+
+function isoDate(d) { return d.toISOString().slice(0, 10); }
+function fmtDateLabel(d) {
+  const today = isoDate(new Date());
+  const ds    = isoDate(d);
+  if (ds === today) return 'Today';
+  const yd = new Date(); yd.setDate(yd.getDate() - 1);
+  if (ds === isoDate(yd)) return 'Yesterday';
+  return d.toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+}
+
+// ── Date navigation ───────────────────────────────────────────────────
+document.getElementById('prevDay').addEventListener('click', () => {
+  currentDate.setDate(currentDate.getDate() - 1); loadDay();
+});
+document.getElementById('nextDay').addEventListener('click', () => {
+  const tom = new Date(); tom.setDate(tom.getDate() + 1); tom.setHours(12,0,0,0);
+  if (currentDate < tom) { currentDate.setDate(currentDate.getDate() + 1); loadDay(); }
+});
+
+// ── Load day ──────────────────────────────────────────────────────────
+async function loadDay() {
+  clearTimeout(pollTimer);
+  document.getElementById('dateLabel').textContent = fmtDateLabel(currentDate);
+  const r    = await fetch(`/nutrition/api/day/${isoDate(currentDate)}`);
+  const data = await r.json();
+  goals = data.goals || {};
+  renderAll(data);
+  pollTimer = setTimeout(loadDay, 5 * 60 * 1000); // refresh every 5 min
+}
+
+function renderAll(data) {
+  const entries = data.entries || [];
+  const waterMl = data.water_ml || 0;
+
+  // Totals from food log
+  const eaten   = entries.reduce((s,e) => s + (e.calories||0), 0);
+  const protein = entries.reduce((s,e) => s + (e.protein||0), 0);
+  const carbs   = entries.reduce((s,e) => s + (e.carbs||0), 0);
+  const fat     = entries.reduce((s,e) => s + (e.fat||0), 0);
+
+  // Burned: prefer Garmin total, fall back to ride calories
+  const burned  = data.garmin_total || data.ride_calories || 0;
+  const burnSrc = data.garmin_total ? 'kcal burned (Garmin)' : (data.ride_calories ? 'kcal burned (rides)' : 'burned');
+
+  // ── Calories card ─────────────────────────────────────
+  document.getElementById('calEaten').textContent   = Math.round(eaten).toLocaleString();
+  document.getElementById('calBurned').textContent  = burned ? Math.round(burned).toLocaleString() + ' kcal' : '—';
+  document.getElementById('calBurnedSrc').textContent = burnSrc;
+
+  if (goals.cal) {
+    document.getElementById('calGoalLbl').textContent = `goal: ${goals.cal.toLocaleString()} kcal`;
+    renderProg('calProgWrap','calProgFill','calProgPct','calProgRem', eaten, goals.cal, '{v} kcal eaten', '{r} kcal left');
+  } else {
+    document.getElementById('calGoalLbl').textContent = '';
+    document.getElementById('calProgWrap').style.display = 'none';
+  }
+
+  const netEl = document.getElementById('netBadge');
+  if (burned) {
+    const net = eaten - burned;
+    netEl.style.display = '';
+    netEl.className = 'nu-net ' + (net < 0 ? 'deficit' : net > 0 ? 'surplus' : 'neutral');
+    netEl.textContent = (net >= 0 ? '+' : '') + Math.round(net).toLocaleString() + ' kcal net ' + (net < 0 ? '(deficit)' : '(surplus)');
+  } else {
+    netEl.style.display = 'none';
+  }
+
+  // ── Macros ────────────────────────────────────────────
+  document.getElementById('macroProtein').textContent  = Math.round(protein) + 'g';
+  document.getElementById('macroCarbsVal').textContent = Math.round(carbs)   + 'g';
+  document.getElementById('macroFatVal').textContent   = Math.round(fat)     + 'g';
+
+  if (goals.protein) renderProg('protProgWrap','protProgFill',null,'protProgGoal', protein, goals.protein, null, '/ {g}g');
+  else document.getElementById('protProgWrap').style.display = 'none';
+
+  if (goals.carbs) renderProg('carbProgWrap','carbProgFill',null,'carbProgGoal', carbs, goals.carbs, null, '/ {g}g');
+  else document.getElementById('carbProgWrap').style.display = 'none';
+
+  if (goals.fat) renderProg('fatProgWrap','fatProgFill',null,'fatProgGoal', fat, goals.fat, null, '/ {g}g');
+  else document.getElementById('fatProgWrap').style.display = 'none';
+
+  // ── Hydration ─────────────────────────────────────────
+  document.getElementById('waterTotal').textContent = waterMl.toLocaleString();
+  if (goals.water) {
+    document.getElementById('waterGoalLbl').textContent = `goal: ${goals.water.toLocaleString()} ml`;
+    renderProg('waterProgWrap','waterProgFill','waterProgPct','waterProgRem', waterMl, goals.water, '{v} ml', '{r} ml to go');
+    document.getElementById('waterProgFill').style.background = '#60a5fa';
+  } else {
+    document.getElementById('waterGoalLbl').textContent = '';
+    document.getElementById('waterProgWrap').style.display = 'none';
+  }
+
+  // ── Food log ──────────────────────────────────────────
+  renderLog(entries);
+}
+
+function renderProg(wrapId, fillId, pctId, remId, val, goal, pctFmt, remFmt) {
+  const wrap = document.getElementById(wrapId);
+  const fill = document.getElementById(fillId);
+  wrap.style.display = '';
+  const pct = Math.min(100, (val / goal) * 100);
+  fill.style.width   = pct + '%';
+  fill.className     = 'nu-prog-fill' + (pct >= 100 ? ' over' : pct >= 85 ? ' nearly' : '');
+  if (pctId && pctFmt) document.getElementById(pctId).textContent = pctFmt.replace('{v}', Math.round(val).toLocaleString());
+  if (remId && remFmt) {
+    const rem = Math.max(0, goal - val);
+    document.getElementById(remId).textContent = remFmt
+      .replace('{r}', Math.round(rem).toLocaleString())
+      .replace('{g}', goal.toLocaleString());
+  }
+}
+
+function renderLog(entries) {
+  const list = document.getElementById('logList');
+  if (!entries.length) {
+    list.innerHTML = '<div class="nu-log-empty">Nothing logged yet — scan a barcode or add manually.</div>';
+    return;
+  }
+  list.innerHTML = entries.map(e => {
+    const kcal = e.calories ? Math.round(e.calories) + ' kcal' : '—';
+    const meta = [
+      e.servingG   ? Math.round(e.servingG) + 'g' : null,
+      e.quantity && e.quantity !== 1 ? '×' + e.quantity : null,
+      e.protein    ? 'P' + Math.round(e.protein) + 'g'  : null,
+      e.carbs      ? 'C' + Math.round(e.carbs)   + 'g'  : null,
+      e.fat        ? 'F' + Math.round(e.fat)      + 'g'  : null,
+    ].filter(Boolean).join(' · ');
+    return `<div class="nu-entry">
+      <div class="nu-entry-name">
+        <div>${escHtml(e.foodName)}</div>
+        ${meta ? `<div class="nu-entry-meta">${meta}</div>` : ''}
+      </div>
+      <div class="nu-entry-kcal">${kcal}</div>
+      <button class="btn-del" data-id="${e.id}">&#x2715;</button>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('.btn-del').forEach(btn =>
+    btn.addEventListener('click', async () => {
+      await fetch(`/nutrition/api/log/${btn.dataset.id}`, { method:'DELETE' });
+      loadDay();
+    })
+  );
+}
+
+function escHtml(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Hydration ─────────────────────────────────────────────────────────
+document.querySelectorAll('[data-ml]').forEach(btn =>
+  btn.addEventListener('click', async () => {
+    const r = await fetch('/nutrition/api/water', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ date:isoDate(currentDate), ml:parseInt(btn.dataset.ml) }),
+    });
+    const d = await r.json();
+    lastWaterId = d.id;
+    loadDay();
+  })
+);
+
+document.getElementById('undoWater').addEventListener('click', async () => {
+  if (!lastWaterId) return;
+  await fetch(`/nutrition/api/water/${lastWaterId}`, { method:'DELETE' });
+  lastWaterId = null;
+  loadDay();
+});
+
+// ── Goals modal ───────────────────────────────────────────────────────
+document.getElementById('btnGoals').addEventListener('click', async () => {
+  const r = await fetch('/nutrition/api/goals');
+  const g = await r.json();
+  document.getElementById('gCal').value     = g.cal     || '';
+  document.getElementById('gProtein').value = g.protein || '';
+  document.getElementById('gCarbs').value   = g.carbs   || '';
+  document.getElementById('gFat').value     = g.fat     || '';
+  document.getElementById('gWater').value   = g.water   || '';
+  document.getElementById('goalsModal').classList.add('open');
+});
+document.getElementById('closeGoals').addEventListener('click',  () => document.getElementById('goalsModal').classList.remove('open'));
+document.getElementById('cancelGoals').addEventListener('click', () => document.getElementById('goalsModal').classList.remove('open'));
+document.getElementById('saveGoals').addEventListener('click', async () => {
+  await fetch('/nutrition/api/goals', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      cal:     parseInt(document.getElementById('gCal').value)     || null,
+      protein: parseInt(document.getElementById('gProtein').value) || null,
+      carbs:   parseInt(document.getElementById('gCarbs').value)   || null,
+      fat:     parseInt(document.getElementById('gFat').value)     || null,
+      water:   parseInt(document.getElementById('gWater').value)   || null,
+    }),
+  });
+  document.getElementById('goalsModal').classList.remove('open');
+  loadDay();
+});
+
+// ── Scanner ───────────────────────────────────────────────────────────
+const scanModal   = document.getElementById('scanModal');
+const confirmArea = document.getElementById('confirmArea');
+const scannerView = document.getElementById('scannerView');
+
+document.getElementById('btnScan').addEventListener('click', openScanner);
+document.getElementById('closeScan').addEventListener('click', closeScanner);
+document.getElementById('btnRescan').addEventListener('click', () => {
+  confirmArea.style.display = 'none';
+  scannerView.style.display = 'block';
+  document.getElementById('scanHint').style.display = 'block';
+  document.getElementById('scanModalTitle').textContent = 'Scan a barcode';
+  startScan();
+});
+
+function openScanner() {
+  pendingProduct = null;
+  confirmArea.style.display = 'none';
+  scannerView.style.display = 'block';
+  document.getElementById('scanHint').style.display = 'block';
+  document.getElementById('scanModalTitle').textContent = 'Scan a barcode';
+  scanModal.classList.add('open');
+  startScan();
+}
+function closeScanner() { stopScan(); scanModal.classList.remove('open'); }
+
+function startScan() {
+  stopScan();
+  scanner = new Html5Qrcode('scannerView');
+  const cfg = { fps:10, qrbox:{width:240,height:110}, formatsToSupport:[
+    Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
+    Html5QrcodeSupportedFormats.UPC_A,  Html5QrcodeSupportedFormats.UPC_E,
+    Html5QrcodeSupportedFormats.CODE_128,
+  ]};
+  scanner.start({ facingMode:'environment' }, cfg, onScanSuccess).catch(err => {
+    document.getElementById('scanHint').textContent = 'Camera error: ' + err;
+  });
+}
+function stopScan() {
+  if (scanner) { scanner.stop().catch(() => {}); scanner = null; }
+}
+
+async function onScanSuccess(code) {
+  stopScan();
+  document.getElementById('scanHint').textContent = 'Looking up barcode…';
+  scannerView.style.display = 'none';
+  try {
+    const r = await fetch(`/nutrition/api/lookup/${encodeURIComponent(code)}`);
+    const p = await r.json();
+    if (!r.ok || p.error) throw new Error('not_found');
+    pendingProduct = { ...p, barcode: code };
+    showConfirm(p);
+  } catch {
+    closeScanner();
+    openManual(`Barcode ${code} (not found)`);
+  }
+}
+
+function showConfirm(p) {
+  document.getElementById('scanModalTitle').textContent = 'Confirm & log';
+  document.getElementById('scanHint').style.display = 'none';
+  document.getElementById('pName').textContent  = p.name;
+  document.getElementById('pBrand').textContent = p.brand || '';
+  document.getElementById('servingG').value   = p.serving_g ? Math.round(p.serving_g) : '';
+  document.getElementById('servingQty').value = 1;
+  confirmArea.style.display = 'block';
+  updateTotal();
+}
+
+function updateTotal() {
+  const p = pendingProduct;
+  if (!p || !p.kcal_per_100g) { document.getElementById('totalKcal').textContent = ''; return; }
+  const g   = parseFloat(document.getElementById('servingG').value)  || 0;
+  const qty = parseFloat(document.getElementById('servingQty').value) || 1;
+  document.getElementById('totalKcal').textContent = g ? `≈ ${Math.round(p.kcal_per_100g / 100 * g * qty)} kcal` : '';
+}
+document.getElementById('servingG').addEventListener('input', updateTotal);
+document.getElementById('servingQty').addEventListener('input', updateTotal);
+
+document.getElementById('btnLog').addEventListener('click', async () => {
+  const p = pendingProduct; if (!p) return;
+  const g   = parseFloat(document.getElementById('servingG').value)  || null;
+  const qty = parseFloat(document.getElementById('servingQty').value) || 1;
+  let kcal=null, prot=null, carbs=null, fat=null;
+  if (p.kcal_per_100g && g) {
+    const f = (g / 100) * qty;
+    kcal  = p.kcal_per_100g       * f;
+    prot  = p.protein_per_100g  ? p.protein_per_100g  * f : null;
+    carbs = p.carbs_per_100g    ? p.carbs_per_100g    * f : null;
+    fat   = p.fat_per_100g      ? p.fat_per_100g      * f : null;
+  }
+  await postLog({ name:p.name, barcode:p.barcode, calories:kcal, protein:prot, carbs, fat, serving_g:g?g*qty:null, quantity:qty });
+  closeScanner();
+});
+
+// ── Manual entry ──────────────────────────────────────────────────────
+const manualModal = document.getElementById('manualModal');
+document.getElementById('btnManual').addEventListener('click', () => openManual(''));
+document.getElementById('closeManual').addEventListener('click', () => manualModal.classList.remove('open'));
+document.getElementById('cancelManual').addEventListener('click', () => manualModal.classList.remove('open'));
+
+function openManual(nameHint) {
+  document.getElementById('mName').value     = nameHint || '';
+  document.getElementById('mKcal').value     = '';
+  document.getElementById('mServingG').value = '';
+  document.getElementById('mProtein').value  = '';
+  document.getElementById('mCarbs').value    = '';
+  document.getElementById('mFat').value      = '';
+  manualModal.classList.add('open');
+  setTimeout(() => document.getElementById('mName').focus(), 120);
+}
+
+document.getElementById('saveManual').addEventListener('click', async () => {
+  const name = document.getElementById('mName').value.trim();
+  const kcal = parseFloat(document.getElementById('mKcal').value);
+  if (!name || isNaN(kcal)) { alert('Name and calories are required.'); return; }
+  await postLog({
+    name, calories:kcal,
+    serving_g: parseFloat(document.getElementById('mServingG').value) || null,
+    protein:   parseFloat(document.getElementById('mProtein').value)  || null,
+    carbs:     parseFloat(document.getElementById('mCarbs').value)    || null,
+    fat:       parseFloat(document.getElementById('mFat').value)      || null,
+  });
+  manualModal.classList.remove('open');
+});
+
+// ── Search ────────────────────────────────────────────────────────────
+const searchModal   = document.getElementById('searchModal');
+const searchInput   = document.getElementById('searchInput');
+const searchResults = document.getElementById('searchResults');
+
+document.getElementById('btnSearch').addEventListener('click', () => {
+  searchInput.value = '';
+  searchResults.innerHTML = '';
+  searchModal.classList.add('open');
+  setTimeout(() => searchInput.focus(), 120);
+});
+document.getElementById('closeSearch').addEventListener('click', () => searchModal.classList.remove('open'));
+document.getElementById('doSearch').addEventListener('click', runSearch);
+searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') runSearch(); });
+
+async function runSearch() {
+  const q = searchInput.value.trim();
+  if (!q) return;
+  searchResults.innerHTML = '<div class="search-loading">Searching…</div>';
+  try {
+    const r = await fetch(`/nutrition/api/search?q=${encodeURIComponent(q)}`);
+    const products = await r.json();
+    if (!products.length) {
+      searchResults.innerHTML = '<div class="search-empty">No results with calorie data found.<br>Try a different search or use Manual entry.</div>';
+      return;
+    }
+    searchResults.innerHTML = products.map((p, i) => {
+      const brand = p.brand ? `<span>${escHtml(p.brand)}</span> · ` : '';
+      const macros = [
+        p.protein_per_100g ? `P${Math.round(p.protein_per_100g)}g` : null,
+        p.carbs_per_100g   ? `C${Math.round(p.carbs_per_100g)}g`   : null,
+        p.fat_per_100g     ? `F${Math.round(p.fat_per_100g)}g`     : null,
+      ].filter(Boolean).join(' ');
+      return `<div class="search-result" data-idx="${i}">
+        <div>
+          <div class="search-result-name">${escHtml(p.name)}</div>
+          <div class="search-result-meta">${brand}per 100g${macros ? ' · ' + macros : ''}</div>
+        </div>
+        <div class="search-result-kcal">${Math.round(p.kcal_per_100g)} kcal</div>
+      </div>`;
+    }).join('');
+
+    searchResults.querySelectorAll('.search-result').forEach(el => {
+      el.addEventListener('click', () => {
+        const p = products[parseInt(el.dataset.idx)];
+        searchModal.classList.remove('open');
+        pendingProduct = p;
+        // Reuse the scan confirm modal
+        document.getElementById('scanModalTitle').textContent = 'Confirm & log';
+        document.getElementById('scanHint').style.display = 'none';
+        document.getElementById('scannerView').style.display = 'none';
+        document.getElementById('pName').textContent  = p.name;
+        document.getElementById('pBrand').textContent = p.brand || '';
+        document.getElementById('servingG').value   = p.serving_g ? Math.round(p.serving_g) : '';
+        document.getElementById('servingQty').value = 1;
+        document.getElementById('confirmArea').style.display = 'block';
+        document.getElementById('scanModal').classList.add('open');
+        updateTotal();
+      });
+    });
+  } catch {
+    searchResults.innerHTML = '<div class="search-empty">Search failed — check your connection.</div>';
+  }
+}
+
+// ── API ───────────────────────────────────────────────────────────────
+async function postLog(fields) {
+  await fetch('/nutrition/api/log', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ date:isoDate(currentDate), ...fields }),
+  });
+  loadDay();
+}
+
+// ── Service worker ────────────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/static/nutrition-sw.js').catch(() => {});
+}
+
+loadDay();
+</script>
+{% endblock %}

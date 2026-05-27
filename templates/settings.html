@@ -78,6 +78,7 @@
     <input type="hidden" name="garminEmail"     value="{{ s.garminEmail     if s else '' }}">
     <input type="hidden" name="garminPassword"  value="{{ s.garminPassword  if s else '' }}">
     <input type="hidden" name="garminSyncHours" value="{{ s.garminSyncHours if s and s.garminSyncHours else 2 }}">
+    <input type="hidden" name="garminSyncMode"  value="{{ s.garminSyncMode  if s and s.garminSyncMode  else 'health' }}">
     <button type="submit" class="btn btn-primary" style="margin-top:1.25rem;">Save</button>
   </form>
 
@@ -123,6 +124,7 @@
     <input type="hidden" name="garminEmail"      value="{{ s.garminEmail      if s else '' }}">
     <input type="hidden" name="garminPassword"   value="{{ s.garminPassword   if s else '' }}">
     <input type="hidden" name="garminSyncHours"  value="{{ s.garminSyncHours  if s and s.garminSyncHours else 2 }}">
+    <input type="hidden" name="garminSyncMode"   value="{{ s.garminSyncMode   if s and s.garminSyncMode   else 'health' }}">
 
     <div style="display:flex; gap:0.75rem; margin-top:1.25rem; align-items:center; flex-wrap:wrap;">
       <button type="submit" class="btn btn-primary">Save</button>
@@ -154,11 +156,20 @@
                  placeholder="••••••••">
         </div>
       </div>
-      <div class="form-group" style="margin-top:1rem; max-width:160px;">
-        <label>Sync every (hours)</label>
-        <input type="number" name="garminSyncHours" min="1" max="24"
-               value="{{ s.garminSyncHours if s and s.garminSyncHours else 2 }}"
-               placeholder="2">
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-top:1rem;">
+        <div class="form-group" style="margin:0;">
+          <label>Garmin use</label>
+          <select name="garminSyncMode" id="garminSyncMode" onchange="updateGarminMode(this.value)">
+            <option value="health" {% if not s or not s.garminSyncMode or s.garminSyncMode == 'health' %}selected{% endif %}>Health stats only (HRV, sleep, HR)</option>
+            <option value="full"   {% if s and s.garminSyncMode == 'full' %}selected{% endif %}>Rides + health stats</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Sync every (hours)</label>
+          <input type="number" name="garminSyncHours" min="1" max="24"
+                 value="{{ s.garminSyncHours if s and s.garminSyncHours else 2 }}"
+                 placeholder="2">
+        </div>
       </div>
 
       <input type="hidden" name="aiProvider"       value="{{ s.aiProvider       if s else 'openai' }}">
@@ -176,7 +187,8 @@
         <button type="button" class="btn btn-secondary" onclick="garminSync()" id="garminBtn"
                 {% if not s or not s.garminEmail %}disabled{% endif %}>Sync Recovery</button>
         <button type="button" class="btn btn-secondary" onclick="garminActivitySync()" id="garminActivityBtn"
-                {% if not s or not s.garminEmail %}disabled{% endif %}>Sync Activities</button>
+                style="display:{% if s and s.garminSyncMode == 'full' %}inline-flex{% else %}none{% endif %};"
+                {% if not s or not s.garminEmail %}disabled{% endif %}>Sync Rides</button>
         <span id="garminStatus" style="font-size:0.8125rem; color:var(--text-muted);"></span>
       </div>
       <div id="garminActivityStatus" style="margin-top:0.5rem; font-size:0.8125rem; color:var(--text-muted); display:none;"></div>
@@ -484,6 +496,12 @@ function garminSync() {
     });
 }
 
+function updateGarminMode(mode) {
+  var actBtn = document.getElementById('garminActivityBtn');
+  if (actBtn) actBtn.style.display = mode === 'full' ? 'inline-flex' : 'none';
+}
+
+
 function garminActivitySync() {
   var btn    = document.getElementById('garminActivityBtn');
   var status = document.getElementById('garminActivityStatus');
@@ -501,7 +519,7 @@ function garminActivitySync() {
       btn.disabled = false;
       es.close();
     } else if (d.done) {
-      status.textContent = '✓ Imported ' + d.imported + ' activities' + (d.skipped ? ', ' + d.skipped + ' skipped' : '');
+      status.textContent = '✓ Imported ' + d.imported + ' rides' + (d.skipped ? ', ' + d.skipped + ' skipped' : '');
       status.style.color = 'var(--success)';
       btn.disabled = false;
       es.close();

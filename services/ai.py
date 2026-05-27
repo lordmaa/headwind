@@ -291,41 +291,46 @@ def generate_analysis(activity, personality_key=None):
     receipts         = build_comparison_receipts(activity)
     receipts_section = _format_receipts(receipts)
 
-    prompt = f"""{framing}
-"""
-    if goals:
-        prompt += f"""
-RIDER'S CURRENT GOALS (factor these into your analysis where relevant):
-{goals}
-"""
     tone_extra = personality['tone_override']
-    prompt += f"""
 
+    system_msg = framing + '\n'
+    if goals:
+        system_msg += f'\nRIDER\'S CURRENT GOALS (factor these into your analysis where relevant):\n{goals}\n'
+    system_msg += f"""
 TONE (non-negotiable):
 - {"Personality note: " + tone_extra if tone_extra else "Sound like a knowledgeable riding mate who has actually looked at the numbers — not a fitness app generating a structured report"}
 - Be observational. Interpret what numbers mean, not just what they are
-- You are allowed — expected — to say when a ride was poor, pacing was off, fatigue is building, power was disappointing
-- Forbidden words and phrases (do not use any of these): "solid", "decent", "great effort", "commendable", "considerable", "promising", "developing well", "well done", "good job", "maintain consistency", "keep it up", "respectable", "your body is adapting", "impressive", "well-executed", "nicely done", "moving forward", "stay focused", "keep pushing"
+- Be honest about current form — if pacing was off, fatigue is showing, or power was below recent efforts, say so plainly. Base this on recent rides (last few weeks/months), not historical peaks
+- If the rider's goals mention a comeback or return from a break: judge performance against their current trajectory, not their pre-break best. A rider rebuilding from scratch doing a reasonable training ride is NOT having a poor ride just because it's slower than their peak from years ago
+- Historical segment PRs (marked as "historical — aspirational target") show what's been achieved before. Use them as context for the ceiling, not as a stick to beat current performance with. Never say a ride was poor solely because it's slower than a years-old PR
+- RIDER NOTES AND DESCRIPTION: if the rider has added notes (visible in the current ride data), treat them as ground truth about the ride's intent. "Chilled ride with son", "recovery spin", "leg spinner", "deliberately easy" = intentional low-effort ride — do NOT critique power or speed as if they were trying hard. Acknowledge the intent and assess whether the ride delivered what it was meant to. Similarly "GPS dropped" or "bad data" notes should stop you treating incomplete stats as representative
+- ACKNOWLEDGE GAINS: the ride history begins with a "Comeback progress by month" table — READ THIS FIRST. Read the OVERALL ARC from the first month to the most recent complete month (ignore any month flagged as partial — partial months have too few rides to compare fairly). If the overall arc shows speed or power up, name those specific numbers (e.g. "power up from 135W avg in January to 176W by April"). This is the most important context for a comeback rider and must appear in the bigger picture section. NEVER call a partial month's average a "downturn" compared to a prior full month — that is noise, not signal. Don't skip the comeback table in favour of micro-comparisons between individual rides
+- WEATHER: if conditions data is present and shows wind, cold, heat, or rain — factor it into your speed/power interpretation before drawing any conclusions about effort. A 13mph headwind ride that looks slow may be a stronger effort than a calm day at 14mph
+
+BANNED WORDS AND PHRASES — you must not use any of these, even once:
+solid, decent, great effort, commendable, considerable, promising, developing well, well done, good job, maintain consistency, keep it up, respectable, your body is adapting, impressive, well-executed, nicely done, moving forward, moving in the right direction, on the right track, heading in the right direction, stay focused, keep pushing, step up, step forward, notable progression, good progress, great progress, positive ride
+
+Before you output your response, scan it for every word above. If you find one, replace it with a direct observation or cut the sentence.
+
+OTHER RULES:
 - Never pad a section with generic observations — skip the section instead
 - Don't restate stats without interpretation: not "157W" but what that means given the terrain, the weather, and the prior rides
 - Express deltas naturally: "17:26 faster", "about 24% quicker", "same power, more speed" — never raw seconds, never "improved by -Xs"
 - Reduce certainty: not "all clear, no fatigue" but "nothing obviously concerning, though hard to say from one ride"
 - Occasionally challenge how the rider probably felt vs what the data actually shows
-- If conditions show headwind, adverse weather, cold, or gusts: explain what that means for the pace numbers before attributing changes to fitness or fatigue. A headwind ride that looks slow may actually be a strong effort
+- If conditions show headwind, adverse weather, cold, or gusts: explain what that means for the pace numbers before attributing changes to fitness or fatigue. A headwind ride that looks slow may actually be a strong effort"""
 
-CURRENT RIDE:
+    user_msg = f"""CURRENT RIDE:
 {current}
 RIDE HISTORY & CONTEXT:
 {context}
 """
-
     if receipts_section:
-        prompt += f"""
+        user_msg += f"""
 COMPARISON EVIDENCE — use at least 2-4 of these in your analysis. Quote specific dates, times, and deltas. Don't paraphrase vaguely:
 {receipts_section}
 """
-
-    prompt += """---
+    user_msg += """---
 
 Write coaching notes, not a report. Use emoji headers for each section.
 
@@ -344,20 +349,23 @@ OPTIONAL — include only if you have something specific and non-obvious to say.
 🚨 Warning — only if you see something genuinely concerning; don't invent warnings to fill space
 🔮 Trajectory — only if the pattern is specific enough to make a realistic projection
 
-Close with a single plain sentence (no emoji, no header, no motivational sign-off). The one specific thing worth taking from this ride — a fact, an observation, or an instruction. Not "keep it up" or any variation of encouragement.
+Close with a single plain sentence (no emoji, no header). A specific observation from this ride's data only — a fact, a number, a pattern that's worth knowing. NOT an instruction for next time. NOT "keep X going", "focus on Y", "work on Z", or any sentence that tells the rider what to do next. If it could appear on any generic ride summary, rewrite it.
 
 RULES:
 - Skip optional sections rather than fill them with generic observations
 - If comparison evidence was provided: use at least 2-4 specific receipts with dates and deltas
-- If a ride was genuinely poor: say so and explain why — don't search for silver linings
+- If a ride was genuinely below recent form: say so and explain what's behind it. If it was a reasonable training ride given the pattern and conditions, say that instead
 - If no history exists: analyse the data alone and flag it
 - The final sentence must be specific to this ride — if it could apply to any ride on any day, rewrite it"""
 
     resp = client.chat.completions.create(
         model=model,
-        messages=[{'role': 'user', 'content': prompt}],
-        max_tokens=800,
-        temperature=0.85,
+        messages=[
+            {'role': 'system', 'content': system_msg},
+            {'role': 'user',   'content': user_msg},
+        ],
+        max_tokens=1000,
+        temperature=0.7,
     )
     return resp.choices[0].message.content or ''
 

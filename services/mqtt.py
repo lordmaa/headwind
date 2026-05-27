@@ -4,6 +4,11 @@ import socket
 
 log = logging.getLogger(__name__)
 
+# Cache of last-published state values (uid -> value string).
+# Only sensors whose value changes get re-published; if nothing changes
+# the broker is not contacted at all, keeping HA recorder writes minimal.
+_last_state: dict = {}
+
 DEVICE = {
     "identifiers": ["bike_tracker"],
     "name": "Headwind",
@@ -48,6 +53,19 @@ GARMIN_SENSORS = [
     ("garmin_stress",       "Recovery Stress",        "mdi:head-dots-horizontal",  None),
 ]
 
+NUTRITION_SENSORS = [
+    # (uid, friendly_name, icon, unit_of_measurement)
+    ("nutrition_calories_eaten",  "Nutrition Calories Eaten",   "mdi:food",              "kcal"),
+    ("nutrition_calories_burned", "Nutrition Calories Burned",  "mdi:fire",              "kcal"),
+    ("nutrition_calories_net",    "Nutrition Calories Net",     "mdi:scale-balance",     "kcal"),
+    ("nutrition_protein_g",       "Nutrition Protein",          "mdi:food-steak",        "g"),
+    ("nutrition_carbs_g",         "Nutrition Carbs",            "mdi:bread-slice",       "g"),
+    ("nutrition_fat_g",           "Nutrition Fat",              "mdi:oil",               "g"),
+    ("nutrition_water_ml",        "Nutrition Water",            "mdi:water",             "ml"),
+    ("nutrition_calorie_pct",     "Nutrition Calorie Progress", "mdi:percent",           "%"),
+    ("nutrition_water_pct",       "Nutrition Water Progress",   "mdi:water-percent",     "%"),
+]
+
 
 def _fmt_duration(secs):
     secs = int(secs or 0)
@@ -77,6 +95,67 @@ def _garmin_state_values(g):
         "garmin_sleep_score":  v(g.get('sleepScore')),
         "garmin_steps":        v(g.get('steps')),
         "garmin_stress":       v(g.get('stressScore')),
+    }
+
+
+def _gather_nutrition():
+    from database import query_db
+    from datetime import date
+    today = date.today().isoformat()
+    rider = query_db('SELECT id FROM Rider WHERE isDefault=1 LIMIT 1', one=True)
+    if not rider:
+        return {}
+    rid = rider['id']
+    food = query_db('''
+        SELECT COALESCE(SUM(calories),0) as cal, COALESCE(SUM(protein),0) as prot,
+               COALESCE(SUM(carbs),0) as carbs, COALESCE(SUM(fat),0) as fat
+        FROM FoodLog WHERE riderId=? AND logDate=?
+    ''', [rid, today], one=True)
+    water = query_db(
+        'SELECT COALESCE(SUM(ml),0) as ml FROM HydrationLog WHERE riderId=? AND logDate=?',
+        [rid, today], one=True,
+    )
+    garmin = query_db('SELECT totalCalories FROM GarminDaily WHERE date=?', [today], one=True)
+    rides  = query_db('''
+        SELECT COALESCE(SUM(calories),0) as cal FROM Activity
+        WHERE riderId=? AND date(startDateLocal)=? AND calories IS NOT NULL
+    ''', [rid, today], one=True)
+    settings = query_db(
+        'SELECT nutritionCalGoal, nutritionProteinGoal, nutritionWaterGoalMl FROM Settings WHERE id=1',
+        one=True,
+    )
+    burned = (garmin['totalCalories'] if garmin and garmin['totalCalories'] else
+              (int(rides['cal']) if rides and rides['cal'] else 0))
+    eaten  = int(food['cal']) if food else 0
+    return {
+        'eaten':        eaten,
+        'burned':       burned,
+        'net':          eaten - burned,
+        'protein':      int(food['prot'])  if food else 0,
+        'carbs':        int(food['carbs']) if food else 0,
+        'fat':          int(food['fat'])   if food else 0,
+        'water_ml':     int(water['ml'])   if water else 0,
+        'cal_goal':     settings['nutritionCalGoal']     if settings else None,
+        'protein_goal': settings['nutritionProteinGoal'] if settings else None,
+        'water_goal':   settings['nutritionWaterGoalMl'] if settings else None,
+    }
+
+
+def _nutrition_state_values(n):
+    def v(val):
+        return str(val) if val is not None else 'unknown'
+    cal_pct   = round(n['eaten']    / n['cal_goal']   * 100) if n.get('cal_goal')   and n['eaten']    else 0
+    water_pct = round(n['water_ml'] / n['water_goal'] * 100) if n.get('water_goal') and n['water_ml'] else 0
+    return {
+        'nutrition_calories_eaten':  v(n['eaten']),
+        'nutrition_calories_burned': v(n['burned']) if n.get('burned') else 'unknown',
+        'nutrition_calories_net':    v(n['net']),
+        'nutrition_protein_g':       v(n['protein']),
+        'nutrition_carbs_g':         v(n['carbs']),
+        'nutrition_fat_g':           v(n['fat']),
+        'nutrition_water_ml':        v(n['water_ml']),
+        'nutrition_calorie_pct':     v(cal_pct),
+        'nutrition_water_pct':       v(water_pct),
     }
 
 
@@ -172,7 +251,9 @@ def _broker_send(msgs, host, port, auth):
 
 
 def publish(settings, stats):
-    """Update all HA sensors. Called by the manual Settings button."""
+    """Force-publish all HA sensors. Called by the manual Settings button.
+    Resets the change-detection cache so the next heartbeat sees a clean baseline."""
+    global _last_state
     host = (settings.get('mqttHost') or '').strip()
     if not host:
         raise ValueError("MQTT host not configured")
@@ -184,45 +265,41 @@ def publish(settings, stats):
                 'password': settings.get('mqttPassword') or ''}
 
     states = _state_values(stats)
-    garmin_states = _garmin_state_values(_gather_garmin())
+    garmin_states    = _garmin_state_values(_gather_garmin())
+    nutrition_states = _nutrition_state_values(_gather_nutrition())
     msgs   = []
 
-    for uid, name, icon, unit in SENSORS:
-        state_topic  = f"homeassistant/sensor/bike_tracker_{uid}/state"
-        config_topic = f"homeassistant/sensor/bike_tracker_{uid}/config"
-
-        config = {
-            "name":        name,
-            "state_topic": state_topic,
-            "unique_id":   f"bike_tracker_{uid}",
-            "icon":        icon,
-            "device":      DEVICE,
-        }
-        if unit:
-            config["unit_of_measurement"] = unit
-
-        msgs.append({'topic': config_topic, 'payload': json.dumps(config), 'retain': True, 'qos': 1})
-        msgs.append({'topic': state_topic,  'payload': states[uid],        'retain': True, 'qos': 1})
-        log.info("MQTT queued %s = %s", uid, states[uid])
-
-    for uid, name, icon, unit in GARMIN_SENSORS:
-        state_topic  = f"homeassistant/sensor/bike_tracker_{uid}/state"
-        config_topic = f"homeassistant/sensor/bike_tracker_{uid}/config"
-        config = {"name": name, "state_topic": state_topic,
-                  "unique_id": f"bike_tracker_{uid}", "icon": icon, "device": DEVICE}
-        if unit:
-            config["unit_of_measurement"] = unit
-        msgs.append({'topic': config_topic, 'payload': json.dumps(config), 'retain': True, 'qos': 1})
-        msgs.append({'topic': state_topic,  'payload': garmin_states[uid], 'retain': True, 'qos': 1})
-        log.info("MQTT queued %s = %s", uid, garmin_states[uid])
+    for sensor_list, state_map in [
+        (SENSORS,           states),
+        (GARMIN_SENSORS,    garmin_states),
+        (NUTRITION_SENSORS, nutrition_states),
+    ]:
+        for uid, name, icon, unit in sensor_list:
+            state_topic  = f"homeassistant/sensor/bike_tracker_{uid}/state"
+            config_topic = f"homeassistant/sensor/bike_tracker_{uid}/config"
+            config = {"name": name, "state_topic": state_topic,
+                      "unique_id": f"bike_tracker_{uid}", "icon": icon, "device": DEVICE}
+            if unit:
+                config["unit_of_measurement"] = unit
+            msgs.append({'topic': config_topic, 'payload': json.dumps(config), 'retain': True, 'qos': 1})
+            msgs.append({'topic': state_topic,  'payload': state_map[uid],     'retain': True, 'qos': 1})
+            log.info("MQTT queued %s = %s", uid, state_map[uid])
 
     _broker_send(msgs, host, port, auth)
-    log.warning("MQTT publish complete — %d sensors", len(SENSORS) + len(GARMIN_SENSORS))
+    # Reset cache so next heartbeat sees the freshly published values as the baseline
+    all_states = {}
+    all_states.update(states)
+    all_states.update(garmin_states)
+    all_states.update(nutrition_states)
+    _last_state.update(all_states)
+    log.warning("MQTT publish complete — %d sensors", len(SENSORS) + len(GARMIN_SENSORS) + len(NUTRITION_SENSORS))
 
 
 def push_update(activity=None):
     """Auto-update sensors and optionally send a ride notification.
-    Safe to call from any route — silently no-ops if MQTT not configured."""
+    Safe to call from any route — silently no-ops if MQTT not configured.
+    Only publishes sensors whose value has changed since the last push."""
+    global _last_state
     from database import query_db
     try:
         settings = query_db('SELECT * FROM Settings WHERE id=1', one=True)
@@ -236,30 +313,28 @@ def push_update(activity=None):
         if s.get('mqttUser'):
             auth = {'username': s['mqttUser'], 'password': s.get('mqttPassword') or ''}
 
-        stats  = _gather_stats()
-        states = _state_values(stats)
-        garmin_states = _garmin_state_values(_gather_garmin())
-        msgs   = []
+        stats = _gather_stats()
+        all_states = {}
+        all_states.update(_state_values(stats))
+        all_states.update(_garmin_state_values(_gather_garmin()))
+        all_states.update(_nutrition_state_values(_gather_nutrition()))
 
-        for uid, name, icon, unit in SENSORS:
-            state_topic  = f"homeassistant/sensor/bike_tracker_{uid}/state"
-            config_topic = f"homeassistant/sensor/bike_tracker_{uid}/config"
-            config = {"name": name, "state_topic": state_topic,
-                      "unique_id": f"bike_tracker_{uid}", "icon": icon, "device": DEVICE}
-            if unit:
-                config["unit_of_measurement"] = unit
-            msgs.append({'topic': config_topic, 'payload': json.dumps(config), 'retain': True, 'qos': 1})
-            msgs.append({'topic': state_topic,  'payload': states[uid],        'retain': True, 'qos': 1})
+        changed = {uid for uid, val in all_states.items() if _last_state.get(uid) != val}
 
-        for uid, name, icon, unit in GARMIN_SENSORS:
-            state_topic  = f"homeassistant/sensor/bike_tracker_{uid}/state"
-            config_topic = f"homeassistant/sensor/bike_tracker_{uid}/config"
-            config = {"name": name, "state_topic": state_topic,
-                      "unique_id": f"bike_tracker_{uid}", "icon": icon, "device": DEVICE}
-            if unit:
-                config["unit_of_measurement"] = unit
-            msgs.append({'topic': config_topic, 'payload': json.dumps(config), 'retain': True, 'qos': 1})
-            msgs.append({'topic': state_topic,  'payload': garmin_states[uid], 'retain': True, 'qos': 1})
+        msgs = []
+        if changed:
+            sensor_lookup = {uid: (name, icon, unit)
+                             for uid, name, icon, unit in SENSORS + GARMIN_SENSORS + NUTRITION_SENSORS}
+            for uid in changed:
+                name, icon, unit = sensor_lookup[uid]
+                state_topic  = f"homeassistant/sensor/bike_tracker_{uid}/state"
+                config_topic = f"homeassistant/sensor/bike_tracker_{uid}/config"
+                config = {"name": name, "state_topic": state_topic,
+                          "unique_id": f"bike_tracker_{uid}", "icon": icon, "device": DEVICE}
+                if unit:
+                    config["unit_of_measurement"] = unit
+                msgs.append({'topic': config_topic, 'payload': json.dumps(config), 'retain': True, 'qos': 1})
+                msgs.append({'topic': state_topic,  'payload': all_states[uid],    'retain': True, 'qos': 1})
 
         if activity:
             from flask import current_app
@@ -297,9 +372,54 @@ def push_update(activity=None):
                 'qos': 1,
             })
 
-        _broker_send(msgs, host, port, auth)
-        log.warning("MQTT push_update complete — sensors updated%s",
-                    ", ride notification sent" if activity else "")
+        if msgs:
+            _broker_send(msgs, host, port, auth)
+            _last_state.update({uid: all_states[uid] for uid in changed})
+            log.warning("MQTT push_update — %d sensor(s) changed%s",
+                        len(changed), ", ride notification sent" if activity else "")
+        elif activity:
+            _broker_send(msgs, host, port, auth)
+            log.warning("MQTT push_update — ride notification sent (no sensor changes)")
 
     except Exception as e:
         log.warning("MQTT push_update failed (non-fatal): %s", e)
+
+
+def push_update_nutrition():
+    """Publish nutrition sensors that have changed — called after every food/water log action."""
+    global _last_state
+    try:
+        from database import query_db
+        settings = query_db('SELECT * FROM Settings WHERE id=1', one=True)
+        if not settings or not (settings['mqttHost'] or '').strip():
+            return
+
+        host = settings['mqttHost'].strip()
+        port = int(settings.get('mqttPort') or 1883)
+        auth = None
+        if settings.get('mqttUser'):
+            auth = {'username': settings['mqttUser'], 'password': settings.get('mqttPassword') or ''}
+
+        nutrition_states = _nutrition_state_values(_gather_nutrition())
+        changed = {uid for uid, val in nutrition_states.items() if _last_state.get(uid) != val}
+        if not changed:
+            return
+
+        msgs = []
+        for uid, name, icon, unit in NUTRITION_SENSORS:
+            if uid not in changed:
+                continue
+            state_topic  = f"homeassistant/sensor/bike_tracker_{uid}/state"
+            config_topic = f"homeassistant/sensor/bike_tracker_{uid}/config"
+            config = {"name": name, "state_topic": state_topic,
+                      "unique_id": f"bike_tracker_{uid}", "icon": icon, "device": DEVICE}
+            if unit:
+                config["unit_of_measurement"] = unit
+            msgs.append({'topic': config_topic, 'payload': json.dumps(config), 'retain': True, 'qos': 1})
+            msgs.append({'topic': state_topic,  'payload': nutrition_states[uid], 'retain': True, 'qos': 1})
+
+        _broker_send(msgs, host, port, auth)
+        _last_state.update({uid: nutrition_states[uid] for uid in changed})
+        log.warning("MQTT nutrition push — %d sensor(s) changed", len(changed))
+    except Exception as e:
+        log.warning("MQTT push_update_nutrition failed (non-fatal): %s", e)

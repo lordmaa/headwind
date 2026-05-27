@@ -1,0 +1,18 @@
+{
+  "name": "Headwind Nutrition",
+  "short_name": "Nutrition",
+  "description": "Log food and track calories against your rides",
+  "start_url": "/nutrition/",
+  "display": "standalone",
+  "background_color": "#0d1b2a",
+  "theme_color": "#0d1b2a",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/static/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -45,12 +45,15 @@ def index():
         kept_garmin_pw = current['garminPassword'] if current else None
         garmin_sync_hours_raw = request.form.get('garminSyncHours', '2').strip()
         garmin_sync_hours = int(garmin_sync_hours_raw) if garmin_sync_hours_raw.isdigit() and int(garmin_sync_hours_raw) >= 1 else 2
+        garmin_sync_mode = request.form.get('garminSyncMode', 'health')
+        if garmin_sync_mode not in ('health', 'full'):
+            garmin_sync_mode = 'health'
 
         db.execute('''
             INSERT INTO Settings (id, aiProvider, openaiKey, openaiModel, ollamaUrl, ollamaModel,
                                   mqttHost, mqttPort, mqttUser, mqttPassword,
-                                  garminEmail, garminPassword, garminSyncHours)
-            VALUES (1,?,?,?,?,?,?,?,?,?,?,?,?)
+                                  garminEmail, garminPassword, garminSyncHours, garminSyncMode)
+            VALUES (1,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(id) DO UPDATE SET
                 aiProvider=excluded.aiProvider,
                 openaiKey=excluded.openaiKey,
@@ -63,7 +66,8 @@ def index():
                 mqttPassword=excluded.mqttPassword,
                 garminEmail=excluded.garminEmail,
                 garminPassword=excluded.garminPassword,
-                garminSyncHours=excluded.garminSyncHours
+                garminSyncHours=excluded.garminSyncHours,
+                garminSyncMode=excluded.garminSyncMode
         ''', [
             provider,
             openai_key if openai_key else kept_key,
@@ -77,6 +81,7 @@ def index():
             garmin_email,
             garmin_password if garmin_password else kept_garmin_pw,
             garmin_sync_hours,
+            garmin_sync_mode,
         ])
         db.commit()
         flash('Settings saved.', 'success')

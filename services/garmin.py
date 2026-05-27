@@ -86,9 +86,22 @@ def _parse_stress(stress_data):
         return None
 
 
+def _parse_calories(stats):
+    try:
+        total  = stats.get('totalKilocalories')
+        active = stats.get('activeKilocalories')
+        return (
+            int(total)  if total  and total  > 0 else None,
+            int(active) if active and active > 0 else None,
+        )
+    except Exception:
+        return None, None
+
+
 def fetch_ride_hr(api, start_utc_iso, elapsed_secs, time_stream=None):
     """
     Pull minute-by-minute HR from Garmin for the ride's time window.
+    Checks GarminDaily.hrStream first (already synced locally), falls back to live API.
     If time_stream (list of elapsed seconds from Strava) is provided, interpolates
     HR values onto it so the chart aligns with distance/speed.
     Returns {'avg': int, 'max': int, 'stream_data': [bpm, ...]} or None.
@@ -101,8 +114,20 @@ def fetch_ride_hr(api, start_utc_iso, elapsed_secs, time_stream=None):
     end_ms   = start_ms + int(elapsed_secs) * 1000
     date_str = start_dt.strftime('%Y-%m-%d')
 
-    hr_data = api.get_heart_rates(date_str)
-    raw     = hr_data.get('heartRateValues') or []
+    # Prefer locally-stored hrStream from GarminDaily (already synced, no extra API call)
+    raw = []
+    try:
+        from database import query_db
+        row = query_db('SELECT hrStream FROM GarminDaily WHERE date=?', [date_str], one=True)
+        if row and row['hrStream']:
+            raw = json.loads(row['hrStream'])
+    except Exception:
+        pass
+
+    # Fall back to live API if local data is absent
+    if not raw:
+        hr_data = api.get_heart_rates(date_str)
+        raw     = hr_data.get('heartRateValues') or []
 
     # Ride-only pairs for avg/max
     ride_pairs = [(ts, bpm) for ts, bpm in raw if bpm is not None and start_ms <= ts <= end_ms]
@@ -153,10 +178,11 @@ def sync_garmin(email, password, days=7):
         d = (today - timedelta(days=i)).isoformat()
 
         try:
-            stats    = api.get_stats(d)
-            rhr      = _parse_rhr(stats)
+            stats              = api.get_stats(d)
+            rhr                = _parse_rhr(stats)
+            total_cal, active_cal = _parse_calories(stats)
         except Exception:
-            rhr = None
+            rhr, total_cal, active_cal = None, None, None
 
         try:
             hrv_data       = api.get_hrv_data(d)
@@ -203,8 +229,8 @@ def sync_garmin(email, password, days=7):
             stress_score = None
 
         db.execute('''
-            INSERT INTO GarminDaily (date, restingHR, hrv, hrvBalanced, sleepHours, sleepScore, bodyBattery, steps, stressScore, hrStream, bodyBatteryStream)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            INSERT INTO GarminDaily (date, restingHR, hrv, hrvBalanced, sleepHours, sleepScore, bodyBattery, steps, stressScore, hrStream, bodyBatteryStream, totalCalories, activeCalories)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(date) DO UPDATE SET
                 restingHR           = COALESCE(excluded.restingHR,          restingHR),
                 hrv                 = COALESCE(excluded.hrv,                hrv),
@@ -215,8 +241,10 @@ def sync_garmin(email, password, days=7):
                 steps               = COALESCE(excluded.steps,              steps),
                 stressScore         = COALESCE(excluded.stressScore,        stressScore),
                 hrStream            = COALESCE(excluded.hrStream,           hrStream),
-                bodyBatteryStream   = COALESCE(excluded.bodyBatteryStream,  bodyBatteryStream)
-        ''', [d, rhr, hrv, balanced, sleep_hrs, sleep_score, body_battery, steps, stress_score, hr_stream_json, bb_stream_json])
+                bodyBatteryStream   = COALESCE(excluded.bodyBatteryStream,  bodyBatteryStream),
+                totalCalories       = COALESCE(excluded.totalCalories,      totalCalories),
+                activeCalories      = COALESCE(excluded.activeCalories,     activeCalories)
+        ''', [d, rhr, hrv, balanced, sleep_hrs, sleep_score, body_battery, steps, stress_score, hr_stream_json, bb_stream_json, total_cal, active_cal])
         synced += 1
 
     db.commit()

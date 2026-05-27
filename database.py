@@ -178,6 +178,33 @@ def migrate_db():
         )
     ''')
 
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS FoodLog (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            riderId    INTEGER REFERENCES Rider(id),
+            logDate    TEXT NOT NULL,
+            barcode    TEXT,
+            foodName   TEXT NOT NULL,
+            calories   REAL,
+            protein    REAL,
+            carbs      REAL,
+            fat        REAL,
+            servingG   REAL,
+            quantity   REAL DEFAULT 1,
+            createdAt  TEXT DEFAULT (datetime('now'))
+        )
+    ''')
+
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS HydrationLog (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            riderId   INTEGER REFERENCES Rider(id),
+            logDate   TEXT NOT NULL,
+            ml        INTEGER NOT NULL,
+            createdAt TEXT DEFAULT (datetime('now'))
+        )
+    ''')
+
     db.commit()
 
     # ── Backfill columns added after initial release ─────────────────
@@ -227,6 +254,12 @@ def migrate_db():
         ('feedToken',                'TEXT'),
         ('friendSyncInterval',       'INTEGER DEFAULT 15'),
         ('garminActivitySyncDate',   'TEXT'),
+        ('garminSyncMode',           "TEXT DEFAULT 'health'"),
+        ('nutritionCalGoal',     'INTEGER'),
+        ('nutritionProteinGoal', 'INTEGER'),
+        ('nutritionCarbGoal',    'INTEGER'),
+        ('nutritionFatGoal',     'INTEGER'),
+        ('nutritionWaterGoalMl', 'INTEGER DEFAULT 2500'),
     ]:
         if col not in settings_cols:
             db.execute(f'ALTER TABLE Settings ADD COLUMN {col} {defn}')
@@ -249,6 +282,8 @@ def migrate_db():
         ('stressScore',        'INTEGER'),
         ('hrStream',           'TEXT'),
         ('bodyBatteryStream',  'TEXT'),
+        ('totalCalories',  'INTEGER'),
+        ('activeCalories', 'INTEGER'),
     ]:
         if col not in garmin_cols:
             db.execute(f'ALTER TABLE GarminDaily ADD COLUMN {col} {defn}')

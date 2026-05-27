@@ -368,15 +368,83 @@ def _build_badge_context(rid, ride_id):
     return '\n'.join(lines)
 
 
+def _build_comeback_progress(ride_id, ride_date, cur_spd_mph=None, cur_pwr_w=None):
+    """Monthly averages since comeback start, to surface gains clearly."""
+    from datetime import datetime
+    current_ym = datetime.now().strftime('%Y-%m')
+
+    rows = query_db('''
+        SELECT strftime('%Y-%m', rideDate) as ym,
+               COUNT(*) as rides,
+               AVG(distanceMi) as avg_dist,
+               AVG(avgSpeedMph) as avg_spd,
+               AVG(avgPower) as avg_pwr,
+               MAX(avgSpeedMph) as best_spd,
+               MAX(avgPower) as best_pwr
+        FROM RideMemory
+        WHERE rideId != ?
+          AND rideDate >= '2026-01-01'
+          AND distanceMi > 2
+          AND NOT (rideName = 'Ride Activity' AND avgPower IS NULL)
+        GROUP BY ym
+        ORDER BY ym
+    ''', [ride_id])
+
+    if len(rows) < 2:
+        return ''
+
+    lines = ['Comeback progress by month (Jan 2026 onwards — read the OVERALL arc, not month-to-month noise):']
+    for r in rows:
+        pwr = f"avg {r['avg_pwr']:.0f}W, best {r['best_pwr']:.0f}W" if r['avg_pwr'] else 'no power data'
+        partial_note = ' ⚠️ partial month' if r['ym'] == current_ym else ''
+        lines.append(
+            f"  {r['ym']}{partial_note}: {r['rides']} rides | "
+            f"avg {r['avg_spd']:.1f}mph (best {r['best_spd']:.1f}mph) | {pwr}"
+        )
+
+    # Add today's ride vs current month avg for context
+    cur_month_row = next((r for r in rows if r['ym'] == current_ym), None)
+    if cur_month_row and (cur_spd_mph or cur_pwr_w):
+        parts = []
+        if cur_spd_mph:
+            direction = 'above' if cur_spd_mph > cur_month_row['avg_spd'] else 'below'
+            parts.append(f'{cur_spd_mph:.1f}mph ({direction} {current_ym} avg of {cur_month_row["avg_spd"]:.1f}mph)')
+        if cur_pwr_w and cur_month_row['avg_pwr']:
+            direction = 'above' if cur_pwr_w > cur_month_row['avg_pwr'] else 'below'
+            parts.append(f'{cur_pwr_w:.0f}W ({direction} {current_ym} avg of {cur_month_row["avg_pwr"]:.0f}W)')
+        if parts:
+            lines.append(f"  Today's ride: {', '.join(parts)}")
+
+    # Overall delta: first month vs most recent COMPLETE month (not partial)
+    complete_rows = [r for r in rows if r['ym'] != current_ym]
+    if not complete_rows:
+        complete_rows = rows
+    first, last_complete = rows[0], complete_rows[-1]
+    spd_gain = last_complete['avg_spd'] - first['avg_spd'] if first['avg_spd'] else 0
+    if spd_gain > 0.2 and first['avg_spd']:
+        pct = spd_gain / first['avg_spd'] * 100
+        lines.append(f'  → Overall speed up {pct:.0f}% from {first["ym"]} to {last_complete["ym"]} (ignore partial current month)')
+    if first['avg_pwr'] and last_complete['avg_pwr']:
+        pwr_gain = last_complete['avg_pwr'] - first['avg_pwr']
+        if pwr_gain > 5:
+            pct = pwr_gain / first['avg_pwr'] * 100
+            lines.append(f'  → Overall power up {pct:.0f}% from {first["ym"]} to {last_complete["ym"]}')
+
+    return '\n'.join(lines)
+
+
 def build_context(activity):
     ride_id  = str(activity['id'])
     dist_mi  = float(activity['distance'] or 0) / 1609.344
     elev_ft  = float(activity['totalElevationGain'] or 0) * 3.28084
 
+    # Last 50 meaningful rides — exclude "Ride Activity" duplicates with no power
     recent = query_db('''
         SELECT * FROM RideMemory
-        WHERE rideId != ? AND distanceMi > 0
-        ORDER BY rideDate DESC LIMIT 5
+        WHERE rideId != ?
+          AND distanceMi > 0
+          AND NOT (rideName = 'Ride Activity' AND avgPower IS NULL)
+        ORDER BY rideDate DESC LIMIT 20
     ''', [ride_id])
 
     comparable = query_db('''
@@ -385,7 +453,8 @@ def build_context(activity):
           AND distanceMi BETWEEN ? AND ?
           AND elevationFt BETWEEN ? AND ?
           AND distanceMi > 0
-        ORDER BY rideDate DESC LIMIT 4
+          AND NOT (rideName = 'Ride Activity' AND avgPower IS NULL)
+        ORDER BY rideDate DESC LIMIT 5
     ''', [
         ride_id,
         dist_mi * 0.7, dist_mi * 1.3,
@@ -397,14 +466,27 @@ def build_context(activity):
         WHERE rideId != ?
           AND rideDate >= date('now', '-30 days')
           AND distanceMi > 0
+          AND NOT (rideName = 'Ride Activity' AND avgPower IS NULL)
         ORDER BY rideDate DESC
     ''', [ride_id])
 
     lines = []
 
+    # Comeback progress FIRST — most important signal for a returning rider
+    cur_spd = float(activity['averageSpeed'] or 0) * 2.23694 or None
+    cur_pwr = float(activity['averageWatts'] or 0) or None
+    comeback_ctx = _build_comeback_progress(
+        ride_id, str(activity['startDateLocal'])[:10],
+        round(cur_spd, 1) if cur_spd else None,
+        round(cur_pwr) if cur_pwr else None,
+    )
+    if comeback_ctx:
+        lines.append(comeback_ctx)
+        lines.append('')
+
     if recent:
-        lines.append('Recent rides (last 5 in memory):')
-        lines.append('Date       | Dist  | Spd   | Elev  | Pwr  | HR   | Name')
+        lines.append(f'Ride history (last {len(recent)} rides):')
+        lines.append('Date       | Dist   | Speed  | Elev   | Power | HR   | Name')
         for r in recent:
             pwr = f"{r['avgPower']:.0f}W" if r['avgPower'] else '—'
             hr  = f"{r['avgHR']:.0f}"     if r['avgHR']    else '—'
@@ -415,7 +497,7 @@ def build_context(activity):
             )
         lines.append('')
 
-    if comparable and comparable != recent:
+    if comparable:
         lines.append('Comparable rides (similar distance & elevation):')
         for r in comparable:
             pwr = f"{r['avgPower']:.0f}W" if r['avgPower'] else '—'
@@ -528,6 +610,14 @@ def build_comparison_receipts(activity):
             ORDER BY activityDate DESC LIMIT 1
         ''', [seg_id, ride_id, ride_date, ride_date], one=True)
 
+        def _pr_age_years(date_str):
+            try:
+                from datetime import datetime
+                d = datetime.strptime(str(date_str)[:10], '%Y-%m-%d')
+                return (datetime.now() - d).days // 365
+            except Exception:
+                return 0
+
         def _make(comp_type, row):
             if not row:
                 return None
@@ -540,11 +630,17 @@ def build_comparison_receipts(activity):
                 delta_str = f'{_fmt_dur(abs(delta_s))} slower'
             else:
                 delta_str = 'identical time'
-            hints = {
-                'previous_best': 'new personal best' if delta_s > 0 else 'just off the PR',
-                'first_effort':  'progression since first attempt',
-                'recent_effort': 'recent form improving' if delta_s > 0 else 'slightly off recent pace',
-            }
+            age_yrs = _pr_age_years(row['activityDate'])
+            historical = age_yrs >= 2
+            if comp_type == 'previous_best':
+                if historical:
+                    hint = f'historical best from {str(row["activityDate"])[:4]} — aspirational target, not a current-form benchmark'
+                else:
+                    hint = 'new personal best' if delta_s > 0 else 'just off the PR'
+            elif comp_type == 'first_effort':
+                hint = 'progression since first attempt'
+            else:
+                hint = 'recent form improving' if delta_s > 0 else 'slightly off recent pace'
             return {
                 'type': 'segment',
                 'comparison_type': comp_type,
@@ -555,7 +651,8 @@ def build_comparison_receipts(activity):
                 'delta': delta_str,
                 'delta_percent': f'{delta_pct:.1f}%',
                 'delta_seconds': delta_s,
-                'hint': hints.get(comp_type, ''),
+                'hint': hint,
+                'historical': historical,
             }
 
         r_recent = _make('recent_effort', recent_eff)
@@ -630,8 +727,15 @@ def build_comparison_receipts(activity):
             'hint': hint,
         })
 
-    # Sort by impact (biggest delta first) and cap to keep prompt tight
-    seg_r  = sorted([r for r in receipts if r['type'] == 'segment'],
-                    key=lambda r: abs(r['delta_seconds']), reverse=True)
+    # Sort: recent improvements first, non-historical PRs next, historical last
+    # Within each tier, bigger delta first
+    def _seg_key(r):
+        if r.get('historical'):
+            return (2, -abs(r['delta_seconds']))
+        if r['comparison_type'] == 'recent_effort':
+            return (0, -abs(r['delta_seconds']))
+        return (1, -abs(r['delta_seconds']))
+
+    seg_r  = sorted([r for r in receipts if r['type'] == 'segment'], key=_seg_key)
     ride_r = [r for r in receipts if r['type'] == 'similar_ride']
     return (seg_r + ride_r)[:10]

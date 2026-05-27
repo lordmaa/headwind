@@ -99,7 +99,7 @@ def fetch_weather(lat, lng, start_dt_local, streams_json=None):
                     'timezone':        'auto',
                     'wind_speed_unit': 'kmh',
                     'past_days':       min(92, max(2, days_ago + 2)),
-                    'forecast_days':   0,
+                    'forecast_days':   1,
                 },
                 timeout=10,
             )

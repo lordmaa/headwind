@@ -203,6 +203,7 @@
         <div style="font-size:0.9375rem; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
           {{ a.sportType | sport_icon }} {{ a.name }}
           {% if a.aiKudos %}<span style="font-size:0.7rem; color:var(--accent); margin-left:0.3rem; font-weight:400;">AI</span>{% endif %}
+          {% if a.id.startswith('garmin_') %}<span style="font-size:0.65rem; color:#5bb8d4; margin-left:0.3rem; font-weight:500; letter-spacing:0.03em;">GARMIN</span>{% elif a.id.startswith('imp_') %}<span style="font-size:0.65rem; color:#c9a84c; margin-left:0.3rem; font-weight:500; letter-spacing:0.03em;">IMPORT</span>{% endif %}
         </div>
         <div style="font-size:0.775rem; color:var(--text-muted); margin-top:0.15rem;">
           {{ a.startDateLocal | fmt_date }}
@@ -253,6 +254,7 @@
                   <div style="font-size:0.9375rem; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
                     {{ a.sportType | sport_icon }} {{ a.name }}
                     {% if a.aiKudos %}<span style="font-size:0.7rem; color:var(--accent); margin-left:0.3rem; font-weight:400;">AI</span>{% endif %}
+                    {% if a.id.startswith('garmin_') %}<span style="font-size:0.65rem; color:#5bb8d4; margin-left:0.3rem; font-weight:500; letter-spacing:0.03em;">GARMIN</span>{% elif a.id.startswith('imp_') %}<span style="font-size:0.65rem; color:#c9a84c; margin-left:0.3rem; font-weight:500; letter-spacing:0.03em;">IMPORT</span>{% endif %}
                   </div>
                   <div style="font-size:0.775rem; color:var(--text-muted); margin-top:0.15rem; font-variant-numeric:tabular-nums;">
                     <span style="color:var(--text);">{{ a.distance | fmt_dist }}</span>

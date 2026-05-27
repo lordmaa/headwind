@@ -61,17 +61,17 @@ def _garmin_heartbeat(app):
                 import logging
                 from database import query_db, get_db
                 log = logging.getLogger(__name__)
-                s = query_db('SELECT garminEmail, garminPassword, garminSyncHours FROM Settings WHERE id=1', one=True)
+                s = query_db('SELECT garminEmail, garminPassword, garminSyncHours, garminSyncMode FROM Settings WHERE id=1', one=True)
                 if s and s['garminEmail'] and s['garminPassword']:
                     interval_hours = s['garminSyncHours'] or 2
                     from services.garmin import sync_garmin, sync_garmin_activities, fetch_ride_hr, _client
                     sync_garmin(s['garminEmail'], s['garminPassword'], days=14)
 
-                    # Pull new Garmin activities (incremental — only since last sync date)
-                    rider = query_db('SELECT id FROM Rider WHERE isDefault=1', one=True)
-                    if rider:
-                        for _ in sync_garmin_activities(s['garminEmail'], s['garminPassword'], rider['id']):
-                            pass
+                    if s['garminSyncMode'] == 'full':
+                        rider = query_db('SELECT id FROM Rider WHERE isDefault=1', one=True)
+                        if rider:
+                            for _ in sync_garmin_activities(s['garminEmail'], s['garminPassword'], rider['id']):
+                                pass
 
                     # Backfill HR for owner's recent rides where Strava had no HR data
                     missing = query_db('''
@@ -202,6 +202,7 @@ def create_app():
     from routes.about         import bp as about_bp
     from routes.setup         import bp as setup_bp
     from routes.friends       import bp as friends_bp
+    from routes.nutrition     import bp as nutrition_bp
 
     # ── Auth guard ───────────────────────────────────────────────
     _PUBLIC = {'login.login_page', 'login.logout', 'static',
@@ -241,15 +242,15 @@ def create_app():
     app.register_blueprint(about_bp)
     app.register_blueprint(setup_bp)
     app.register_blueprint(friends_bp)
+    app.register_blueprint(nutrition_bp)
 
-    # Start background threads only in the main worker process, not the reloader watcher
-    if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' or not app.debug:
-        threading.Thread(target=_mqtt_heartbeat,      args=(app,), daemon=True).start()
-        threading.Thread(target=_garmin_heartbeat,    args=(app,), daemon=True).start()
-        threading.Thread(target=_friends_autosync,    args=(app,), daemon=True).start()
+    threading.Thread(target=_mqtt_heartbeat,   args=(app,), daemon=True).start()
+    threading.Thread(target=_garmin_heartbeat, args=(app,), daemon=True).start()
+    threading.Thread(target=_friends_autosync, args=(app,), daemon=True).start()
 
     return app
 
 
 if __name__ == '__main__':
-    create_app().run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5001)))
+    # use_reloader=False → single process, no duplicate background threads
+    create_app().run(debug=True, use_reloader=False, host='0.0.0.0', port=int(os.environ.get('PORT', 5001)))
