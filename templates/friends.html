@@ -1,0 +1,262 @@
+{% extends 'base.html' %}
+
+{% block title %}Friends{% endblock %}
+{% block page_title %}Friends{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{{ url_for('dashboard.index') }}" class="btn btn-secondary">← Dashboard</a>
+{% endblock %}
+
+{% block content %}
+
+<!-- Your feed token -->
+<div class="card" style="margin-bottom:1.5rem;">
+  <div class="card-title">Your Feed Token</div>
+  <p style="color:var(--text-muted); font-size:0.875rem; margin:0 0 0.75rem;">
+    Share this token with friends so they can add your instance. Keep it private — anyone with it can read your rides.
+  </p>
+  <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+    <code id="feedToken" style="background:var(--surface2,#0d2135); border:1px solid #1e4060; border-radius:6px;
+                                padding:0.5rem 0.9rem; font-size:0.9rem; letter-spacing:0.03em; flex:1; word-break:break-all;">
+      {{ feed_token }}
+    </code>
+    <button onclick="copyToken('{{ feed_token }}', this)"
+            class="btn btn-secondary" style="white-space:nowrap;">Copy</button>
+  </div>
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-top:0.6rem; flex-wrap:wrap; gap:0.5rem;">
+    <p style="color:var(--text-muted); font-size:0.8rem; margin:0;">
+      Feed URL: <code>{{ request.host_url.rstrip('/') }}/api/feed</code> — token sent as <code>X-Feed-Token</code> header
+    </p>
+    <form method="POST" action="{{ url_for('friends.regenerate_token') }}"
+          onsubmit="return confirm('Regenerate token? All existing friends will need updating.')">
+      <button type="submit" class="btn btn-secondary" style="padding:0.25rem 0.6rem; font-size:0.8rem;">Regenerate Token</button>
+    </form>
+  </div>
+</div>
+
+<!-- Add a friend -->
+<div class="card" style="margin-bottom:1.5rem;">
+  <div class="card-title">Add a Friend</div>
+
+  <!-- Step 1: connect -->
+  <div style="display:grid; grid-template-columns:2fr 1fr auto; gap:0.75rem; align-items:end;">
+    <div>
+      <label style="font-size:0.8rem; color:var(--text-muted); display:block; margin-bottom:0.3rem;">Their Base URL</label>
+      <input id="probe-url" type="url" placeholder="http://192.168.1.50:5001"
+             style="width:100%; background:var(--surface2,#0d2135); color:var(--text); border:1px solid #1e4060;
+                    border-radius:6px; padding:0.5rem 0.75rem; font-size:0.875rem;">
+      <div style="font-size:0.72rem; color:var(--text-muted); margin-top:0.25rem;">Root URL only — no path</div>
+    </div>
+    <div>
+      <label style="font-size:0.8rem; color:var(--text-muted); display:block; margin-bottom:0.3rem;">Their Feed Token</label>
+      <input id="probe-token" type="text" placeholder="paste token"
+             style="width:100%; background:var(--surface2,#0d2135); color:var(--text); border:1px solid #1e4060;
+                    border-radius:6px; padding:0.5rem 0.75rem; font-size:0.875rem;">
+    </div>
+    <button id="probe-btn" type="button" onclick="probeInstance()" class="btn btn-secondary" style="white-space:nowrap;">Connect</button>
+  </div>
+
+  <div id="probe-error" style="display:none; margin-top:0.6rem; color:#f87171; font-size:0.85rem;"></div>
+
+  <!-- Step 2: pick rider + name (hidden until probe succeeds) -->
+  <form id="add-form" method="POST" action="{{ url_for('friends.add') }}"
+        style="display:none; margin-top:1.25rem; padding-top:1.25rem; border-top:1px solid #1e4060;">
+    <input type="hidden" name="url" id="form-url">
+    <input type="hidden" name="token" id="form-token">
+    <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:0.75rem; align-items:end;">
+      <div>
+        <label style="font-size:0.8rem; color:var(--text-muted); display:block; margin-bottom:0.3rem;">Rider</label>
+        <select name="riderName" id="rider-select"
+                style="width:100%; background:var(--surface2,#0d2135); color:var(--text); border:1px solid #1e4060;
+                       border-radius:6px; padding:0.5rem 0.75rem; font-size:0.875rem;">
+        </select>
+      </div>
+      <div>
+        <label style="font-size:0.8rem; color:var(--text-muted); display:block; margin-bottom:0.3rem;">Display Name</label>
+        <input name="name" id="form-name" type="text" placeholder="Sam" required
+               style="width:100%; background:var(--surface2,#0d2135); color:var(--text); border:1px solid #1e4060;
+                      border-radius:6px; padding:0.5rem 0.75rem; font-size:0.875rem;">
+      </div>
+      <button type="submit" class="btn btn-primary" style="white-space:nowrap;">Add &amp; Sync</button>
+    </div>
+    <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.5rem;">
+      Same URL can be added multiple times with different riders selected.
+    </div>
+  </form>
+</div>
+
+<!-- Auto-sync interval -->
+<div class="card" style="margin-bottom:1.5rem; display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
+  <div style="flex:1; min-width:0;">
+    <div style="font-weight:600; font-size:0.875rem; margin-bottom:0.15rem;">Auto-Sync</div>
+    <div style="font-size:0.8rem; color:var(--text-muted);">Automatically pull new rides from all friends in the background.</div>
+  </div>
+  <form method="POST" action="{{ url_for('friends.set_sync_interval') }}"
+        style="display:flex; align-items:center; gap:0.6rem;">
+    <select name="interval" onchange="this.form.submit()"
+            style="background:var(--surface2,#0d2135); color:var(--text); border:1px solid #1e4060;
+                   border-radius:6px; padding:0.4rem 0.65rem; font-size:0.875rem;">
+      {% for val, label in [(0,'Off'),(15,'Every 15 min'),(30,'Every 30 min'),(60,'Every hour'),(120,'Every 2 hours')] %}
+      <option value="{{ val }}" {% if sync_interval == val %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </form>
+</div>
+
+<!-- Friends list -->
+{% if friends %}
+<div class="card" style="padding:0; overflow:hidden;">
+  <div style="padding:1rem 1.25rem; border-bottom:1px solid #1e4060;">
+    <div class="card-title" style="margin:0;">Connected Instances</div>
+  </div>
+  <table style="width:100%; border-collapse:collapse;">
+    <thead>
+      <tr style="border-bottom:1px solid #1e4060;">
+        <th style="padding:0.75rem 1.25rem; text-align:left; font-size:0.75rem; color:var(--text-muted); font-weight:600;">Rider</th>
+        <th style="padding:0.75rem 1rem; text-align:left; font-size:0.75rem; color:var(--text-muted); font-weight:600;">URL</th>
+        <th style="padding:0.75rem 1rem; text-align:left; font-size:0.75rem; color:var(--text-muted); font-weight:600;">Last Synced</th>
+        <th style="padding:0.75rem 1.25rem; text-align:right; font-size:0.75rem; color:var(--text-muted); font-weight:600;"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for f in friends %}
+      <tr style="border-bottom:1px solid #1e4060;">
+        <td style="padding:0.875rem 1.25rem;">
+          <div style="display:flex; align-items:center; gap:0.6rem;">
+            {% if f.rider_avatar %}
+              <img src="{{ url_for('static', filename='avatars/' + f.rider_avatar) }}"
+                   style="width:28px;height:28px;border-radius:50%;object-fit:cover;" alt="{{ f.name }}">
+            {% else %}
+              <span class="rider-initial" style="width:28px;height:28px;font-size:0.75rem;">{{ f.name[0]|upper }}</span>
+            {% endif %}
+            <span style="font-weight:500;">{{ f.name }}</span>
+          </div>
+        </td>
+        <td style="padding:0.875rem 1rem; color:var(--text-muted); font-size:0.8125rem;">
+          <code>{{ f.url }}</code>
+        </td>
+        <td style="padding:0.875rem 1rem; color:var(--text-muted); font-size:0.8125rem;">
+          {% if f.lastSynced %}{{ f.lastSynced[:16] | replace('T',' ') }}{% else %}Never{% endif %}
+        </td>
+        <td style="padding:0.875rem 1.25rem; text-align:right;">
+          <div style="display:flex; gap:0.5rem; justify-content:flex-end; align-items:center;">
+            <button onclick="syncFriend({{ f.id }}, this)"
+                    class="btn btn-secondary" style="padding:0.3rem 0.7rem; font-size:0.8125rem;">Sync</button>
+            <form method="POST" action="{{ url_for('friends.delete', fid=f.id) }}"
+                  data-confirm="Remove {{ f.name }} and all their rides?" onsubmit="return confirm(this.dataset.confirm)" style="display:inline;">
+              <button type="submit"
+                      style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:1rem;padding:0.2rem 0.4rem;"
+                      title="Remove">×</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card" style="text-align:center; padding:2.5rem; color:var(--text-muted);">
+  No friends connected yet — add one above.
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function copyToken(text, btn) {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(function() {
+      btn.textContent = 'Copied!';
+      setTimeout(function() { btn.textContent = 'Copy'; }, 1500);
+    });
+  } else {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    btn.textContent = 'Copied!';
+    setTimeout(function() { btn.textContent = 'Copy'; }, 1500);
+  }
+}
+
+function probeInstance() {
+  var url   = document.getElementById('probe-url').value.trim().replace(/\/+$/, '');
+  var token = document.getElementById('probe-token').value.trim();
+  var btn   = document.getElementById('probe-btn');
+  var errEl = document.getElementById('probe-error');
+  if (!url) { errEl.textContent = 'Enter a URL first'; errEl.style.display = 'block'; return; }
+
+  btn.textContent = 'Connecting…';
+  btn.disabled = true;
+  errEl.style.display = 'none';
+  document.getElementById('add-form').style.display = 'none';
+
+  fetch('/friends/probe', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({url: url, token: token})
+  })
+  .then(r => r.json())
+  .then(data => {
+    btn.textContent = 'Connect';
+    btn.disabled = false;
+    if (data.error) {
+      errEl.textContent = data.error;
+      errEl.style.display = 'block';
+      return;
+    }
+    var riders = data.riders || [];
+    var sel = document.getElementById('rider-select');
+    sel.innerHTML = '';
+    riders.forEach(function(r) {
+      var opt = document.createElement('option');
+      opt.value = (r.name === 'Default rider') ? '' : r.name;
+      opt.textContent = r.name + (r.isDefault ? ' (default)' : '');
+      sel.appendChild(opt);
+    });
+
+    // Auto-fill display name from first rider
+    var firstName = (riders[0] && riders[0].name !== 'Default rider') ? riders[0].name : '';
+    document.getElementById('form-name').value = firstName;
+
+    // Update display name when rider selection changes
+    sel.onchange = function() {
+      var picked = riders.find(function(r) { return (r.name === 'Default rider' ? '' : r.name) === sel.value; });
+      if (picked && picked.name !== 'Default rider') {
+        document.getElementById('form-name').value = picked.name;
+      }
+    };
+
+    document.getElementById('form-url').value = url;
+    document.getElementById('form-token').value = token;
+    document.getElementById('add-form').style.display = 'block';
+  })
+  .catch(function(e) {
+    btn.textContent = 'Connect';
+    btn.disabled = false;
+    errEl.textContent = 'Connection failed: ' + e.message;
+    errEl.style.display = 'block';
+  });
+}
+
+function syncFriend(fid, btn) {
+  var orig = btn.textContent;
+  btn.textContent = 'Syncing…';
+  btn.disabled = true;
+  fetch('/friends/' + fid + '/sync', { method: 'POST' })
+    .then(r => r.json())
+    .then(d => {
+      btn.textContent = d.ok ? ('✓ ' + d.synced + ' rides') : ('Error: ' + d.error);
+      setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 3000);
+      if (d.ok) setTimeout(() => location.reload(), 1200);
+    })
+    .catch(e => { btn.textContent = 'Failed'; btn.disabled = false; });
+}
+</script>
+{% endblock %}

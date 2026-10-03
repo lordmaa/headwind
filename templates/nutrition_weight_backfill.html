@@ -1,0 +1,220 @@
+{% extends 'base.html' %}
+{% block title %}Backfill Weight{% endblock %}
+{% block page_title %}Backfill Weight{% endblock %}
+
+{% block head %}
+<style>
+  .wb-row { display:flex; align-items:center; gap:0.4rem; margin-bottom:0.5rem; }
+  .wb-row input[type=date] { flex:1.4; min-width:0; }
+  .wb-row input[type=number] { flex:1; min-width:0; }
+  .wb-row-del {
+    background:none; border:none; color:var(--text-muted); font-size:1rem;
+    cursor:pointer; padding:0.2rem 0.4rem; flex-shrink:0;
+  }
+  .wb-row-del:hover { color:var(--danger); }
+  .wb-add-row { width:100%; justify-content:center; margin-top:0.25rem; }
+  .wb-advanced-toggle {
+    font-size:0.78rem; color:var(--text-muted); text-decoration:underline;
+    cursor:pointer; margin-top:1rem; display:inline-block;
+  }
+  .wb-advanced { display:none; margin-top:0.75rem; padding-top:0.75rem; border-top:1px solid var(--border); }
+  .wb-advanced.open { display:block; }
+  .wb-help { font-size: 0.82rem; color: var(--text-muted); margin-bottom: 0.75rem; }
+  .wb-help code { background: var(--border); padding: 0.1rem 0.3rem; border-radius: 3px; }
+  #wbText { width: 100%; min-height: 120px; font-family: monospace; font-size: 0.85rem; resize: vertical; }
+  .wb-file-row { display: flex; align-items: center; gap: 0.6rem; margin: 0.75rem 0; }
+  .wb-table-wrap { overflow-x: auto; margin-top: 1rem; }
+  table.wb-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  table.wb-table th { text-align: left; padding: 0.4rem 0.6rem; color: var(--text-muted); font-size: 0.72rem; text-transform: uppercase; border-bottom: 1px solid var(--border); }
+  table.wb-table td { padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border); }
+  tr.wb-error td { color: var(--danger); }
+  tr.wb-duplicate td { color: var(--warning); }
+  .wb-summary { margin: 0.75rem 0; font-size: 0.85rem; }
+  .wb-actions { display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card" style="margin-bottom: 0.75rem;">
+  <div class="card-title">Add past weigh-ins</div>
+  <div id="wbRowsWrap"></div>
+  <button class="btn btn-secondary wb-add-row" id="wbAddRow" type="button">+ Add another day</button>
+  <div>
+    <span class="wb-advanced-toggle" id="wbAdvancedToggle">Paste text or upload a file instead</span>
+  </div>
+  <div class="wb-advanced" id="wbAdvanced">
+    <p class="wb-help">
+      One entry per line: <code>date, weight</code>. Dates are <code>YYYY-MM-DD</code>.
+      Weight can be kg (<code>103.4</code>) or stone/lb (<code>16st 4lb</code>).<br>
+      Example: <code>2026-08-01, 16st 4lb</code>
+    </p>
+    <textarea id="wbText" placeholder="2026-08-01, 16st 4lb&#10;2026-08-08, 103.4"></textarea>
+    <div class="wb-file-row">
+      <span style="font-size: 0.82rem; color: var(--text-muted);">or upload a CSV:</span>
+      <input type="file" id="wbFile" accept=".csv,.txt">
+    </div>
+  </div>
+  <div style="margin-top:1rem;">
+    <button class="btn btn-primary" id="wbPreviewBtn" style="width:100%; justify-content:center;">Preview</button>
+  </div>
+</div>
+
+<div class="card" id="wbResultsCard" style="display: none;">
+  <div class="card-title">Preview</div>
+  <div class="wb-summary" id="wbSummary"></div>
+  <div class="wb-table-wrap">
+    <table class="wb-table">
+      <thead><tr><th>Date</th><th>Weight</th><th>Status</th></tr></thead>
+      <tbody id="wbRows"></tbody>
+    </table>
+  </div>
+  <div class="wb-actions">
+    <button class="btn btn-secondary" id="wbOverwriteToggle">Also overwrite duplicates</button>
+    <button class="btn btn-primary" id="wbConfirmBtn">Import valid rows</button>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let wbUnit = 'stlb';
+let wbParsedRows = [];
+let wbOverwrite = false;
+
+function isoDate(d) { return d.toISOString().slice(0,10); }
+
+function addRow(dateVal, stVal, lbVal, kgVal) {
+  const wrap = document.getElementById('wbRowsWrap');
+  const row = document.createElement('div');
+  row.className = 'wb-row';
+  const weightHtml = wbUnit === 'kg'
+    ? `<input type="number" class="wb-kg" step="0.1" min="20" max="300" placeholder="kg" value="${kgVal||''}">`
+    : `<input type="number" class="wb-st" step="1" min="0" max="60" placeholder="st" value="${stVal||''}">
+       <input type="number" class="wb-lb" step="0.1" min="0" max="13.9" placeholder="lb" value="${lbVal||''}">`;
+  row.innerHTML = `
+    <input type="date" class="wb-date" value="${dateVal||''}">
+    ${weightHtml}
+    <button class="wb-row-del" type="button">&#x2715;</button>
+  `;
+  row.querySelector('.wb-row-del').addEventListener('click', () => row.remove());
+  wrap.appendChild(row);
+  return row;
+}
+
+document.getElementById('wbAddRow').addEventListener('click', () => {
+  const rows = document.querySelectorAll('.wb-row');
+  const last = rows[rows.length - 1];
+  let dateVal = '', stVal = '', lbVal = '', kgVal = '';
+  if (last) {
+    const lastDate = last.querySelector('.wb-date').value;
+    if (lastDate) {
+      const d = new Date(lastDate + 'T12:00:00');
+      d.setDate(d.getDate() - 1);
+      dateVal = isoDate(d);
+    }
+    if (wbUnit === 'kg') kgVal = last.querySelector('.wb-kg').value;
+    else { stVal = last.querySelector('.wb-st').value; lbVal = last.querySelector('.wb-lb').value; }
+  }
+  addRow(dateVal, stVal, lbVal, kgVal);
+});
+
+document.getElementById('wbAdvancedToggle').addEventListener('click', () => {
+  document.getElementById('wbAdvanced').classList.toggle('open');
+});
+
+async function initBackfill() {
+  const settings = await (await fetch('/nutrition/api/weight/settings')).json();
+  wbUnit = settings.unit || 'stlb';
+  const today = new Date();
+  for (let i = 0; i < 3; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - (i + 1));
+    addRow(isoDate(d));
+  }
+}
+
+function rowLines() {
+  const lines = [];
+  document.querySelectorAll('.wb-row').forEach(row => {
+    const dateVal = row.querySelector('.wb-date').value;
+    if (!dateVal) return;
+    if (wbUnit === 'kg') {
+      const kg = row.querySelector('.wb-kg').value.trim();
+      if (!kg) return;
+      lines.push(`${dateVal}, ${kg}kg`);
+    } else {
+      const st = row.querySelector('.wb-st').value.trim();
+      const lb = row.querySelector('.wb-lb').value.trim();
+      if (!st && !lb) return;
+      lines.push(`${dateVal}, ${st || 0}st ${lb || 0}lb`);
+    }
+  });
+  return lines;
+}
+
+document.getElementById('wbOverwriteToggle').addEventListener('click', () => {
+  wbOverwrite = !wbOverwrite;
+  document.getElementById('wbOverwriteToggle').textContent =
+    wbOverwrite ? 'Overwriting duplicates ✓' : 'Also overwrite duplicates';
+});
+
+document.getElementById('wbPreviewBtn').addEventListener('click', async () => {
+  const fileInput = document.getElementById('wbFile');
+  let resp;
+  if (fileInput.files.length) {
+    const fd = new FormData();
+    fd.append('file', fileInput.files[0]);
+    resp = await fetch('/nutrition/api/weight/backfill/preview', { method: 'POST', body: fd });
+  } else {
+    const lines  = rowLines();
+    const pasted = document.getElementById('wbText').value.trim();
+    const text   = lines.join('\n') + (pasted ? '\n' + pasted : '');
+    if (!text.trim()) { alert('Add at least one date and weight first.'); return; }
+    resp = await fetch('/nutrition/api/weight/backfill/preview', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+  }
+  const data = await resp.json();
+  wbParsedRows = data.rows || [];
+  renderPreview();
+});
+
+function renderPreview() {
+  const card = document.getElementById('wbResultsCard');
+  card.style.display = '';
+  const ok     = wbParsedRows.filter(r => !r.error);
+  const errors = wbParsedRows.filter(r => r.error);
+  const dupes  = ok.filter(r => r.duplicate);
+  document.getElementById('wbSummary').textContent =
+    `${wbParsedRows.length} row(s) — ${ok.length} valid, ${errors.length} error(s), ${dupes.length} already logged.`;
+
+  document.getElementById('wbRows').innerHTML = wbParsedRows.map(r => {
+    const cls = r.error ? 'wb-error' : (r.duplicate ? 'wb-duplicate' : '');
+    const status = r.error ? r.error : (r.duplicate ? 'Already logged — will replace if overwrite is on' : 'OK');
+    return `<tr class="${cls}">
+      <td>${r.date || r.raw}</td>
+      <td>${r.weightKg != null ? r.weightKg.toFixed(1) + ' kg' : '—'}</td>
+      <td>${status}</td>
+    </tr>`;
+  }).join('');
+  card.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+document.getElementById('wbConfirmBtn').addEventListener('click', async () => {
+  const rows = wbParsedRows
+    .filter(r => !r.error)
+    .map(r => ({ date: r.date, weightKg: r.weightKg, overwrite: wbOverwrite && r.duplicate }));
+  if (!rows.length) return;
+  const resp = await fetch('/nutrition/api/weight/backfill/confirm', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rows }),
+  });
+  const data = await resp.json();
+  alert(`Imported ${data.imported} weigh-in(s)${data.skipped ? `, skipped ${data.skipped} already-logged date(s)` : ''}.`);
+  window.location.href = '/nutrition/weight';
+});
+
+initBackfill();
+</script>
+{% endblock %}

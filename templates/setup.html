@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome — Headwind</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+  <style>
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      background: var(--main-bg);
+      padding: 3rem 1rem;
+    }
+    .wizard { width: 100%; max-width: 560px; }
+
+    .wizard-hero {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .wizard-hero img {
+      width: 56px; height: 56px; border-radius: 14px; flex-shrink: 0;
+    }
+    .wizard-hero-text h1 {
+      font-size: 1.75rem; font-weight: 700; color: var(--text); margin: 0 0 0.2rem;
+    }
+    .wizard-hero-text p {
+      font-size: 0.875rem; color: var(--text-muted); margin: 0;
+    }
+
+    .step-track {
+      display: flex;
+      gap: 0.4rem;
+      margin-bottom: 1.75rem;
+    }
+    .step-dot {
+      flex: 1;
+      height: 4px;
+      border-radius: 2px;
+      background: var(--border);
+    }
+    .step-dot.done, .step-dot.active { background: var(--accent); }
+    .step-label {
+      font-size: 0.6875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 1rem;
+    }
+
+    .arch-box {
+      background: #0a1e2e;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.1rem 1.25rem;
+      margin-bottom: 1.75rem;
+    }
+    .arch-box-title {
+      font-size: 0.6875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 600;
+      color: var(--accent);
+      margin-bottom: 0.75rem;
+    }
+    .arch-row {
+      display: flex;
+      gap: 0.75rem;
+      align-items: flex-start;
+      margin-bottom: 0.65rem;
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .arch-row:last-child { margin-bottom: 0; }
+    .arch-icon {
+      font-size: 1rem;
+      flex-shrink: 0;
+      margin-top: 0.05rem;
+    }
+    .arch-row strong { color: var(--text); }
+
+    .section-label {
+      font-size: 0.6875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+    }
+    .owner-badge {
+      display: inline-block;
+      font-size: 0.625rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      background: var(--accent);
+      color: #fff;
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      margin-left: 0.4rem;
+      vertical-align: middle;
+    }
+
+    .rider-row {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      margin-bottom: 0.6rem;
+    }
+    .rider-row input, .text-field {
+      flex: 1;
+      background: #0f2535;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.9375rem;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .rider-row input:focus, .text-field:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .btn-remove {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1.1rem;
+      cursor: pointer;
+      padding: 0.25rem 0.4rem;
+      border-radius: 4px;
+      line-height: 1;
+    }
+    .btn-remove:hover { color: var(--danger); }
+
+    .btn-add {
+      background: none;
+      border: 1px dashed var(--border);
+      color: var(--text-muted);
+      font-size: 0.8125rem;
+      cursor: pointer;
+      padding: 0.45rem 0.9rem;
+      border-radius: 6px;
+      width: 100%;
+      margin-top: 0.25rem;
+      margin-bottom: 1.75rem;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .btn-add:hover { border-color: var(--accent); color: var(--text); }
+
+    .submit-btn {
+      width: 100%;
+      padding: 0.7rem;
+      font-size: 1rem;
+    }
+
+    .field-group { margin-bottom: 1rem; }
+    .field-group label {
+      display: block;
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+      margin-bottom: 0.35rem;
+    }
+
+    .choice-row { display: flex; gap: 0.75rem; margin-bottom: 1.75rem; }
+    .choice-card {
+      flex: 1;
+      background: #0f2535;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    .choice-card:hover { border-color: var(--text-muted); }
+    .choice-card.selected { border-color: var(--accent); background: #14293c; }
+    .choice-card input { display: none; }
+    .choice-card .choice-title { font-weight: 600; color: var(--text); margin-bottom: 0.2rem; }
+    .choice-card .choice-sub { font-size: 0.75rem; color: var(--text-muted); }
+
+    .skip-link {
+      display: block;
+      text-align: center;
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+      margin-top: 0.75rem;
+      text-decoration: none;
+    }
+    .skip-link:hover { color: var(--text); }
+
+    .mfa-box { display: none; margin-top: 1rem; }
+    .mfa-box.show { display: block; }
+    .garmin-status {
+      font-size: 0.8125rem;
+      border-radius: 8px;
+      padding: 0.6rem 0.85rem;
+      margin-top: 0.75rem;
+      display: none;
+    }
+    .garmin-status.show { display: block; }
+    .garmin-status.ok { background: #0a1e14; border: 1px solid var(--success); color: var(--success); }
+    .garmin-status.error { background: #1a0a0a; border: 1px solid var(--danger); color: var(--danger); }
+    .garmin-status.pending { background: #1a1508; border: 1px solid var(--warning); color: var(--warning); }
+
+    .done-icon {
+      font-size: 2.5rem;
+      text-align: center;
+      margin-bottom: 0.5rem;
+    }
+    .done-text { text-align: center; color: var(--text-muted); font-size: 0.9375rem; margin-bottom: 1.75rem; }
+    .also-box {
+      background: #0a1e2e;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      margin-top: 1.5rem;
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+    .also-box strong { color: var(--text); }
+
+    .ha-status { font-size: 0.8125rem; color: var(--text-muted); min-height: 1.2em; margin-top: 0.5rem; }
+    .ha-map { display:flex; gap:0.5rem; align-items:center; border:1px solid var(--border); border-radius:8px; padding:0.6rem; margin-bottom:0.5rem; }
+    .ha-map-name { flex:1; min-width:0; }
+    .ha-map-name b { display:block; overflow-wrap:anywhere; font-size: 0.875rem; }
+    .ha-map select {
+      width:auto; min-width:8rem; background:#0f2535; color:var(--text); border:1px solid var(--border);
+      border-radius:6px; padding:0.35rem 0.5rem; font-size:0.8125rem;
+    }
+    .ha-x { background:none; border:none; color:var(--text-muted); font-size:1.4rem; min-width:36px; min-height:36px; cursor:pointer; }
+    .ha-ent {
+      display:block; width:100%; text-align:left; background:none; color:var(--text); border:none;
+      border-bottom:1px solid var(--border); padding:0.6rem 0.25rem; min-height:44px; cursor:pointer; font-size:0.875rem;
+    }
+    .ha-ent small { color:var(--text-muted); display:block; overflow-wrap:anywhere; }
+    .ha-ents { margin-top:0.5rem; }
+
+    /* The entity picker is a full-screen overlay while open, not a box nested inside the scrollable
+       page — two attempts at bounding/scrolling a nested box (viewport-relative, then fixed-pixel)
+       both fought real mobile touch-gesture handoff between the box and the page in different ways.
+       An overlay sidesteps the whole class of bug: while it's open there's exactly one scrollable
+       surface on screen, so there's nothing to fight with. */
+    .ha-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: var(--main-bg);
+      z-index: 1000;
+      overflow-y: auto;
+      padding: 1.5rem 1.25rem;
+    }
+    .ha-overlay.open { display: block; }
+    .ha-overlay-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    .ha-overlay-head h3 { font-size: 1.0625rem; font-weight: 700; color: var(--text); }
+    .ha-overlay-close {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 8px;
+      min-width: 44px;
+      min-height: 44px;
+      font-size: 1.25rem;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .ha-search {
+      background:#0f2535; color:var(--text); border:1px solid var(--border); border-radius:6px;
+      padding:0.5rem 0.75rem; font-size:0.9375rem; width:100%; box-sizing:border-box;
+    }
+  </style>
+</head>
+<body>
+<div class="wizard">
+
+  <!-- Hero -->
+  <div class="wizard-hero">
+    <img src="{{ url_for('static', filename='logo.png') }}" alt="Headwind">
+    <div class="wizard-hero-text">
+      <h1>Welcome to Headwind</h1>
+      <p>Self-hosted, private cycling analytics — let's get you set up.</p>
+    </div>
+  </div>
+
+  <div class="step-track">
+    {% for n in ('1','2','3','4','5','6') %}
+    <div class="step-dot {{ 'done' if n|int < step|int else ('active' if n == step else '') }}"></div>
+    {% endfor %}
+  </div>
+
+  {% if step == '1' %}
+  <div class="step-label">Step 1 of 6 — Riders</div>
+
+  <!-- Architecture explanation -->
+  <div class="arch-box">
+    <div class="arch-box-title">How riders work</div>
+    <div class="arch-row">
+      <span class="arch-icon">🔑</span>
+      <span>
+        <strong>One Garmin account per instance.</strong>
+        The first rider can connect Garmin for automatic sync — but file import (FIT, GPX, or a Strava
+        data-export zip) works for everyone, including the first rider. Garmin is optional.
+      </span>
+    </div>
+    <div class="arch-row">
+      <span class="arch-icon">👥</span>
+      <span>
+        <strong>Additional riders</strong> are co-riders — training partners, family, club mates.
+        Everyone uses file import. No Garmin account needed.
+      </span>
+    </div>
+    <div class="arch-row">
+      <span class="arch-icon">📊</span>
+      <span>
+        Every rider gets their own <strong>stats, segment PRs, achievements, and AI coaching</strong>.
+        Heatmap and segments are shared across everyone on the instance.
+      </span>
+    </div>
+    <div class="arch-row">
+      <span class="arch-icon">➕</span>
+      <span>You can add or remove riders any time from the <strong>Riders</strong> page.</span>
+    </div>
+  </div>
+
+  <form method="POST" action="/setup" id="setupForm">
+
+    <!-- Owner rider -->
+    <div style="margin-bottom:1.25rem;">
+      <div class="section-label">
+        Your name <span class="owner-badge">Owner</span>
+      </div>
+      <div class="rider-row">
+        <input
+          type="text"
+          name="riders[]"
+          required
+          autofocus
+          placeholder="e.g. Alex"
+          autocomplete="off">
+      </div>
+      <p style="font-size:0.75rem; color:var(--text-muted); margin:0.3rem 0 0;">
+        This rider can connect Garmin for automatic sync, or import rides via FIT/GPX file — or both.
+      </p>
+    </div>
+
+    <!-- Additional riders -->
+    <div class="section-label" style="margin-bottom:0.5rem;">
+      Additional riders <span style="font-weight:400; text-transform:none; letter-spacing:0;">(optional)</span>
+    </div>
+    <div id="extraRiders"></div>
+    <button type="button" class="btn-add" onclick="addRider()">+ Add another rider</button>
+
+    <button type="submit" class="btn btn-primary submit-btn">Continue →</button>
+  </form>
+
+  <!-- Restore divider -->
+  <div style="display:flex; align-items:center; gap:1rem; margin:1.75rem 0 1.5rem;">
+    <div style="flex:1; height:1px; background:var(--border);"></div>
+    <span style="font-size:0.8125rem; color:var(--text-muted); white-space:nowrap;">or restore from a backup</span>
+    <div style="flex:1; height:1px; background:var(--border);"></div>
+  </div>
+
+  {% if error %}
+  <div style="background:#1a0a0a; border:1px solid var(--danger); border-radius:8px; padding:0.75rem 1rem; font-size:0.875rem; color:var(--danger); margin-bottom:1rem;">
+    {{ error }}
+  </div>
+  {% endif %}
+
+  <form method="POST" action="/setup/restore" enctype="multipart/form-data" id="restoreForm">
+    <label class="btn btn-secondary submit-btn" style="cursor:pointer; text-align:center;">
+      Upload Backup (.zip or .db)
+      <input type="file" name="backup" accept=".zip,.db" style="display:none;"
+             onchange="this.closest('form').submit()">
+    </label>
+    <p style="font-size:0.75rem; color:var(--text-muted); text-align:center; margin:0.5rem 0 0;">
+      Restores all riders, rides, segments, and settings from a previous Headwind instance.
+    </p>
+  </form>
+
+  {% elif step == '2' %}
+  <div class="step-label">Step 2 of 6 — Units</div>
+  <form method="POST" action="/setup?step=2">
+    <div class="choice-row">
+      <label class="choice-card" id="cardImperial">
+        <input type="radio" name="units" value="imperial" checked onchange="pickUnits('imperial')">
+        <div class="choice-title">Miles &amp; lb</div>
+        <div class="choice-sub">Imperial</div>
+      </label>
+      <label class="choice-card" id="cardMetric">
+        <input type="radio" name="units" value="metric" onchange="pickUnits('metric')">
+        <div class="choice-title">Km &amp; kg</div>
+        <div class="choice-sub">Metric</div>
+      </label>
+    </div>
+    <p style="font-size:0.75rem; color:var(--text-muted); margin:-1rem 0 1.25rem;">
+      Changeable any time in Settings — this just sets your starting default.
+    </p>
+    <button type="submit" class="btn btn-primary submit-btn">Continue →</button>
+  </form>
+
+  {% elif step == '3' %}
+  <div class="step-label">Step 3 of 6 — Garmin</div>
+  <div class="arch-box">
+    <div class="arch-box-title">What this connects</div>
+    <div class="arch-row">
+      <span class="arch-icon">⌚</span>
+      <span>Pulls resting heart rate, HRV, sleep, body battery, stress and steps from Garmin Connect
+        into your Recovery dashboard — and optionally your ride history too.</span>
+    </div>
+    <div class="arch-row">
+      <span class="arch-icon">🔒</span>
+      <span>Your Garmin password is stored locally in this instance's database, never sent anywhere
+        but Garmin's own servers. If your account has 2-step verification, Headwind will ask for the code
+        right here — no SSH, no command line.</span>
+    </div>
+  </div>
+
+  <div class="field-group">
+    <label for="garminEmail">Garmin Connect email</label>
+    <input type="email" id="garminEmail" class="text-field" autocomplete="off"
+           value="{{ s.garminEmail if s and s.garminEmail else '' }}">
+  </div>
+  <div class="field-group">
+    <label for="garminPassword">Garmin Connect password</label>
+    <input type="password" id="garminPassword" class="text-field" autocomplete="off">
+  </div>
+
+  <button type="button" class="btn btn-primary submit-btn" id="garminConnectBtn" onclick="garminConnect()">Connect Garmin</button>
+  <div class="garmin-status" id="garminStatus"></div>
+
+  <div class="mfa-box" id="mfaBox">
+    <div class="field-group" style="margin-top:1rem;">
+      <label for="garminMfaCode">Garmin sent you a verification code — enter it here</label>
+      <input type="text" id="garminMfaCode" class="text-field" inputmode="numeric" autocomplete="one-time-code" placeholder="123456">
+    </div>
+    <button type="button" class="btn btn-primary submit-btn" id="garminVerifyBtn" onclick="garminVerify()">Verify code</button>
+  </div>
+
+  <a href="/setup?step=4" class="skip-link" id="garminSkip">Skip for now — I'll connect Garmin later from Settings →</a>
+
+  {% elif step == '4' %}
+  <div class="step-label">Step 4 of 6 — Home Assistant</div>
+  <div class="arch-box">
+    <div class="arch-box-title">What this connects</div>
+    <div class="arch-row">
+      <span class="arch-icon">🌡️</span>
+      <span>Pull body-composition readings from a Bluetooth/WiFi scale, or anything else Home Assistant
+        already sees, straight into your weight graph and body metrics.</span>
+    </div>
+    <div class="arch-row">
+      <span class="arch-icon">☀️</span>
+      <span>Show live weather on your Dashboard using a weather entity HA already has — no separate
+        API key needed.</span>
+    </div>
+    <div class="arch-row">
+      <span class="arch-icon">🔒</span>
+      <span>Your token is stored locally in this instance's database. Entirely optional — skip it if
+        you don't run Home Assistant.</span>
+    </div>
+  </div>
+
+  <div class="field-group">
+    <label for="haUrl">Home Assistant URL</label>
+    <input type="text" id="haUrl" class="text-field" placeholder="http://homeassistant.local:8123"
+           inputmode="url" autocapitalize="off" value="{{ s.haUrl if s and s.haUrl else '' }}">
+  </div>
+  <div class="field-group">
+    <label for="haToken">Long-lived access token</label>
+    <input type="password" id="haToken" class="text-field" autocomplete="off"
+           placeholder="{{ '•••••••• saved — leave blank to keep' if ha_has_token else 'Profile → Security → Long-lived access tokens' }}">
+  </div>
+  <div style="display:flex; gap:0.6rem; margin-bottom:0.5rem;">
+    <button type="button" class="btn btn-secondary" style="flex:1;" id="haTestBtn">Test connection</button>
+  </div>
+  <div class="ha-status" id="haConnStatus"></div>
+
+  <div style="margin-top:1.5rem;">
+    <div class="section-label">Health entities <span style="font-weight:400; text-transform:none; letter-spacing:0;">(optional)</span></div>
+    <div id="haMaps"></div>
+    <button type="button" class="btn-add" id="haLoadBtn">+ Add an entity from Home Assistant</button>
+    <div id="haPicker" class="ha-overlay">
+      <div class="ha-overlay-head">
+        <h3>Add a health entity</h3>
+        <button type="button" class="ha-overlay-close" id="haPickerClose" aria-label="Close">&times;</button>
+      </div>
+      <input type="text" id="haSearch" class="ha-search" placeholder="Search e.g. weight, body fat…" autocapitalize="off">
+      <div class="ha-status" id="haPickStatus"></div>
+      <div class="ha-ents" id="haEnts"></div>
+    </div>
+  </div>
+
+  <div style="margin-top:0.5rem;">
+    <div class="section-label">Current weather <span style="font-weight:400; text-transform:none; letter-spacing:0;">(optional)</span></div>
+    <div id="haWeatherChosen"></div>
+    <button type="button" class="btn-add" id="haWeatherPickBtn">{{ 'Change weather entity' if ha_weather_entity else '+ Choose a weather entity' }}</button>
+    <div id="haWeatherPicker" class="ha-overlay">
+      <div class="ha-overlay-head">
+        <h3>Choose a weather entity</h3>
+        <button type="button" class="ha-overlay-close" id="haWeatherPickerClose" aria-label="Close">&times;</button>
+      </div>
+      <input type="text" id="haWeatherSearch" class="ha-search" placeholder="Search…" autocapitalize="off">
+      <div class="ha-status" id="haWeatherPickStatus"></div>
+      <div class="ha-ents" id="haWeatherEnts"></div>
+    </div>
+  </div>
+
+  <button type="button" class="btn btn-primary submit-btn" onclick="location.href='/setup?step=5'">Continue →</button>
+  <a href="/setup?step=5" class="skip-link">Skip Home Assistant for now — I can connect it later from Settings →</a>
+
+  {% elif step == '5' %}
+  <div class="step-label">Step 5 of 6 — One-time ping</div>
+  <div class="arch-box">
+    <div class="arch-box-title">What this sends, exactly</div>
+    <div class="arch-row">
+      <span class="arch-icon">📡</span>
+      <span>
+        A single, one-time, anonymous ping to the Headwind dev server so we have a rough idea how many
+        instances are actually running — nothing more. It happens once, ever, right now, when you click
+        Continue below.
+      </span>
+    </div>
+    <div class="arch-row">
+      <span class="arch-icon">🔍</span>
+      <span>
+        <strong>Exactly two values are sent:</strong> a random id generated just now on this install
+        (not tied to you, your IP isn't stored against it, and it can't be reversed to anything personal),
+        and the Headwind version number. That's the whole payload — no rides, no food, no weight, no
+        location, nothing else, ever.
+      </span>
+    </div>
+    <div class="arch-row">
+      <span class="arch-icon">🚫</span>
+      <span>
+        <strong>Opt out forever</strong> with the toggle below — no ping is ever sent, and this can't
+        be turned back on later short of editing the database directly.
+      </span>
+    </div>
+  </div>
+
+  <form method="POST" action="/setup?step=5">
+    <label style="display:flex; align-items:center; gap:0.6rem; margin-bottom:1.5rem; cursor:pointer;">
+      <input type="checkbox" name="telemetry" value="off" style="width:20px; height:20px;">
+      <span style="font-size:0.9375rem; color:var(--text);">Opt out forever — never send this ping</span>
+    </label>
+    <button type="submit" class="btn btn-primary submit-btn">Continue →</button>
+  </form>
+
+  {% elif step == '6' %}
+  <div class="step-label">Step 6 of 6 — Done</div>
+  <div class="done-icon">🚴</div>
+  <p class="done-text">Headwind is ready. Head to your dashboard, or import some rides to get started.</p>
+  <a href="/dashboard" class="btn btn-primary submit-btn" style="display:block; text-align:center; text-decoration:none;">Go to dashboard →</a>
+
+  <div class="also-box">
+    Also available any time from <strong>Settings</strong>: connect <strong>Garmin</strong> if you skipped it,
+    hook up <strong>Home Assistant/MQTT</strong> for dashboards and notifications, and restore or download backups.
+  </div>
+  {% endif %}
+
+</div>
+
+<script>
+var extraCount = 0;
+function addRider() {
+  extraCount++;
+  var div = document.createElement('div');
+  div.className = 'rider-row';
+  div.id = 'extra-' + extraCount;
+  div.innerHTML =
+    '<input type="text" name="riders[]" placeholder="Rider name" autocomplete="off">' +
+    '<button type="button" class="btn-remove" onclick="removeRider(' + extraCount + ')" title="Remove">×</button>';
+  document.getElementById('extraRiders').appendChild(div);
+  div.querySelector('input').focus();
+}
+function removeRider(id) {
+  var el = document.getElementById('extra-' + id);
+  if (el) el.remove();
+}
+function pickUnits(v) {
+  // Only present on step 2 — this used to run unconditionally on every step and threw on
+  // the others (null.classList), which silently killed the rest of this script block on
+  // every step but 2 (nothing downstream happened to depend on that continuing, until the
+  // Home Assistant step's JS wiring below did).
+  var ci = document.getElementById('cardImperial'), cm = document.getElementById('cardMetric');
+  if (ci) ci.classList.toggle('selected', v === 'imperial');
+  if (cm) cm.classList.toggle('selected', v === 'metric');
+}
+pickUnits('imperial');
+
+var garminMfaToken = null;
+
+function garminStatusEl() { return document.getElementById('garminStatus'); }
+function showGarminStatus(kind, text) {
+  var el = garminStatusEl();
+  el.className = 'garmin-status show ' + kind;
+  el.textContent = text;
+}
+
+function garminConnect() {
+  var email = document.getElementById('garminEmail').value.trim();
+  var password = document.getElementById('garminPassword').value;
+  if (!email || !password) {
+    showGarminStatus('error', 'Enter your Garmin email and password first.');
+    return;
+  }
+  var btn = document.getElementById('garminConnectBtn');
+  btn.disabled = true;
+  showGarminStatus('pending', 'Connecting to Garmin…');
+  fetch('/garmin/connect', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({email: email, password: password}),
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    btn.disabled = false;
+    if (data.error) {
+      showGarminStatus('error', data.error);
+      return;
+    }
+    if (data.needs_mfa) {
+      garminMfaToken = data.token;
+      document.getElementById('mfaBox').classList.add('show');
+      showGarminStatus('pending', 'Garmin needs a verification code — check your phone or email.');
+      document.getElementById('garminMfaCode').focus();
+      return;
+    }
+    if (data.ok) {
+      document.getElementById('mfaBox').classList.remove('show');
+      showGarminStatus('ok', 'Garmin connected. Recovery data will sync within the hour.');
+      document.getElementById('garminSkip').textContent = 'Continue →';
+    }
+  })
+  .catch(function() {
+    btn.disabled = false;
+    showGarminStatus('error', 'Could not reach the server — check your connection and try again.');
+  });
+}
+
+function garminVerify() {
+  var code = document.getElementById('garminMfaCode').value.trim();
+  if (!code || !garminMfaToken) return;
+  var btn = document.getElementById('garminVerifyBtn');
+  btn.disabled = true;
+  showGarminStatus('pending', 'Verifying…');
+  fetch('/garmin/connect/mfa', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({token: garminMfaToken, code: code}),
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    btn.disabled = false;
+    if (data.error) {
+      showGarminStatus('error', data.error + ' — check the code and try again.');
+      return;
+    }
+    if (data.ok) {
+      document.getElementById('mfaBox').classList.remove('show');
+      showGarminStatus('ok', 'Garmin connected. Recovery data will sync within the hour.');
+      document.getElementById('garminSkip').textContent = 'Continue →';
+    }
+  })
+  .catch(function() {
+    btn.disabled = false;
+    showGarminStatus('error', 'Could not reach the server — check your connection and try again.');
+  });
+}
+
+// ── Step 4: Home Assistant (health entities + weather) ──────────────
+// Mirrors templates/home_assistant.html's flow exactly, against the same endpoints, so whatever
+// gets configured here shows up identically on the Settings page afterwards.
+const HA_TARGETS = {{ ha_targets | tojson }};
+let haMaps = {{ ha_mappings | tojson }};
+let haWeatherEntity = {{ (ha_weather_entity or '') | tojson }};
+let haEntities = [];
+const haEsc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function haOpenOverlay(id) {
+  document.getElementById(id).classList.add('open');
+  document.body.style.overflow = 'hidden';  // one scrollable surface at a time while the overlay's open
+}
+function haCloseOverlay(id) {
+  document.getElementById(id).classList.remove('open');
+  document.body.style.overflow = '';
+}
+function haSay(id, msg, ok) {
+  const e = document.getElementById(id); if (!e) return;
+  e.textContent = msg;
+  e.style.color = ok === true ? 'var(--success)' : ok === false ? 'var(--danger)' : 'var(--text-muted)';
+}
+function haCreds() {
+  const fd = new FormData();
+  fd.append('url', document.getElementById('haUrl').value.trim());
+  fd.append('token', document.getElementById('haToken').value.trim());
+  return fd;
+}
+async function haPost(path, body) {
+  const r = await fetch('/settings/home-assistant' + path, {method: 'POST', body});
+  const d = await r.json().catch(() => ({error: 'Bad response'}));
+  return {ok: r.ok, d};
+}
+let haSaveTimer = null;
+function haAutoSave() {
+  clearTimeout(haSaveTimer);
+  haSaveTimer = setTimeout(haSave, 400);
+}
+async function haSave() {
+  const r = await fetch('/settings/home-assistant/save', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      url: document.getElementById('haUrl').value.trim(),
+      token: document.getElementById('haToken').value.trim(),
+      minutes: 15, mappings: haMaps, weather_entity: haWeatherEntity,
+    }),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (r.ok) document.getElementById('haToken').value = '';
+  return {ok: r.ok, d};
+}
+function haRenderMaps() {
+  const el = document.getElementById('haMaps'); if (!el) return;
+  el.innerHTML = haMaps.map((m, i) => `
+    <div class="ha-map">
+      <div class="ha-map-name"><b>${haEsc(m.name || m.entity_id)}</b></div>
+      <select onchange="haMaps[${i}].target=this.value;haAutoSave()">
+        ${Object.entries(HA_TARGETS).map(([k, v]) => `<option value="${k}" ${m.target === k ? 'selected' : ''}>${haEsc(v[0])}</option>`).join('')}
+      </select>
+      <button type="button" class="ha-x" onclick="haMaps.splice(${i},1);haRenderMaps();haAutoSave()" aria-label="Remove">&times;</button>
+    </div>`).join('');
+}
+function haRenderWeatherChosen() {
+  const el = document.getElementById('haWeatherChosen'); if (!el) return;
+  el.innerHTML = haWeatherEntity
+    ? `<div class="ha-map"><div class="ha-map-name"><b>${haEsc(haWeatherEntity)}</b></div><button type="button" class="ha-x" onclick="haWeatherEntity='';haRenderWeatherChosen();haAutoSave()" aria-label="Remove">&times;</button></div>`
+    : '';
+  const btn = document.getElementById('haWeatherPickBtn');
+  if (btn) btn.textContent = haWeatherEntity ? 'Change weather entity' : '+ Choose a weather entity';
+}
+function haRenderEnts() {
+  const q = document.getElementById('haSearch').value.toLowerCase().trim();
+  const taken = new Set(haMaps.map(m => m.entity_id));
+  document.getElementById('haEnts').innerHTML = haEntities
+    .filter(e => e.domain !== 'weather' && !taken.has(e.entity_id) && (!q || (e.name + ' ' + e.entity_id).toLowerCase().includes(q)))
+    .slice(0, 60).map(e => `
+    <button type="button" class="ha-ent" data-id="${haEsc(e.entity_id)}">
+      ${haEsc(e.name)} <b style="float:right">${haEsc(e.state)} ${haEsc(e.unit)}</b>
+      <small>${haEsc(e.entity_id)}</small>
+    </button>`).join('') || '<div class="ha-status">No matches.</div>';
+}
+function haRenderWeatherEnts() {
+  const q = document.getElementById('haWeatherSearch').value.toLowerCase().trim();
+  const list = haEntities.filter(e => e.domain === 'weather' && (!q || (e.name + ' ' + e.entity_id).toLowerCase().includes(q)));
+  document.getElementById('haWeatherEnts').innerHTML = list.map(e => `
+    <button type="button" class="ha-ent" data-id="${haEsc(e.entity_id)}">
+      ${haEsc(e.name)} <b style="float:right">${haEsc(e.state)}</b>
+      <small>${haEsc(e.entity_id)}</small>
+    </button>`).join('') || '<div class="ha-status">No weather entities found in Home Assistant.</div>';
+}
+document.addEventListener('click', function (ev) {
+  const b = ev.target.closest('#haEnts .ha-ent');
+  if (b) {
+    const e = haEntities.find(x => x.entity_id === b.dataset.id);
+    const blob = (e.name + e.entity_id).toLowerCase();
+    const guess = blob.includes('fat') ? 'body_fat' : blob.includes('muscle') ? 'muscle_mass' : blob.includes('water') ? 'body_water'
+                : blob.includes('bmi') ? 'bmi' : blob.includes('bone') ? 'bone_mass' : blob.includes('visceral') ? 'visceral_fat'
+                : blob.includes('heart') ? 'resting_hr' : blob.includes('step') ? (blob.includes('phone') ? 'steps_phone' : 'steps_watch') : 'weight';
+    haMaps.push({entity_id: e.entity_id, name: e.name, target: guess});
+    haRenderMaps(); haRenderEnts(); haAutoSave();
+    return;
+  }
+  const wb = ev.target.closest('#haWeatherEnts .ha-ent');
+  if (wb) {
+    haWeatherEntity = wb.dataset.id;
+    haCloseOverlay('haWeatherPicker');
+    haRenderWeatherChosen();
+    haAutoSave();
+  }
+});
+
+if (document.getElementById('haUrl')) {
+  haRenderMaps();
+  haRenderWeatherChosen();
+
+  document.getElementById('haTestBtn').onclick = async function () {
+    haSay('haConnStatus', 'Testing…');
+    const {ok, d} = await haPost('/test', haCreds());
+    if (!ok) { haSay('haConnStatus', '✗ ' + d.error, false); return; }
+    const s = await haSave();
+    haSay('haConnStatus', s.ok ? `✓ Connected to ${d.name || 'Home Assistant'} and saved` : '✗ Connected, but saving failed: ' + s.d.error, s.ok);
+  };
+
+  document.getElementById('haLoadBtn').onclick = async function () {
+    haOpenOverlay('haPicker');
+    haSay('haPickStatus', 'Loading entities…');
+    const {ok, d} = await haPost('/entities', haCreds());
+    if (!ok) { haSay('haPickStatus', '✗ ' + d.error, false); return; }
+    haEntities = d;
+    haSay('haPickStatus', `${d.filter(e => e.domain !== 'weather').length} entities — likely health ones first`);
+    haRenderEnts();
+    document.getElementById('haSearch').focus();
+  };
+  document.getElementById('haSearch').oninput = haRenderEnts;
+  document.getElementById('haPickerClose').onclick = () => haCloseOverlay('haPicker');
+
+  document.getElementById('haWeatherPickBtn').onclick = async function () {
+    haOpenOverlay('haWeatherPicker');
+    haSay('haWeatherPickStatus', 'Loading entities…');
+    if (!haEntities.length) {
+      const {ok, d} = await haPost('/entities', haCreds());
+      if (!ok) { haSay('haWeatherPickStatus', '✗ ' + d.error, false); return; }
+      haEntities = d;
+    }
+    haSay('haWeatherPickStatus', `${haEntities.filter(e => e.domain === 'weather').length} weather entities`);
+    haRenderWeatherEnts();
+    document.getElementById('haWeatherSearch').focus();
+  };
+  document.getElementById('haWeatherSearch').oninput = haRenderWeatherEnts;
+  document.getElementById('haWeatherPickerClose').onclick = () => haCloseOverlay('haWeatherPicker');
+}
+</script>
+</body>
+</html>

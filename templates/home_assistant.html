@@ -1,0 +1,295 @@
+{% extends 'base.html' %}
+{% block title %}Home Assistant{% endblock %}
+{% block page_title %}Home Assistant{% endblock %}
+
+{% block head %}
+<style>
+  .ha-wrap { display:flex; flex-direction:column; gap:1rem; max-width:640px; }
+  .ha-wrap input[type=text], .ha-wrap input[type=password], .ha-wrap input[type=number], .ha-wrap select {
+    width:100%; box-sizing:border-box; min-height:46px; font-size:16px;
+  }
+  .ha-wrap .btn { min-height:46px; justify-content:center; }
+  .ha-row { display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap; }
+  .ha-row > .btn { flex:1; }
+  .ha-status { font-size:0.85rem; color:var(--text-muted); min-height:1.2em; }
+  .ha-map { display:flex; gap:0.5rem; align-items:center; border:1px solid var(--border); border-radius:10px; padding:0.6rem; margin-bottom:0.5rem; }
+  .ha-map-name { flex:1; min-width:0; }
+  .ha-map-name b { display:block; overflow-wrap:anywhere; }
+  .ha-map-name small { color:var(--text-muted); overflow-wrap:anywhere; }
+  .ha-map select { width:auto; min-width:8.5rem; }
+  .ha-x { background:none; border:none; color:var(--text-muted); font-size:1.6rem; min-width:44px; min-height:44px; cursor:pointer; }
+  .ha-ent { display:block; width:100%; text-align:left; background:none; color:var(--text); border:none; border-bottom:1px solid var(--border);
+            padding:0.65rem 0.25rem; min-height:48px; cursor:pointer; font-size:0.95rem; }
+  .ha-ent small { color:var(--text-muted); display:block; overflow-wrap:anywhere; }
+  .ha-ents { margin-top:0.5rem; }
+  table.ha-tbl { width:100%; font-size:0.85rem; border-collapse:collapse; }
+  table.ha-tbl td { padding:0.35rem 0.25rem; border-bottom:1px solid var(--border); }
+
+  /* The entity picker is a full-screen overlay while open, not a box nested inside the scrollable
+     page — two attempts at bounding/scrolling a nested box (viewport-relative, then fixed-pixel)
+     both fought real mobile touch-gesture handoff between the box and the page in different ways.
+     An overlay sidesteps the whole class of bug: while it's open there's exactly one scrollable
+     surface on screen, so there's nothing to fight with. */
+  .ha-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: var(--main-bg);
+    z-index: 1000;
+    overflow-y: auto;
+    padding: 1.5rem 1.25rem;
+  }
+  .ha-overlay.open { display: block; }
+  .ha-overlay-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+  .ha-overlay-head h3 { font-size: 1.0625rem; font-weight: 700; color: var(--text); }
+  .ha-overlay-close {
+    background: none; border: 1px solid var(--border); color: var(--text); border-radius: 8px;
+    min-width: 44px; min-height: 44px; font-size: 1.25rem; cursor: pointer; flex-shrink: 0;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ha-wrap">
+
+  <div class="card">
+    <div class="card-title">Connection</div>
+    <p style="color:var(--text-muted); font-size:0.85rem; margin-bottom:0.75rem; line-height:1.5;">
+      Pulls readings (e.g. your Bluetooth scale) from Home Assistant. In HA: your profile &rarr; Security &rarr;
+      <b>Long-lived access tokens</b> &rarr; Create token.
+    </p>
+    <div class="form-group">
+      <label>Home Assistant URL</label>
+      <input type="text" id="haUrl" value="{{ url }}" placeholder="http://homeassistant.local:8123" inputmode="url" autocapitalize="off">
+    </div>
+    <div class="form-group">
+      <label>Long-lived access token</label>
+      <input type="password" id="haToken" placeholder="{{ '•••••••• saved — leave blank to keep' if has_token else 'Paste token' }}" autocomplete="off">
+    </div>
+    <div class="ha-row">
+      <button class="btn btn-secondary" id="haTest">Test connection</button>
+      <button class="btn btn-primary" id="haSave">Save</button>
+    </div>
+    <div class="ha-status" id="haConnStatus" style="margin-top:0.5rem;"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Entities to import</div>
+    <div id="haMaps"></div>
+    <button class="btn btn-secondary" id="haLoad" style="width:100%;">+ Add an entity from Home Assistant</button>
+    <div id="haPicker" class="ha-overlay">
+      <div class="ha-overlay-head">
+        <h3>Add a health entity</h3>
+        <button type="button" class="ha-overlay-close" id="haPickerClose" aria-label="Close">&times;</button>
+      </div>
+      <input type="text" id="haSearch" placeholder="Search e.g. weight, body fat…" autocapitalize="off">
+      <div class="ha-status" id="haPickStatus"></div>
+      <div class="ha-ents" id="haEnts"></div>
+    </div>
+    <div class="form-group" style="margin-top:1rem;">
+      <label>Check for new readings every (minutes)</label>
+      <input type="number" id="haMinutes" min="5" max="1440" value="{{ minutes }}" inputmode="numeric" onchange="autoSave()">
+    </div>
+    <div class="ha-status">Weight goes into your weight graph. The scale is the source of truth: it replaces a hand-typed weigh-in for the same day, and the last reading each day wins.</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Current weather <span style="font-weight:400; color:var(--text-muted);">(optional)</span></div>
+    <p class="ha-status" style="margin-bottom:0.75rem;">
+      Shows live conditions on your Dashboard, pulled straight from an existing HA weather entity —
+      no separate API key to manage. Works with Met Office, OpenWeatherMap, accuweather, or any other
+      HA weather integration you already have.
+    </p>
+    {% if weather_condition %}
+    <div class="ha-status" style="margin-bottom:0.5rem;">
+      Currently: {{ weather_icon(weather_condition) }} {{ weather_condition }}{% if weather_temp_c is not none %} &middot; {{ weather_temp_c }}&deg;C{% endif %}
+      {% if weather_updated_at %}<br><span style="font-size:0.75rem;">updated {{ weather_updated_at | fmt_date }}</span>{% endif %}
+    </div>
+    {% endif %}
+    <div id="haWeatherChosen"></div>
+    <button class="btn btn-secondary" id="haWeatherPick" style="width:100%;">{{ 'Change weather entity' if weather_entity else '+ Choose a weather entity' }}</button>
+    <div id="haWeatherPicker" class="ha-overlay">
+      <div class="ha-overlay-head">
+        <h3>Choose a weather entity</h3>
+        <button type="button" class="ha-overlay-close" id="haWeatherPickerClose" aria-label="Close">&times;</button>
+      </div>
+      <input type="text" id="haWeatherSearch" placeholder="Search…" autocapitalize="off">
+      <div class="ha-status" id="haWeatherPickStatus"></div>
+      <div class="ha-ents" id="haWeatherEnts"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Sync</div>
+    <div class="ha-row">
+      <button class="btn btn-primary" id="haSync">Sync now</button>
+      <button class="btn btn-secondary" id="haSync10">Re-import last 10 days</button>
+    </div>
+    <div class="ha-status" id="haSyncStatus" style="margin-top:0.5rem;">
+      {% if last_result %}Last run: {{ last_result }}{% else %}Not run yet.{% endif %}
+    </div>
+    {% if weights or recent %}
+    <table class="ha-tbl" style="margin-top:0.75rem;">
+      {% for w in weights %}<tr><td>{{ w.logDate }}</td><td>Weight</td><td>{{ '%.1f'|format(w.weightKg) }} kg</td></tr>{% endfor %}
+      {% for r in recent %}<tr><td>{{ r.logDate }}</td><td>{{ targets[r.metric][0] if r.metric in targets else r.metric }}</td><td>{{ r.value }} {{ r.unit or '' }}</td></tr>{% endfor %}
+    </table>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const TARGETS = {{ targets | tojson }};
+let maps = {{ mappings | tojson }};
+let weatherEntity = {{ (weather_entity or '') | tojson }};
+let entities = [];
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function creds() {
+  const fd = new FormData();
+  fd.append('url', $('haUrl').value.trim());
+  fd.append('token', $('haToken').value.trim());
+  return fd;
+}
+function say(id, msg, ok) { const e = $(id); e.textContent = msg; e.style.color = ok === true ? 'var(--success)' : ok === false ? 'var(--danger)' : 'var(--text-muted)'; }
+
+function openOverlay(id) { $(id).classList.add('open'); document.body.style.overflow = 'hidden'; }
+function closeOverlay(id) { $(id).classList.remove('open'); document.body.style.overflow = ''; }
+$('haPickerClose').onclick = () => closeOverlay('haPicker');
+$('haWeatherPickerClose').onclick = () => closeOverlay('haWeatherPicker');
+
+let saveTimer = null;
+function autoSave() {           // any change to the entity list or interval is stored straight away
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    const {ok, d} = await save();
+    say('haSyncStatus', ok ? '✓ Saved' : '✗ Could not save: ' + d.error, ok);
+  }, 400);
+}
+
+function renderMaps() {
+  $('haMaps').innerHTML = maps.map((m, i) => `
+    <div class="ha-map">
+      <div class="ha-map-name"><b>${esc(m.name || m.entity_id)}</b><small>${esc(m.entity_id)}</small></div>
+      <select onchange="maps[${i}].target=this.value;autoSave()">
+        ${Object.entries(TARGETS).map(([k, v]) => `<option value="${k}" ${m.target === k ? 'selected' : ''}>${esc(v[0])}</option>`).join('')}
+      </select>
+      <button class="ha-x" onclick="maps.splice(${i},1);renderMaps();autoSave()" aria-label="Remove">&times;</button>
+    </div>`).join('') || '<p class="ha-status">Nothing selected yet.</p>';
+}
+renderMaps();
+
+function renderWeatherChosen() {
+  $('haWeatherChosen').innerHTML = weatherEntity
+    ? `<div class="ha-map"><div class="ha-map-name"><b>${esc(weatherEntity)}</b></div><button class="ha-x" onclick="weatherEntity='';renderWeatherChosen();autoSave()" aria-label="Remove">&times;</button></div>`
+    : '';
+  $('haWeatherPick').textContent = weatherEntity ? 'Change weather entity' : '+ Choose a weather entity';
+}
+renderWeatherChosen();
+
+async function post(path, body) {
+  const r = await fetch('/settings/home-assistant' + path, {method:'POST', body});
+  const d = await r.json().catch(() => ({error:'Bad response'}));
+  return {ok: r.ok, d};
+}
+
+$('haTest').onclick = async () => {
+  say('haConnStatus', 'Testing…');
+  const {ok, d} = await post('/test', creds());
+  if (!ok) { say('haConnStatus', '✗ ' + d.error, false); return; }
+  const s = await save();   // a working connection is saved straight away
+  say('haConnStatus', s.ok ? `✓ Connected to ${d.name || 'Home Assistant'} (version ${d.version}) and saved` : '✗ Connected, but saving failed: ' + s.d.error, s.ok);
+};
+
+async function save() {
+  const r = await fetch('/settings/home-assistant/save', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({url:$('haUrl').value.trim(), token:$('haToken').value.trim(), minutes:$('haMinutes').value, mappings:maps, weather_entity:weatherEntity})});
+  const d = await r.json();
+  if (r.ok) $('haToken').value = '';
+  return {ok: r.ok, d};
+}
+$('haSave').onclick = async () => {
+  const {ok, d} = await save();
+  say('haConnStatus', ok ? '✓ Saved' : '✗ ' + d.error, ok);
+};
+
+$('haLoad').onclick = async () => {
+  openOverlay('haPicker');
+  say('haPickStatus', 'Loading entities…');
+  const {ok, d} = await post('/entities', creds());
+  if (!ok) { say('haPickStatus', '✗ ' + d.error, false); return; }
+  entities = d;
+  say('haPickStatus', `${d.length} entities — likely health ones first`);
+  renderEnts();
+  $('haSearch').focus();
+};
+$('haSearch').oninput = renderEnts;
+
+function renderEnts() {
+  const q = $('haSearch').value.toLowerCase().trim();
+  const taken = new Set(maps.map(m => m.entity_id));
+  $('haEnts').innerHTML = entities.filter(e => !taken.has(e.entity_id) && (!q || (e.name + ' ' + e.entity_id).toLowerCase().includes(q)))
+    .slice(0, 60).map(e => `
+    <button class="ha-ent" data-id="${esc(e.entity_id)}">
+      ${esc(e.name)} <b style="float:right">${esc(e.state)} ${esc(e.unit)}</b>
+      <small>${esc(e.entity_id)}</small>
+    </button>`).join('') || '<div class="ha-status">No matches.</div>';
+}
+$('haEnts').onclick = ev => {
+  const b = ev.target.closest('.ha-ent'); if (!b) return;
+  const e = entities.find(x => x.entity_id === b.dataset.id);
+  const blob = (e.name + e.entity_id).toLowerCase();
+  const guess = blob.includes('fat') ? 'body_fat' : blob.includes('muscle') ? 'muscle_mass' : blob.includes('water') ? 'body_water'
+              : blob.includes('bmi') ? 'bmi' : blob.includes('bone') ? 'bone_mass' : blob.includes('visceral') ? 'visceral_fat'
+              : blob.includes('heart') ? 'resting_hr' : blob.includes('step') ? (blob.includes('phone') ? 'steps_phone' : 'steps_watch') : 'weight';
+  maps.push({entity_id: e.entity_id, name: e.name, target: guess});
+  renderMaps(); renderEnts(); autoSave();
+};
+
+$('haWeatherPick').onclick = async () => {
+  openOverlay('haWeatherPicker');
+  say('haWeatherPickStatus', 'Loading entities…');
+  if (!entities.length) {
+    const {ok, d} = await post('/entities', creds());
+    if (!ok) { say('haWeatherPickStatus', '✗ ' + d.error, false); return; }
+    entities = d;
+  }
+  say('haWeatherPickStatus', `${entities.filter(e => e.domain === 'weather').length} weather entities`);
+  renderWeatherEnts();
+  $('haWeatherSearch').focus();
+};
+$('haWeatherSearch').oninput = renderWeatherEnts;
+
+function renderWeatherEnts() {
+  const q = $('haWeatherSearch').value.toLowerCase().trim();
+  const list = entities.filter(e => e.domain === 'weather' && (!q || (e.name + ' ' + e.entity_id).toLowerCase().includes(q)));
+  $('haWeatherEnts').innerHTML = list.map(e => `
+    <button class="ha-ent" data-id="${esc(e.entity_id)}">
+      ${esc(e.name)} <b style="float:right">${esc(e.state)}</b>
+      <small>${esc(e.entity_id)}</small>
+    </button>`).join('') || '<div class="ha-status">No weather entities found — add the Met Office, OpenWeatherMap or a similar integration in Home Assistant first.</div>';
+}
+$('haWeatherEnts').onclick = ev => {
+  const b = ev.target.closest('.ha-ent'); if (!b) return;
+  weatherEntity = b.dataset.id;
+  closeOverlay('haWeatherPicker');
+  renderWeatherChosen();
+  autoSave();
+};
+
+async function runSync(days) {
+  say('haSyncStatus', 'Saving and syncing…');
+  const s = await save();
+  if (!s.ok) { say('haSyncStatus', '✗ ' + s.d.error, false); return; }
+  const fd = new FormData(); if (days) fd.append('days', days);
+  const {ok, d} = await post('/sync', fd);
+  say('haSyncStatus', ok ? `✓ ${d.weights} weigh-in(s), ${d.metrics} other reading(s)` + (d.replaced_manual ? `, ${d.replaced_manual} hand-typed weigh-in(s) replaced by the scale` : '') + (d.errors.length ? ' — ' + d.errors.join('; ') : '')
+                         : '✗ ' + d.error, ok && !d.errors.length);
+  if (ok) setTimeout(() => location.reload(), 1500);
+}
+$('haSync').onclick = () => runSync();
+$('haSync10').onclick = () => runSync(10);
+</script>
+{% endblock %}

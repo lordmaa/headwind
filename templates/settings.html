@@ -1,0 +1,683 @@
+{% extends 'base.html' %}
+
+{% block title %}Settings{% endblock %}
+{% block page_title %}Settings{% endblock %}
+
+{% block content %}
+<div style="display:flex; flex-direction:column; gap:1.5rem;">
+
+  <!-- Support -->
+  <div class="card" style="border-left:3px solid #FFDD00;display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap;">
+    <div style="flex:1;min-width:200px;">
+      <div style="font-weight:600;font-size:0.9375rem;margin-bottom:0.25rem;">Headwind is free and open source</div>
+      <div style="font-size:0.8125rem;color:var(--text-muted);">
+        If it's saving you cash on Strava/Wahoo subscriptions, a coffee is appreciated.
+        <a href="https://github.com/lordmaa/headwind" target="_blank"
+           style="color:var(--accent);">GitHub →</a>
+      </div>
+    </div>
+    <a href="https://buymeacoffee.com/lordmerchant" target="_blank"
+       style="display:inline-flex;align-items:center;gap:0.5rem;
+              background:#FFDD00;color:#000000;font-weight:700;font-size:0.875rem;
+              padding:0.5rem 1.1rem;border-radius:8px;text-decoration:none;
+              white-space:nowrap;flex-shrink:0;">
+      ☕ Buy me a coffee
+    </a>
+  </div>
+
+  <!-- Measurement Units -->
+  <form method="POST" class="card">
+    <div class="card-title">Display Preferences</div>
+    <div style="display:flex; align-items:center; gap:1.5rem;">
+      <div class="form-group" style="margin:0; flex:1;">
+        <label>Units</label>
+        <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
+          <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer; font-weight:400;">
+            <input type="radio" name="units" value="imperial" {% if not s or s.units == 'imperial' %}checked{% endif %} style="cursor:pointer;">
+            Imperial (mi, mph, ft)
+          </label>
+          <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer; font-weight:400;">
+            <input type="radio" name="units" value="metric" {% if s and s.units == 'metric' %}checked{% endif %} style="cursor:pointer;">
+            Metric (km, km/h, m)
+          </label>
+        </div>
+      </div>
+    </div>
+    <input type="hidden" name="aiProvider"        value="{{ s.aiProvider or 'openai' }}">
+    <input type="hidden" name="openaiKey"         value="{{ s.openaiKey         if s and s.openaiKey         else '' }}">
+    <input type="hidden" name="openaiModel"       value="{{ s.openaiModel       if s and s.openaiModel       else 'gpt-4o' }}">
+    <input type="hidden" name="ollamaUrl"         value="{{ s.ollamaUrl         if s and s.ollamaUrl         else 'http://localhost:11434' }}">
+    <input type="hidden" name="ollamaModel"       value="{{ s.ollamaModel       if s and s.ollamaModel       else 'llama3.2' }}">
+    <input type="hidden" name="mqttHost"          value="{{ s.mqttHost          if s and s.mqttHost          else '' }}">
+    <input type="hidden" name="mqttPort"          value="{{ s.mqttPort          if s and s.mqttPort          else '1883' }}">
+    <input type="hidden" name="mqttUser"          value="{{ s.mqttUser          if s and s.mqttUser          else '' }}">
+    <input type="hidden" name="mqttPassword"      value="{{ s.mqttPassword      if s and s.mqttPassword      else '' }}">
+    <input type="hidden" name="garminEmail"       value="{{ s.garminEmail       if s and s.garminEmail       else '' }}">
+    <input type="hidden" name="garminPassword"    value="{{ s.garminPassword    if s and s.garminPassword    else '' }}">
+    <input type="hidden" name="garminSyncHours"   value="{{ s.garminSyncHours   if s and s.garminSyncHours   else 0.5 }}">
+    <input type="hidden" name="garminSyncMode"    value="{{ s.garminSyncMode    if s and s.garminSyncMode    else 'health' }}">
+    <button type="submit" class="btn btn-primary" style="margin-top:1.25rem;">Save Preferences</button>
+  </form>
+
+  <!-- Login Details -->
+  <form method="POST" action="/settings/password" class="card">
+    <div class="card-title">Login Details</div>
+    <div style="display:grid; grid-template-columns:1fr 2fr 1fr 1fr; gap:1rem; align-items:end;">
+      <div class="form-group" style="margin:0;">
+        <label>Current Password</label>
+        <input type="password" name="currentPassword" required placeholder="••••••••">
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label>New Username <span style="color:var(--text-muted); font-weight:400; text-transform:none; letter-spacing:0;">(blank = keep <strong style="color:var(--text);">{{ current_username }}</strong>)</span></label>
+        <input type="text" name="newUsername" autocomplete="off" placeholder="{{ current_username }}">
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label>New Password</label>
+        <input type="password" name="newPassword" placeholder="••••••••">
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label>Confirm Password</label>
+        <input type="password" name="confirmPassword" placeholder="••••••••">
+      </div>
+    </div>
+    <button type="submit" class="btn btn-primary" style="margin-top:1.25rem;">Update Login</button>
+  </form>
+
+  <!-- AI Provider -->
+  <form method="POST" class="card">
+    <div class="card-title">AI Provider</div>
+    <div style="display:grid; grid-template-columns:180px 1fr 1fr; gap:1rem; align-items:start;">
+      <div class="form-group" style="margin:0;">
+        <label>Provider</label>
+        <select name="aiProvider" id="providerSelect" onchange="updateProvider()">
+          <option value="openai" {% if not s or s.aiProvider == 'openai' %}selected{% endif %}>OpenAI</option>
+          <option value="ollama" {% if s and s.aiProvider == 'ollama' %}selected{% endif %}>Ollama (local)</option>
+        </select>
+      </div>
+      <div id="openaiFields" style="display:contents;">
+        <div class="form-group" style="margin:0;">
+          <label>API Key</label>
+          <input type="password" name="openaiKey"
+                 value="{{ s.openaiKey if s and s.openaiKey else '' }}"
+                 placeholder="sk-...">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Model</label>
+          <select name="openaiModel">
+            {% for m in openai_models %}
+            <option value="{{ m }}" {% if s and s.openaiModel == m %}selected{% endif %}>{{ m }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div id="ollamaFields" style="display:none; grid-column:2/-1; display:none;">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+          <div class="form-group" style="margin:0;">
+            <label>Ollama URL</label>
+            <input type="text" name="ollamaUrl"
+                   value="{{ s.ollamaUrl if s and s.ollamaUrl else 'http://localhost:11434' }}"
+                   placeholder="http://localhost:11434">
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label>Model</label>
+            <input type="text" name="ollamaModel"
+                   value="{{ s.ollamaModel if s and s.ollamaModel else 'llama3.2' }}"
+                   placeholder="llama3.2">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <input type="hidden" name="garminEmail"     value="{{ s.garminEmail or '' }}">
+    <input type="hidden" name="garminPassword"  value="{{ s.garminPassword or '' }}">
+    <input type="hidden" name="garminSyncHours" value="{{ s.garminSyncHours if s and s.garminSyncHours else 0.5 }}">
+    <input type="hidden" name="garminSyncMode"  value="{{ s.garminSyncMode  if s and s.garminSyncMode  else 'health' }}">
+    <div style="display:flex; gap:0.75rem; margin-top:1.25rem; align-items:center; flex-wrap:wrap;">
+      <button type="submit" class="btn btn-primary">Save</button>
+      <button type="button" class="btn btn-secondary" id="aiTestBtn" onclick="testSetting('ai', this)">Test AI</button>
+      <span id="aiTestStatus" style="font-size:0.8125rem; color:var(--text-muted);"></span>
+    </div>
+  </form>
+
+  <!-- Home Assistant import (scale / health entities) -->
+  <div class="card" style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
+    <div style="flex:1; min-width:200px;">
+      <div class="card-title" style="margin-bottom:0.25rem;">Home Assistant — import health data</div>
+      <div style="font-size:0.8125rem; color:var(--text-muted);">Pull your Bluetooth scale's weight and body readings into Headwind.</div>
+    </div>
+    <a href="{{ url_for('homeassistant.index') }}" class="btn btn-secondary" style="min-height:44px;">Set up &rarr;</a>
+  </div>
+
+  <!-- MQTT / Home Assistant -->
+  <form method="POST" class="card">
+    <div class="card-title">Home Assistant — MQTT</div>
+    <p style="color:var(--text-muted); font-size:0.875rem; margin-bottom:1rem; line-height:1.6;">
+      Publishes sensors to Home Assistant via MQTT Discovery — total rides, distance,
+      elevation, calories, time, Everests, laps of Earth, and last ride details.
+    </p>
+    <div style="display:grid; grid-template-columns:3fr 1fr 2fr 2fr; gap:1rem;">
+      <div class="form-group" style="margin:0;">
+        <label>Broker Host</label>
+        <input type="text" name="mqttHost"
+               value="{{ s.mqttHost if s and s.mqttHost else '' }}"
+               placeholder="192.168.1.x or homeassistant.local">
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label>Port</label>
+        <input type="number" name="mqttPort"
+               value="{{ s.mqttPort if s and s.mqttPort else 1883 }}"
+               placeholder="1883">
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label>Username <span style="color:var(--text-muted);">(optional)</span></label>
+        <input type="text" name="mqttUser"
+               value="{{ s.mqttUser if s and s.mqttUser else '' }}"
+               placeholder="mqtt user">
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label>Password <span style="color:var(--text-muted);">(optional)</span></label>
+        <input type="password" name="mqttPassword"
+               value="{{ s.mqttPassword if s and s.mqttPassword else '' }}"
+               placeholder="••••••••">
+      </div>
+    </div>
+
+    <input type="hidden" name="aiProvider"       value="{{ s.aiProvider or 'openai' }}">
+    <input type="hidden" name="openaiKey"        value="{{ s.openaiKey or '' }}">
+    <input type="hidden" name="openaiModel"      value="{{ s.openaiModel or 'gpt-4o' }}">
+    <input type="hidden" name="ollamaUrl"        value="{{ s.ollamaUrl or '' }}">
+    <input type="hidden" name="ollamaModel"      value="{{ s.ollamaModel or '' }}">
+    <input type="hidden" name="garminEmail"      value="{{ s.garminEmail or '' }}">
+    <input type="hidden" name="garminPassword"   value="{{ s.garminPassword or '' }}">
+    <input type="hidden" name="garminSyncHours"  value="{{ s.garminSyncHours  if s and s.garminSyncHours else 0.5 }}">
+    <input type="hidden" name="garminSyncMode"   value="{{ s.garminSyncMode   if s and s.garminSyncMode   else 'health' }}">
+
+    <div style="display:flex; gap:0.75rem; margin-top:1.25rem; align-items:center; flex-wrap:wrap;">
+      <button type="submit" class="btn btn-primary">Save</button>
+      <button type="button" class="btn btn-secondary" id="mqttTestBtn" onclick="testSetting('mqtt', this)">Test connection</button>
+      <button type="button" class="btn btn-secondary" onclick="mqttPublish()" id="mqttBtn">Publish to HA</button>
+      <span id="mqttStatus" style="font-size:0.8125rem; color:var(--text-muted);"></span>
+    </div>
+  </form>
+
+  <!-- Garmin Connect -->
+  <div>
+
+    <!-- Garmin Connect -->
+    <form method="POST" class="card">
+      <div class="card-title">Garmin Connect</div>
+      <p style="color:var(--text-muted); font-size:0.875rem; margin-bottom:1rem; line-height:1.6;">
+        Pulls resting HR, HRV, sleep score, and body battery from Garmin Connect for richer AI coaching context.
+      </p>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+        <div class="form-group" style="margin:0;">
+          <label>Garmin Email</label>
+          <input type="email" name="garminEmail"
+                 value="{{ s.garminEmail if s and s.garminEmail else '' }}"
+                 placeholder="you@example.com">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Password</label>
+          <input type="password" name="garminPassword"
+                 value="{{ s.garminPassword if s and s.garminPassword else '' }}"
+                 placeholder="••••••••">
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-top:1rem;">
+        <div class="form-group" style="margin:0;">
+          <label>Garmin use</label>
+          <select name="garminSyncMode" id="garminSyncMode" onchange="updateGarminMode(this.value)">
+            <option value="health" {% if not s or not s.garminSyncMode or s.garminSyncMode == 'health' %}selected{% endif %}>Health stats only (HRV, sleep, HR)</option>
+            <option value="full"   {% if s and s.garminSyncMode == 'full' %}selected{% endif %}>Rides + health stats</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Sync every (hours)</label>
+          <input type="number" name="garminSyncHours" min="0.25" max="24" step="0.25"
+                 value="{{ s.garminSyncHours if s and s.garminSyncHours else 0.5 }}"
+                 placeholder="0.5">
+        </div>
+      </div>
+
+      <input type="hidden" name="aiProvider"       value="{{ s.aiProvider or 'openai' }}">
+      <input type="hidden" name="openaiKey"        value="{{ s.openaiKey or '' }}">
+      <input type="hidden" name="openaiModel"      value="{{ s.openaiModel or 'gpt-4o' }}">
+      <input type="hidden" name="ollamaUrl"        value="{{ s.ollamaUrl or '' }}">
+      <input type="hidden" name="ollamaModel"      value="{{ s.ollamaModel or '' }}">
+      <input type="hidden" name="mqttHost"         value="{{ s.mqttHost or '' }}">
+      <input type="hidden" name="mqttPort"         value="{{ s.mqttPort         if s else 1883 }}">
+      <input type="hidden" name="mqttUser"         value="{{ s.mqttUser or '' }}">
+      <input type="hidden" name="mqttPassword"     value="{{ s.mqttPassword or '' }}">
+
+      <div style="display:flex; gap:0.75rem; margin-top:1.25rem; align-items:center; flex-wrap:wrap;">
+        <button type="submit" class="btn btn-primary">Save</button>
+        <button type="button" class="btn btn-secondary" onclick="garminConnect()" id="garminConnectBtn">
+          {{ 'Reconnect' if s and s.garminEmail else 'Connect' }}
+        </button>
+        <button type="button" class="btn btn-secondary" onclick="garminSync()" id="garminBtn"
+                {% if not s or not s.garminEmail %}disabled{% endif %}>Sync Recovery</button>
+        <button type="button" class="btn btn-secondary" onclick="garminActivitySync()" id="garminActivityBtn"
+                style="display:{% if s and s.garminSyncMode == 'full' %}inline-flex{% else %}none{% endif %};"
+                {% if not s or not s.garminEmail %}disabled{% endif %}>Sync Rides</button>
+        <span id="garminStatus" style="font-size:0.8125rem; color:var(--text-muted);"></span>
+      </div>
+      <div id="garminConnectStatus" style="margin-top:0.6rem; font-size:0.8125rem; display:none; padding:0.5rem 0.75rem; border-radius:8px;"></div>
+      <div id="garminMfaBox" style="display:none; margin-top:0.6rem; gap:0.5rem;">
+        <input type="text" id="garminMfaCode" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code"
+               style="background:#0f2535; color:var(--text); border:1px solid var(--border); border-radius:6px; padding:0.45rem 0.7rem; width:140px;">
+        <button type="button" class="btn btn-secondary" onclick="garminVerifyMfa()">Verify code</button>
+      </div>
+      <div id="garminActivityStatus" style="margin-top:0.5rem; font-size:0.8125rem; color:var(--text-muted); display:none;"></div>
+    </form>
+
+  </div>
+
+  <!-- Weather Backfill + Backup side by side -->
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; align-items:start;">
+
+    <!-- Weather Backfill -->
+    <div class="card">
+      <div class="card-title">Weather Backfill</div>
+      <p style="color:var(--text-muted); font-size:0.875rem; margin-bottom:1rem; line-height:1.6;">
+        Fetch weather data for all historical rides that are missing it.
+        Runs in batches automatically — click once and let it finish.
+      </p>
+      <div style="display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap;">
+        <button class="btn btn-secondary" onclick="weatherBackfill()" id="backfillBtn">Backfill All Weather</button>
+        <span id="backfillStatus" style="font-size:0.8125rem; color:var(--text-muted);"></span>
+      </div>
+    </div>
+
+    <!-- Backup & Restore -->
+    <div class="card">
+      <div class="card-title">Backup &amp; Restore</div>
+      <p style="color:var(--text-muted); font-size:0.875rem; margin-bottom:1rem; line-height:1.6;">
+        Export a full backup — all rides, segments, settings, avatars, and rider data.
+        Use to migrate to a new machine or restore after a problem.
+      </p>
+      <div style="display:flex; gap:0.75rem; align-items:flex-start; flex-wrap:wrap;">
+        <div>
+          <a href="/settings/backup/export" class="btn btn-secondary">Download Backup</a>
+          <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.4rem;">Downloads a <code>.zip</code> (db + avatars)</div>
+        </div>
+        <div>
+          <form method="POST" action="/settings/backup/import" enctype="multipart/form-data" id="importForm" style="display:flex; flex-direction:column; gap:0.4rem;">
+            <label class="btn btn-secondary" style="cursor:pointer; margin:0;">
+              Restore Backup
+              <input type="file" name="backup" accept=".zip,.db" style="display:none;" onchange="document.getElementById('importForm').submit()">
+            </label>
+            <div style="font-size:0.75rem; color:var(--text-muted);">Replaces current data — back up first</div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Setup Guide -->
+  <div class="card">
+    <div class="card-title">Setup Guide</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:2rem;">
+      <div>
+        <div style="font-size:0.6875rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--accent); font-weight:600; margin-bottom:0.5rem;">Home Assistant / MQTT</div>
+        <p style="color:var(--text-muted); font-size:0.8125rem; line-height:1.6; margin:0 0 1.25rem;">
+          Enter broker details above. Sensors publish every 20 seconds and after every sync.
+          Set the <strong style="color:var(--text);">HA Device</strong> on each rider's profile for per-rider push notifications.
+        </p>
+
+        <div style="font-size:0.6875rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--accent); font-weight:600; margin-bottom:0.5rem;">Garmin Connect</div>
+        <p style="color:var(--text-muted); font-size:0.8125rem; line-height:1.6; margin:0;">
+          Enter credentials above and click <strong style="color:var(--text);">Connect</strong> — if your account uses 2-step
+          verification you'll be asked for the code right there, no command line needed. Recovery data syncs automatically
+          every few hours after that.
+        </p>
+      </div>
+      <div>
+        <div style="font-size:0.6875rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--accent); font-weight:600; margin-bottom:0.5rem;">Environment Variables</div>
+        <div style="background:#0a1e2e; border:1px solid var(--border); border-radius:8px; padding:0.9rem 1rem; font-size:0.8125rem; font-family:monospace; line-height:2;">
+          <div><span style="color:var(--accent);">DATABASE_URL</span>=<span style="color:var(--text-muted);">/data/bike.db</span></div>
+          <div><span style="color:var(--accent);">SECRET_KEY</span>=<span style="color:var(--text-muted);">your-random-secret</span></div>
+          <div><span style="color:var(--accent);">APP_USERNAME</span>=<span style="color:var(--text-muted);">admin</span></div>
+          <div><span style="color:var(--accent);">APP_PASSWORD</span>=<span style="color:var(--text-muted);">your-password</span></div>
+          <div><span style="color:var(--accent);">APP_URL</span>=<span style="color:var(--text-muted);">https://headwind.yourdomain.com</span></div>
+          <div><span style="color:var(--accent);">OPENAI_API_KEY</span>=<span style="color:var(--text-muted);">(optional — for AI coaching)</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- About -->
+  <div class="card">
+    <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.75rem;">
+      <img src="{{ url_for('static', filename='logo.png') }}" alt="" style="width:36px; height:36px; border-radius:9px; flex-shrink:0;">
+      <div>
+        <div style="font-weight:700; font-size:1rem; color:var(--text);">Headwind</div>
+        <div style="font-size:0.75rem; color:var(--text-muted);">Self-hosted, private cycling analytics</div>
+      </div>
+    </div>
+    <p style="color:var(--text-muted); font-size:0.8125rem; line-height:1.6; margin:0 0 0.75rem;">
+      Your rides, your data — stored locally on your own hardware.
+      Syncs from Garmin Connect and the Headwind phone app, supports FIT/GPX/Strava-export imports,
+      and runs entirely on your network.
+    </p>
+
+    <!-- Version / update check -->
+    <div style="background:var(--surface2,#0d2135); border:1px solid #1e4060; border-radius:8px;
+                padding:0.65rem 0.9rem; margin-bottom:0.75rem; display:flex; align-items:center;
+                gap:0.75rem; flex-wrap:wrap;">
+      <div style="flex:1; min-width:0;">
+        <div style="display:flex; align-items:baseline; gap:0.6rem; margin-bottom:0.15rem;">
+          <span style="font-weight:700; font-size:0.95rem; color:var(--text);">v{{ app_version }}</span>
+          <span style="font-size:0.75rem; color:var(--text-muted);">
+            {{ '· built ' + build_time if build_time else '· dev build' }}
+          </span>
+        </div>
+        <code id="build-time-display" style="display:none;">{{ build_time if build_time else '' }}</code>
+      </div>
+      <div style="display:flex; align-items:center; gap:0.5rem;">
+        <span id="update-badge" style="display:none; font-size:0.75rem; font-weight:600;
+              border-radius:999px; padding:0.2rem 0.6rem; white-space:nowrap;"></span>
+        <button onclick="checkForUpdate()" id="update-btn"
+                style="font-size:0.8rem; padding:0.3rem 0.65rem;" class="btn btn-secondary">Check for update</button>
+      </div>
+    </div>
+
+    <a href="{{ url_for('about.index') }}" class="btn btn-secondary" style="font-size:0.8125rem;">View full feature list</a>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function checkForUpdate() {
+  var btn      = document.getElementById('update-btn');
+  var badge    = document.getElementById('update-badge');
+  var localRaw = document.getElementById('build-time-display').textContent.trim();
+  var localDate = new Date(localRaw);
+  var hasLocal  = !isNaN(localDate);
+  btn.textContent = 'Checking…';
+  btn.disabled = true;
+  badge.style.display = 'none';
+
+  fetch('/settings/version-check')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      btn.textContent = 'Check for update';
+      btn.disabled = false;
+      var hubDate = new Date(data.last_updated);
+      if (isNaN(hubDate)) {
+        badge.textContent = 'Could not read Hub';
+        badge.style.background = 'rgba(100,100,100,0.15)';
+        badge.style.color = 'var(--text-muted)';
+      } else if (!hasLocal) {
+        // Dev instance — just show when Hub was last updated
+        var d = hubDate;
+        var label = d.toISOString().slice(0,16).replace('T',' ') + ' UTC';
+        badge.textContent = 'Latest Docker: ' + label;
+        badge.style.background = 'rgba(100,100,100,0.15)';
+        badge.style.color = 'var(--text-muted)';
+      } else {
+        var diffMins = (hubDate - localDate) / 60000;
+        if (diffMins > 60) {
+          badge.textContent = 'Update available';
+          badge.style.background = 'rgba(251,146,60,0.15)';
+          badge.style.color = '#fb923c';
+        } else {
+          badge.textContent = 'Up to date';
+          badge.style.background = 'rgba(34,197,94,0.12)';
+          badge.style.color = '#4ade80';
+        }
+      }
+      badge.style.display = 'inline-block';
+    })
+    .catch(function() {
+      btn.textContent = 'Check for update';
+      btn.disabled = false;
+      badge.textContent = 'Check failed';
+      badge.style.background = 'rgba(100,100,100,0.15)';
+      badge.style.color = 'var(--text-muted)';
+      badge.style.display = 'inline-block';
+    });
+}
+
+function updateProvider() {
+  var p = document.getElementById('providerSelect').value;
+  document.getElementById('openaiFields').style.display = p === 'openai' ? 'contents' : 'none';
+  document.getElementById('ollamaFields').style.display = p === 'ollama' ? 'block' : 'none';
+}
+updateProvider();
+
+// Tests whatever is typed in the form this button sits in — no need to save first
+function testSetting(kind, btn) {
+  var status = document.getElementById(kind + (kind === 'ai' ? 'TestStatus' : 'Status'));
+  btn.disabled = true;
+  status.style.color = 'var(--text-muted)';
+  status.textContent = 'Testing…';
+  fetch('/settings/test-' + kind, { method: 'POST', body: new FormData(btn.closest('form')) })
+    .then(r => r.json())
+    .then(d => {
+      if (d.error) {
+        status.textContent = '✗ ' + d.error;
+        status.style.color = 'var(--danger)';
+      } else {
+        status.textContent = kind === 'ai' ? '✓ ' + d.model + ' responded in ' + d.ms + ' ms — now press Save to keep it' : '✓ Connected to broker — press Save to keep it';
+        status.style.color = 'var(--success)';
+      }
+    })
+    .catch(() => { status.textContent = '✗ Request failed'; status.style.color = 'var(--danger)'; })
+    .finally(() => { btn.disabled = false; });
+}
+
+function mqttPublish() {
+  var btn = document.getElementById('mqttBtn');
+  var status = document.getElementById('mqttStatus');
+  btn.disabled = true;
+  status.textContent = 'Publishing…';
+  status.style.color = 'var(--text-muted)';
+  fetch('/mqtt/publish', { method: 'POST' })
+    .then(r => r.json())
+    .then(d => {
+      if (d.error) {
+        status.textContent = 'Error: ' + d.error;
+        status.style.color = 'var(--danger)';
+      } else {
+        status.textContent = '✓ ' + d.sensors + ' sensors published';
+        status.style.color = 'var(--success)';
+      }
+      btn.disabled = false;
+    })
+    .catch(() => {
+      status.textContent = 'Request failed';
+      status.style.color = 'var(--danger)';
+      btn.disabled = false;
+    });
+}
+
+function weatherBackfill() {
+  var btn = document.getElementById('backfillBtn');
+  var status = document.getElementById('backfillStatus');
+  btn.disabled = true;
+  status.textContent = 'Starting…';
+  status.style.color = 'var(--text-muted)';
+
+  function poll() {
+    fetch('/settings/weather-backfill', { method: 'POST' })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.error) {
+          status.textContent = 'Error: ' + d.error;
+          status.style.color = 'var(--danger)';
+          btn.disabled = false;
+          return;
+        }
+        if (d.remaining > 0) {
+          status.textContent = 'Running… ' + d.done + ' done, ' + d.remaining + ' remaining';
+          setTimeout(poll, 2000);
+        } else {
+          status.textContent = '✓ All done — ' + d.done + ' updated' + (d.failed ? ', ' + d.failed + ' failed' : '');
+          status.style.color = 'var(--success)';
+          btn.disabled = false;
+        }
+      })
+      .catch(function() {
+        status.textContent = 'Backfill running in background — refresh to check progress';
+        status.style.color = 'var(--text-muted)';
+        btn.disabled = false;
+      });
+  }
+  poll();
+}
+
+function garminSync() {
+  var btn = document.getElementById('garminBtn');
+  var status = document.getElementById('garminStatus');
+  btn.disabled = true;
+  status.textContent = 'Syncing…';
+  status.style.color = 'var(--text-muted)';
+  fetch('/garmin/sync', { method: 'POST' })
+    .then(r => r.json())
+    .then(d => {
+      if (d.error) {
+        status.textContent = 'Error: ' + d.error;
+        status.style.color = 'var(--danger)';
+      } else {
+        status.textContent = '✓ Synced ' + d.synced + ' days';
+        status.style.color = 'var(--success)';
+      }
+      btn.disabled = false;
+    })
+    .catch(() => {
+      status.textContent = 'Request failed';
+      status.style.color = 'var(--danger)';
+      btn.disabled = false;
+    });
+}
+
+var garminMfaToken = null;
+
+function garminConnectStatusEl() { return document.getElementById('garminConnectStatus'); }
+function showGarminConnectStatus(kind, text) {
+  var el = garminConnectStatusEl();
+  var colors = {ok: 'var(--success)', error: 'var(--danger)', pending: 'var(--warning)'};
+  var bg = {ok: '#0a1e14', error: '#1a0a0a', pending: '#1a1508'};
+  el.style.display = 'block';
+  el.style.color = colors[kind];
+  el.style.background = bg[kind];
+  el.style.border = '1px solid ' + colors[kind];
+  el.textContent = text;
+}
+
+function garminConnect() {
+  var form = document.getElementById('garminConnectBtn').closest('form');
+  var email = form.querySelector('input[name="garminEmail"]').value.trim();
+  var password = form.querySelector('input[name="garminPassword"]').value;
+  if (!email || !password) {
+    showGarminConnectStatus('error', 'Enter your Garmin email and password first.');
+    return;
+  }
+  var btn = document.getElementById('garminConnectBtn');
+  btn.disabled = true;
+  showGarminConnectStatus('pending', 'Connecting to Garmin…');
+  fetch('/garmin/connect', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({email: email, password: password}),
+  })
+  .then(r => r.json())
+  .then(data => {
+    btn.disabled = false;
+    if (data.error) {
+      showGarminConnectStatus('error', data.error);
+      return;
+    }
+    if (data.needs_mfa) {
+      garminMfaToken = data.token;
+      var box = document.getElementById('garminMfaBox');
+      box.style.display = 'flex';
+      box.style.alignItems = 'center';
+      showGarminConnectStatus('pending', 'Garmin needs a verification code — check your phone or email.');
+      document.getElementById('garminMfaCode').focus();
+      return;
+    }
+    if (data.ok) {
+      showGarminConnectStatus('ok', 'Garmin connected — reloading…');
+      setTimeout(() => location.reload(), 800);
+    }
+  })
+  .catch(() => {
+    btn.disabled = false;
+    showGarminConnectStatus('error', 'Could not reach the server — check your connection and try again.');
+  });
+}
+
+function garminVerifyMfa() {
+  var code = document.getElementById('garminMfaCode').value.trim();
+  if (!code || !garminMfaToken) return;
+  showGarminConnectStatus('pending', 'Verifying…');
+  fetch('/garmin/connect/mfa', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({token: garminMfaToken, code: code}),
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.error) {
+      showGarminConnectStatus('error', data.error + ' — check the code and try again.');
+      return;
+    }
+    if (data.ok) {
+      document.getElementById('garminMfaBox').style.display = 'none';
+      showGarminConnectStatus('ok', 'Garmin connected — reloading…');
+      setTimeout(() => location.reload(), 800);
+    }
+  })
+  .catch(() => {
+    showGarminConnectStatus('error', 'Could not reach the server — check your connection and try again.');
+  });
+}
+
+function updateGarminMode(mode) {
+  var actBtn = document.getElementById('garminActivityBtn');
+  if (actBtn) actBtn.style.display = mode === 'full' ? 'inline-flex' : 'none';
+}
+
+
+function garminActivitySync() {
+  var btn    = document.getElementById('garminActivityBtn');
+  var status = document.getElementById('garminActivityStatus');
+  btn.disabled = true;
+  status.style.display = 'block';
+  status.style.color   = 'var(--text-muted)';
+  status.textContent   = 'Connecting to Garmin…';
+
+  var es = new EventSource('/garmin/sync-activities');
+  es.onmessage = function(e) {
+    var d = JSON.parse(e.data);
+    if (d.error) {
+      status.textContent = 'Error: ' + d.error;
+      status.style.color = 'var(--danger)';
+      btn.disabled = false;
+      es.close();
+    } else if (d.done) {
+      status.textContent = '✓ Imported ' + d.imported + ' rides' + (d.skipped ? ', ' + d.skipped + ' skipped' : '');
+      status.style.color = 'var(--success)';
+      btn.disabled = false;
+      es.close();
+    } else if (d.msg) {
+      status.textContent = d.msg;
+    } else if (d.imported !== undefined) {
+      status.textContent = 'Importing… ' + d.imported + ' done, ' + d.skipped + ' skipped';
+    }
+  };
+  es.onerror = function() {
+    if (es.readyState === EventSource.CLOSED) return;
+    status.textContent = 'Connection lost';
+    status.style.color = 'var(--danger)';
+    btn.disabled = false;
+    es.close();
+  };
+}
+
+</script>
+{% endblock %}

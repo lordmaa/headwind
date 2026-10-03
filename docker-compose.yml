@@ -1,0 +1,20 @@
+services:
+  headwind:
+    image: lordmerchant99/headwind:latest
+    container_name: headwind
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./data:/data
+      - ./garmin_tokens:/app/.garmin_tokens
+    environment:
+      - DATABASE_URL=/data/bike.db
+      # Compose fills these from a .env next to this file. Leave them blank and Headwind generates a random
+      # signing key and a first-login password (printed once in `docker logs headwind`), kept in ./data.
+      - SECRET_KEY=${SECRET_KEY:-}
+      - APP_USERNAME=${APP_USERNAME:-admin}
+      - APP_PASSWORD=${APP_PASSWORD:-}
+      - APP_URL=http://localhost:5001
+      - OPENAI_API_KEY=
+      # - TELEMETRY=off   # skip the one-time anonymous install ping entirely (also opt-out-able in the setup wizard)
+    restart: unless-stopped

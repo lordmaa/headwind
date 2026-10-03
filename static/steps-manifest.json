@@ -1,0 +1,14 @@
+{
+  "name": "Headwind Steps",
+  "short_name": "Steps",
+  "description": "Log today's steps in one tap",
+  "start_url": "/nutrition/steps",
+  "scope": "/nutrition/",
+  "display": "standalone",
+  "background_color": "#0d1b2a",
+  "theme_color": "#0d1b2a",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/static/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

@@ -1,0 +1,228 @@
+{% extends 'base.html' %}
+
+{% block title %}Weekly Nutrition{% endblock %}
+
+{% block head %}
+<style>
+  .week-nav { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; }
+  .week-nav button { background: var(--card-bg); border: 1px solid var(--border); color: var(--accent); padding: 0.5rem 1rem; cursor: pointer; border-radius: 3px; }
+  .week-nav button:hover { background: var(--border); }
+  .week-label { color: var(--text-muted); font-size: 0.9rem; min-width: 150px; text-align: center; }
+  .week-summary { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1rem; margin-bottom: 2rem; }
+  @media (max-width: 768px) { .week-summary { grid-template-columns: 1fr 1fr; } }
+  .summary-card { background: var(--card-bg); border: 1px solid var(--border); padding: 1rem; border-radius: 3px; }
+  .summary-label { color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.5rem; }
+  .summary-value { font-size: 1.5rem; font-weight: bold; color: white; }
+  .summary-value.deficit { color: var(--success); }
+  .summary-value.surplus { color: var(--danger); }
+  .week-table { margin: 2rem 0; background: var(--card-bg); border: 1px solid var(--border); border-radius: 3px; overflow: hidden; }
+  .week-table table { width: 100%; border-collapse: collapse; }
+  .week-table th { background: var(--border); color: var(--text-muted); padding: 0.75rem; text-align: left; font-weight: 600; font-size: 0.75rem; }
+  .week-table td { padding: 0.75rem; border-bottom: 1px solid var(--border); }
+  .week-table tr.totals td { font-weight: bold; background: var(--border); }
+  .week-table .no-data { opacity: 0.5; }
+  .badge { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 3px; font-size: 0.75rem; font-weight: bold; }
+  .badge.deficit { background: var(--success); color: white; }
+  .badge.surplus { background: var(--danger); color: white; }
+  .badge.neutral { background: var(--border); color: var(--text-muted); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+  <h1>Weekly Nutrition</h1>
+
+  <!-- Week Navigation -->
+  <div class="week-nav">
+    <button onclick="prevWeek()">← Prev</button>
+    <div class="week-label" id="weekLabel">Loading...</div>
+    <button onclick="nextWeek()">Next →</button>
+    <button onclick="thisWeek()" style="margin-left: auto;">This Week</button>
+  </div>
+
+  <!-- Summary Cards -->
+  <div class="week-summary">
+    <div class="summary-card">
+      <div class="summary-label">Total Eaten</div>
+      <div class="summary-value" id="summaryEaten">—</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">Total Burned (est.)</div>
+      <div class="summary-value" id="summaryBurned">—</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">Net (rough)</div>
+      <div class="summary-value" id="summaryNet">—</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">Protein</div>
+      <div class="summary-value" id="summaryProtein" style="font-size: 1rem;">—</div>
+      <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;" id="proteinTarget">—</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">Carbs</div>
+      <div class="summary-value" id="summaryCarbsVal" style="font-size: 1rem;">—</div>
+      <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;" id="carbsTarget">—</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">Fat</div>
+      <div class="summary-value" id="summaryFatVal" style="font-size: 1rem;">—</div>
+      <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;" id="fatTarget">—</div>
+    </div>
+  </div>
+
+  <!-- Day-by-Day Table -->
+  <div class="week-table">
+    <table>
+      <thead>
+        <tr>
+          <th>Day</th>
+          <th>Eaten</th>
+          <th>Burned</th>
+          <th>Net</th>
+          <th>Protein</th>
+          <th>Carbs</th>
+          <th>Fat</th>
+          <th>Water</th>
+        </tr>
+      </thead>
+      <tbody id="weekTableBody">
+        <tr><td colspan="8" style="text-align: center; color: var(--text-muted);">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  let currentDate = new Date();
+
+  function isoDate(d) {
+    return d.toISOString().split('T')[0];
+  }
+
+  function mondayOf(d) {
+    const m = new Date(d);
+    m.setDate(d.getDate() - d.getDay() + 1);
+    return m;
+  }
+
+  function fmtDate(iso) {
+    const [y, m, d] = iso.split('-').map(Number);
+    const date = new Date(y, m - 1, d);
+    return date.toLocaleDateString('en-GB', { month: 'short', day: 'numeric' });
+  }
+
+  async function loadWeek() {
+    const monday = mondayOf(currentDate);
+    const dateStr = isoDate(monday);
+
+    const r = await fetch(`/nutrition/api/week/${dateStr}`);
+    if (!r.ok) {
+      document.getElementById('weekLabel').textContent = 'Error loading data';
+      return;
+    }
+
+    const data = await r.json();
+    const days = data.days;
+    const totals = data.totals;
+    const goals = data.goals || {};
+
+    // Week label
+    const weekEnd = new Date(monday);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    const label = `w/c ${fmtDate(data.week_start)}`;
+    document.getElementById('weekLabel').textContent = label;
+
+    // Summary cards
+    document.getElementById('summaryEaten').textContent = `${totals.eaten} kcal`;
+    document.getElementById('summaryBurned').textContent = totals.burned ? `${totals.burned} kcal` : '—';
+    if (totals.net !== null) {
+      const netVal = Math.abs(totals.net);
+      const isDeficit = totals.net < 0;
+      document.getElementById('summaryNet').textContent = `${isDeficit ? '−' : '+'}${netVal} kcal`;
+      document.getElementById('summaryNet').className = `summary-value ${isDeficit ? 'deficit' : 'surplus'}`;
+    } else {
+      document.getElementById('summaryNet').textContent = '—';
+    }
+    const totalProtein = totals.protein.toFixed(0);
+    const totalCarbs = totals.carbs.toFixed(0);
+    const totalFat = totals.fat.toFixed(0);
+
+    document.getElementById('summaryProtein').textContent = `${totalProtein}g`;
+    document.getElementById('summaryCarbsVal').textContent = `${totalCarbs}g`;
+    document.getElementById('summaryFatVal').textContent = `${totalFat}g`;
+
+    const proteinTarget = goals.protein ? (goals.protein * 7).toFixed(0) : null;
+    const carbsTarget = goals.carbs ? (goals.carbs * 7).toFixed(0) : null;
+    const fatTarget = goals.fat ? (goals.fat * 7).toFixed(0) : null;
+
+    document.getElementById('proteinTarget').textContent = proteinTarget ? `target ${proteinTarget}g` : '';
+    document.getElementById('carbsTarget').textContent = carbsTarget ? `target ${carbsTarget}g` : '';
+    document.getElementById('fatTarget').textContent = fatTarget ? `target ${fatTarget}g` : '';
+
+    // Table
+    const tbody = document.getElementById('weekTableBody');
+    tbody.innerHTML = days.map(d => {
+      const netClass = d.net === null ? 'neutral' : (d.net < 0 ? 'deficit' : 'surplus');
+      const netVal = d.net === null ? '—' : `${d.net < 0 ? '−' : '+'}${Math.abs(d.net)}`;
+      const rowClass = d.has_data ? '' : 'no-data';
+      const actIcon = d.has_activity ? ' 🚴' : '';
+      return `
+        <tr class="${rowClass}">
+          <td>${d.dow} ${fmtDate(d.date)}${actIcon}</td>
+          <td>${d.eaten}</td>
+          <td>${d.burned || '—'}</td>
+          <td><span class="badge ${netClass}">${netVal}</span></td>
+          <td>${d.protein.toFixed(0)}g</td>
+          <td>${d.carbs.toFixed(0)}g</td>
+          <td>${d.fat.toFixed(0)}g</td>
+          <td>${d.water_ml}ml</td>
+        </tr>
+      `;
+    }).join('');
+
+    // Totals row
+    const totalsNet = totals.net === null ? '—' : `${totals.net < 0 ? '−' : '+'}${Math.abs(totals.net)}`;
+    const netClass = totals.net === null ? 'neutral' : (totals.net < 0 ? 'deficit' : 'surplus');
+    tbody.innerHTML += `
+      <tr class="totals">
+        <td>Total</td>
+        <td>${totals.eaten}</td>
+        <td>${totals.burned}</td>
+        <td><span class="badge ${netClass}">${totalsNet}</span></td>
+        <td>${totals.protein.toFixed(0)}g</td>
+        <td>${totals.carbs.toFixed(0)}g</td>
+        <td>${totals.fat.toFixed(0)}g</td>
+        <td>${totals.water_ml}ml</td>
+      </tr>
+      <tr class="totals" style="opacity: 0.6; font-size: 0.85rem;">
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td>${proteinTarget ? `target ${proteinTarget}g` : ''}</td>
+        <td>${carbsTarget ? `target ${carbsTarget}g` : ''}</td>
+        <td>${fatTarget ? `target ${fatTarget}g` : ''}</td>
+        <td></td>
+      </tr>
+    `;
+  }
+
+  function prevWeek() {
+    currentDate.setDate(currentDate.getDate() - 7);
+    loadWeek();
+  }
+
+  function nextWeek() {
+    currentDate.setDate(currentDate.getDate() + 7);
+    loadWeek();
+  }
+
+  function thisWeek() {
+    currentDate = new Date();
+    loadWeek();
+  }
+
+  document.addEventListener('DOMContentLoaded', loadWeek);
+</script>
+{% endblock %}

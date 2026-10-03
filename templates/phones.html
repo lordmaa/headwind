@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+{% block title %}Phones{% endblock %}
+{% block page_title %}Phones{% endblock %}
+{% block head %}
+<style>
+  .ph-card { background:var(--card-bg); border:1px solid var(--border); border-radius:14px; padding:1rem; margin-bottom:1rem; }
+  .ph-form { display:flex; gap:0.5rem; flex-wrap:wrap; align-items:end; }
+  .ph-form .form-group { flex:1; min-width:180px; margin:0; }
+  .ph-form input { width:100%; font-size:16px; min-height:44px; }
+  .ph-row { display:flex; align-items:center; justify-content:space-between; gap:0.5rem; padding:0.6rem 0; border-top:1px solid var(--border); font-size:0.9rem; }
+  .ph-row small { color:var(--text-muted); display:block; }
+  #phResult { display:none; text-align:center; }
+  #phResult img { width:220px; height:220px; background:#fff; padding:6px; border-radius:10px; }
+  #phResult code { display:block; word-break:break-all; font-size:0.72rem; background:var(--border); padding:0.5rem; border-radius:6px; margin-top:0.5rem; text-align:left; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="ph-card">
+  <div style="font-weight:600;margin-bottom:0.3rem">Get the Android app</div>
+  <a class="btn btn-secondary" href="/phones/app" style="min-height:44px;display:inline-flex;align-items:center">Download &amp; install instructions</a>
+</div>
+<div class="ph-card">
+  <div style="font-weight:600;margin-bottom:0.6rem">Pair a phone</div>
+  <div class="ph-form">
+    <div class="form-group"><label>Name</label><input id="phName" placeholder="e.g. Pixel 10" value="Phone"></div>
+    <div class="form-group"><label>Server address the phone will use</label><input id="phUrl" value="{{ default_url }}" placeholder="https://your-headwind-address"></div>
+    <button class="btn btn-primary" id="phGo" style="min-height:44px">Create token</button>
+  </div>
+  {% if not default_url %}<p style="font-size:0.85rem;color:var(--danger);margin:0.6rem 0 0">⚠ This Headwind has no https address configured (APP_URL is not https). Type the address you reach it on through your reverse proxy above; a plain <code>http://192.168…</code> address will not work in the app.</p>{% endif %}
+  <p style="font-size:0.78rem;color:var(--text-muted);margin:0.5rem 0 0">Use the <b>https://</b> address you reach Headwind on from outside the house (your reverse proxy), not the LAN IP, so the app also works away from home. The token is shown once; lose it and just make a new one.</p>
+  <div id="phResult" style="margin-top:1rem">
+    <img id="phQr" alt="pairing QR code">
+    <p style="font-size:0.85rem;margin:0.5rem 0 0">Scan this in the Headwind app — or paste the link:</p>
+    <code id="phLink"></code>
+  </div>
+</div>
+<div class="ph-card">
+  <div style="font-weight:600;margin-bottom:0.3rem">Paired phones</div>
+  {% if not devices %}<p style="color:var(--text-muted);font-size:0.9rem">None yet.</p>{% endif %}
+  {% for d in devices %}
+  <div class="ph-row"><div>{{ d.name }}{% if d.revokedAt %} <span style="color:var(--danger)">(revoked)</span>{% endif %}
+    <small>added {{ d.createdAt[:10] | fmt_date }} · {{ ('last used ' ~ d.lastUsedAt[:16]) if d.lastUsedAt else 'never used' }}</small></div>
+    {% if not d.revokedAt %}<button class="btn btn-secondary" onclick="revoke({{ d.id }})">Revoke</button>{% endif %}</div>
+  {% endfor %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById('phGo').addEventListener('click', async () => {
+  const r = await fetch('/phones/create', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({name: document.getElementById('phName').value, server_url: document.getElementById('phUrl').value})});
+  const j = await r.json();
+  if (!r.ok) { alert(j.error || 'Could not create token'); return; }
+  document.getElementById('phQr').src = j.qr; document.getElementById('phLink').textContent = j.link;
+  document.getElementById('phResult').style.display = 'block';
+});
+async function revoke(id) { if (!confirm('Revoke this phone? The app on it will stop working.')) return; await fetch('/phones/' + id + '/revoke', {method:'POST'}); location.reload(); }
+</script>
+{% endblock %}

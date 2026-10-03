@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% block title %}Workouts{% endblock %}
+{% block page_title %}Workouts{% endblock %}
+{% block head %}
+<style>
+  .wo-row { display:flex; align-items:center; gap:0.8rem; padding:0.7rem 0; border-top:1px solid var(--border); }
+  .wo-ico { font-size:1.6rem; width:2rem; text-align:center; }
+  .wo-main { flex:1; min-width:0; }
+  .wo-main b { display:block; }
+  .wo-main small { color:var(--text-muted); }
+  .wo-num { text-align:right; font-variant-numeric:tabular-nums; font-weight:700; }
+  .wo-num small { display:block; font-weight:400; color:var(--text-muted); }
+</style>
+{% endblock %}
+{% block content %}
+<div style="background:var(--card-bg);border:1px solid var(--border);border-radius:14px;padding:1rem;">
+  <p style="color:var(--text-muted);font-size:0.85rem;margin-top:0">Walks and runs recorded by the Headwind phone app (last 90 days). Rides live on the dashboard; workouts are kept separate so they never change your ride stats. Their calories count toward the day's burn.</p>
+  {% if not workouts %}
+    <p style="color:var(--text-muted)">Nothing recorded yet. Pair a phone under <a href="/phones/">Phones</a> and record a walk.</p>
+  {% endif %}
+  {% for w in workouts %}
+    {% set mi = (w.distance or 0) / 1609.344 %}
+    {% set secs = w.movingTime or 0 %}
+    <div class="wo-row">
+      <div class="wo-ico">{{ '🏃' if w.sport == 'Run' else ('🥾' if w.sport == 'Hike' else '🚶') }}</div>
+      <div class="wo-main"><b>{{ w.name or w.sport }}</b><small>{{ w.startDateLocal[:10] | fmt_date }} · {{ w.startDateLocal[11:16] }}{% if w.weatherSummary %} · {{ w.weatherSummary }}{% endif %}</small></div>
+      <div class="wo-num">{{ '%.2f' | format(mi) }} mi<small>{{ (secs // 3600) ~ 'h ' if secs >= 3600 else '' }}{{ '%02d' | format((secs % 3600) // 60) if secs >= 3600 else ((secs // 60) ~ 'm') }}{% if w.calories %} · {{ w.calories | round | int }} kcal{% endif %}{% if w.steps %} · {{ '{:,}'.format(w.steps) }} steps{% endif %}</small></div>
+    </div>
+  {% endfor %}
+</div>
+{% endblock %}

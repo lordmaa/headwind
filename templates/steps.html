@@ -1,0 +1,98 @@
+{% extends 'base.html' %}
+{% block title %}Steps{% endblock %}
+{% block page_title %}Steps{% endblock %}
+
+{% block head %}
+<link rel="manifest" href="/static/steps-manifest.json">
+<meta name="theme-color" content="#0d1b2a">
+<style>
+  .st-card { background:var(--card-bg); border:1px solid var(--border); border-radius:14px; padding:1rem; margin-bottom:1rem; }
+  .st-today { display:flex; align-items:baseline; gap:0.5rem; }
+  .st-today b { font-size:2.4rem; font-weight:800; }
+  .st-bar { height:10px; background:var(--border); border-radius:6px; overflow:hidden; margin:0.6rem 0 0.25rem; }
+  .st-bar > div { height:100%; background:linear-gradient(90deg,#10b981,#6ee7b7); }
+  .st-form { display:flex; gap:0.5rem; flex-wrap:wrap; align-items:end; }
+  .st-form .form-group { flex:1; min-width:120px; margin:0; }
+  .st-form input { width:100%; font-size:16px; min-height:46px; }
+  .st-form button { min-height:46px; }
+  .st-row { display:flex; align-items:center; justify-content:space-between; gap:0.5rem; padding:0.55rem 0; border-top:1px solid var(--border); font-size:0.9rem; }
+  .st-row small { color:var(--text-muted); display:block; }
+  .st-num { font-weight:700; font-variant-numeric:tabular-nums; }
+  .st-hit { color:var(--success); }
+  .st-del { background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:1rem; padding:0.3rem 0.5rem; }
+  .st-msg { font-size:0.85rem; margin-top:0.5rem; min-height:1.2em; }
+  .st-chips { display:flex; gap:0.4rem; margin:0 0 0.6rem; }
+  .st-chip { background:var(--border); border:none; color:inherit; border-radius:99px; padding:0.35rem 0.8rem; font-size:0.82rem; cursor:pointer; }
+  .st-chip.on { background:var(--success); color:#062b1f; font-weight:700; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="st-card">
+  <div style="font-size:0.75rem;letter-spacing:.09em;text-transform:uppercase;color:var(--text-muted)">Today</div>
+  <div class="st-today"><b id="stToday">–</b><span style="color:var(--text-muted)">of <span id="stGoal">8,000</span> steps</span></div>
+  <div class="st-bar"><div id="stBar" style="width:0%"></div></div>
+  <div id="stSrc" style="font-size:0.78rem;color:var(--text-muted)"></div>
+</div>
+
+<div class="st-card">
+  <div style="font-weight:600;margin-bottom:0.6rem">Log steps</div>
+  <div class="st-chips"><button class="st-chip on" data-off="0">Today</button><button class="st-chip" data-off="1">Yesterday</button><button class="st-chip" data-off="2">2 days ago</button></div>
+  <div class="st-form">
+    <div class="form-group"><label>Date</label><input type="date" id="stDate"></div>
+    <div class="form-group"><label>Steps</label><input type="number" id="stSteps" inputmode="numeric" min="0" max="100000" placeholder="e.g. 8500"></div>
+    <button class="btn btn-primary" id="stSave">Save</button>
+  </div>
+  <div class="st-msg" id="stMsg"></div>
+  <p style="font-size:0.78rem;color:var(--text-muted);margin:0.5rem 0 0">Use this if you don't have a Garmin or your phone/watch isn't feeding Headwind. Each day uses the highest count from any source, so a manual entry never lowers a real one.</p>
+</div>
+
+<div class="st-card">
+  <div style="font-weight:600;margin-bottom:0.3rem">Last 3 weeks</div>
+  <div id="stList"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const fmt = n => (n == null ? '–' : Number(n).toLocaleString('en-GB'));
+const $ = id => document.getElementById(id);
+async function load() {
+  const d = await (await fetch('/nutrition/api/steps')).json();
+  $('stGoal').textContent = fmt(d.goal);
+  if (!$('stDate').value) $('stDate').value = d.today;
+  $('stDate').max = d.today;
+  const t = d.days[0];
+  $('stToday').textContent = fmt(t.best);
+  $('stBar').style.width = Math.min(100, t.best / d.goal * 100) + '%';
+  const srcs = [['manual','Manual'],['phone','Phone'],['watch','Watch'],['garmin','Garmin']].filter(([k]) => t[k] != null).map(([k, l]) => l + ' ' + fmt(t[k]));
+  $('stSrc').textContent = srcs.length ? srcs.join(' · ') : 'No steps logged today yet';
+  $('stList').innerHTML = d.days.map(x => {
+    const parts = [['manual','Manual'],['phone','Phone'],['watch','Watch'],['garmin','Garmin']].filter(([k]) => x[k] != null).map(([k, l]) => l + ' ' + fmt(x[k])).join(' · ');
+    const dt = new Date(x.date + 'T12:00:00').toLocaleDateString('en-GB', {weekday:'short', day:'numeric', month:'short'});
+    return `<div class="st-row"><div>${dt}<small>${parts || 'nothing logged'}</small></div>
+      <div style="display:flex;align-items:center;gap:0.4rem"><span class="st-num ${x.best >= d.goal ? 'st-hit' : ''}">${fmt(x.best || null)}${x.best >= d.goal ? ' ✓' : ''}</span>
+      ${x.manual != null ? `<button class="st-del" title="Remove my manual entry" onclick="del('${x.date}')">&#x1F5D1;</button>` : ''}</div></div>`;
+  }).join('');
+}
+async function save() {
+  const steps = $('stSteps').value;
+  if (steps === '') { $('stMsg').textContent = 'Enter a number of steps.'; return; }
+  const r = await fetch('/nutrition/api/steps', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({date: $('stDate').value, steps})});
+  const j = await r.json();
+  $('stMsg').style.color = r.ok ? 'var(--success)' : 'var(--danger)';
+  $('stMsg').textContent = r.ok ? 'Saved.' : (j.error || 'Could not save.');
+  if (r.ok) { $('stSteps').value = ''; load(); }
+}
+async function del(day) { await fetch('/nutrition/api/steps/' + day, {method:'DELETE'}); load(); }
+document.querySelectorAll('.st-chip').forEach(b => b.addEventListener('click', () => {
+  const t = new Date($('stDate').max + 'T12:00:00'); t.setDate(t.getDate() - Number(b.dataset.off));
+  $('stDate').value = t.toISOString().slice(0, 10);
+  document.querySelectorAll('.st-chip').forEach(x => x.classList.toggle('on', x === b));
+  $('stSteps').focus();
+}));
+$('stSave').addEventListener('click', save);
+$('stSteps').addEventListener('keydown', e => { if (e.key === 'Enter') save(); });
+load();
+</script>
+{% endblock %}

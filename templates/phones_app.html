@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% block title %}Android app{% endblock %}
+{% block page_title %}Android app{% endblock %}
+{% block content %}
+<div style="background:var(--card-bg);border:1px solid var(--border);border-radius:14px;padding:1rem;margin-bottom:1rem">
+  <div style="font-weight:600">Headwind for Android — proof build</div>
+  <p style="color:var(--text-muted);font-size:0.85rem;margin:0.3rem 0 0.8rem">Fast nutrition (today's numbers, quick-add from recents, water) and recording of walks / runs / hikes. It is a sideloaded APK, not from the Play Store.</p>
+  {% if available %}
+    <a class="btn btn-primary" href="/phones/app.apk" style="min-height:48px;display:inline-flex;align-items:center;font-size:1rem">⬇ Download APK ({{ size_mb }} MB)</a>
+    <pre style="font-size:0.72rem;color:var(--text-muted);white-space:pre-wrap;margin-top:0.8rem">{{ info }}</pre>
+  {% else %}<p style="color:var(--danger)">No APK is available on this server yet.</p>{% endif %}
+</div>
+<div style="background:var(--card-bg);border:1px solid var(--border);border-radius:14px;padding:1rem;line-height:1.6;font-size:0.92rem">
+  <div style="font-weight:600;margin-bottom:0.4rem">Installing it</div>
+  <ol style="margin:0;padding-left:1.2rem">
+    <li>Open this page <b>on the phone</b> and tap Download APK. If Android asks, allow your browser to <b>install unknown apps</b> (Settings → Apps → Special app access).</li>
+    <li>Open the downloaded file and tap <b>Install</b>. If Play Protect warns about an unrecognised app, tap <b>More details → Install anyway</b>.</li>
+    <li>Open Headwind. On this site go to <b>Phones → Create token</b> and scan the QR code from the app (or paste the link).</li>
+    <li>Recording needs <b>Location</b> ("While using the app" is enough) and Notifications, so the recording notification shows. Recording continues with the screen off.</li>
+  </ol>
+  <p style="color:var(--text-muted);font-size:0.8rem;margin:0.8rem 0 0">Updates: install the newer APK over the old one — it keeps your pairing because every build is signed with the same key.</p>
+</div>
+{% endblock %}

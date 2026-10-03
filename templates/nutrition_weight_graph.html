@@ -1,0 +1,279 @@
+{% extends 'base.html' %}
+{% block title %}Weight{% endblock %}
+{% block page_title %}Weight{% endblock %}
+
+{% block head %}
+<style>
+  .wg-tabs { display: flex; gap: 1rem; margin-bottom: 0.75rem; border-bottom: 1px solid var(--border); overflow-x: auto; }
+  .wg-tab { background: none; border: none; color: var(--text-muted); padding: 0.5rem 0.1rem; font-size: 0.85rem; cursor: pointer; white-space: nowrap; border-bottom: 2px solid transparent; }
+  .wg-tab.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+  .wg-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+  .wg-nav-label { font-size: 0.85rem; color: var(--text-muted); text-align: center; flex: 1; }
+  .wg-headline { margin-bottom: 1rem; }
+  .wg-pill { display: inline-block; font-size: 0.72rem; padding: 0.2rem 0.55rem; border-radius: 999px; background: var(--border); color: var(--text-muted); margin-bottom: 0.4rem; }
+  .wg-big { font-size: 2rem; font-weight: 700; line-height: 1.1; }
+  .wg-big.loss { color: var(--success); }
+  .wg-big.gain { color: var(--danger); }
+  .wg-big.flat { color: var(--text-muted); }
+  .wg-sub { font-size: 0.82rem; color: var(--text-muted); margin-top: 0.35rem; }
+  #wgChartWrap { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem 0.5rem; }
+  #wgSvg { width: 100%; height: auto; display: block; }
+  .wg-empty { text-align: center; color: var(--text-muted); padding: 2rem 0; }
+  .wg-links { display: flex; gap: 0.5rem; margin-top: 1rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="wg-tabs" id="wgTabs">
+  <button class="wg-tab" data-period="W">W</button>
+  <button class="wg-tab" data-period="M">M</button>
+  <button class="wg-tab" data-period="3M">3M</button>
+  <button class="wg-tab" data-period="6M">6M</button>
+  <button class="wg-tab" data-period="Y">Y</button>
+  <button class="wg-tab" data-period="ALL">All</button>
+</div>
+
+<div class="wg-nav">
+  <button class="btn btn-secondary" id="wgPrev" style="padding:0.3rem 0.6rem;">&#8592;</button>
+  <div class="wg-nav-label" id="wgRangeLabel">—</div>
+  <button class="btn btn-secondary" id="wgNext" style="padding:0.3rem 0.6rem;">&#8594;</button>
+</div>
+
+<div class="wg-headline" id="wgHeadline" style="display:none;">
+  <div class="wg-pill" id="wgPill">This period</div>
+  <div class="wg-big" id="wgBig">—</div>
+  <div class="wg-sub" id="wgSub"></div>
+</div>
+
+<div id="wgChartWrap">
+  <svg id="wgSvg" viewBox="0 0 800 420" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="wg-empty" id="wgEmpty" style="display:none;">No weigh-ins in this period yet.</div>
+</div>
+
+<div id="wgMetrics" style="display:none; margin-top:1rem;">
+  <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:0.5rem;">From the scale &middot; individual readings can be noisy, so watch the direction, not the number</div>
+  <div id="wgMetricCards" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:0.6rem;"></div>
+</div>
+
+<div style="font-size:0.75rem; color:var(--text-muted); margin:0.75rem 0;">
+  <svg width="12" height="12" style="vertical-align:-1px;"><circle cx="6" cy="6" r="4" fill="var(--accent)" stroke="var(--card-bg)" stroke-width="1.5"/></svg> scale reading
+  &nbsp; <svg width="12" height="12" style="vertical-align:-1px;"><circle cx="6" cy="6" r="4" fill="var(--text)" stroke="var(--card-bg)" stroke-width="1.5"/></svg> typed in
+</div>
+
+<div class="wg-links">
+  <a href="/nutrition/weight/backfill" class="btn btn-secondary" style="text-decoration:none;">Backfill history</a>
+  <a href="/nutrition" class="btn btn-secondary" style="text-decoration:none;">&#8592; Back to day</a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const LB_PER_KG = 2.2046226218488;
+const PERIOD_DAYS = { W: 7, M: 30, '3M': 90, '6M': 182, Y: 365 };
+const MONTH_INITIALS = ['J','F','M','A','M','J','J','A','S','O','N','D'];
+
+let period = 'M';
+let endDate = new Date(); endDate.setHours(12,0,0,0);
+let weightUnit = 'stlb';
+
+function isoDate(d) { return d.toISOString().slice(0,10); }
+
+function kgToLb(kg) { return kg * LB_PER_KG; }
+
+function fmtWeight(kg) {
+  if (weightUnit === 'kg') return kg.toFixed(1);
+  const totalLb = kgToLb(kg);
+  let stone = Math.floor(totalLb / 14);
+  let lb = Math.round((totalLb - stone * 14) * 10) / 10;
+  if (lb >= 14) { stone += 1; lb = Math.round((lb - 14) * 10) / 10; }
+  return `${stone}st ${lb.toFixed(1)}lb`;
+}
+
+function fmtDeltaMain(deltaKg) {
+  // Signed change in the unit people track day-to-day deltas in: lb if stlb, kg if kg.
+  const val = weightUnit === 'kg' ? deltaKg : kgToLb(deltaKg);
+  const unitLbl = weightUnit === 'kg' ? 'kg' : 'lb';
+  const sign = val > 0 ? '+' : '';
+  return `${sign}${val.toFixed(1)} ${unitLbl}`;
+}
+
+document.querySelectorAll('.wg-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    period = btn.dataset.period;
+    endDate = new Date(); endDate.setHours(12,0,0,0);
+    loadGraph();
+  });
+});
+
+document.getElementById('wgPrev').addEventListener('click', () => {
+  const days = period === 'ALL' ? 365 : PERIOD_DAYS[period];
+  endDate.setDate(endDate.getDate() - days);
+  loadGraph();
+});
+document.getElementById('wgNext').addEventListener('click', () => {
+  const days = period === 'ALL' ? 365 : PERIOD_DAYS[period];
+  const today = new Date(); today.setHours(12,0,0,0);
+  endDate.setDate(endDate.getDate() + days);
+  if (endDate > today) endDate = today;
+  loadGraph();
+});
+
+async function loadGraph() {
+  document.querySelectorAll('.wg-tab').forEach(b => b.classList.toggle('active', b.dataset.period === period));
+  const r = await fetch(`/nutrition/api/weight/graph?period=${period}&end=${isoDate(endDate)}`);
+  const data = await r.json();
+  weightUnit = data.unit || weightUnit;
+  render(data);
+  loadMetrics();
+}
+
+function spark(points) {
+  if (points.length < 2) return '';
+  const W = 140, H = 36, vals = points.map(p => p.value);
+  let lo = Math.min(...vals), hi = Math.max(...vals); if (lo === hi) { lo -= 1; hi += 1; }
+  const t0 = new Date(points[0].date), span = Math.max(1, new Date(points[points.length-1].date) - t0);
+  const pts = points.map(p => `${((new Date(p.date) - t0) / span * (W-6) + 3).toFixed(1)},${((1 - (p.value - lo) / (hi - lo)) * (H-6) + 3).toFixed(1)}`).join(' ');
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/></svg>`;
+}
+
+async function loadMetrics() {
+  const list = await (await fetch(`/nutrition/api/metrics?period=${period}&end=${isoDate(endDate)}`)).json();
+  const box = document.getElementById('wgMetrics');
+  box.style.display = list.length ? '' : 'none';
+  document.getElementById('wgMetricCards').innerHTML = list.map(m => {
+    const first = m.points[0].value, last = m.points[m.points.length-1].value, d = last - first;
+    const delta = m.points.length > 1 ? `${d > 0 ? '+' : ''}${d.toFixed(1)}${m.unit ? ' ' + m.unit : ''} this period` : 'one reading so far';
+    return `<div class="card" style="padding:0.6rem 0.7rem;">
+      <div style="font-size:0.75rem; color:var(--text-muted);">${m.label}</div>
+      <div style="font-size:1.3rem; font-weight:600;">${(+last.toFixed(1))}<span style="font-size:0.8rem; color:var(--text-muted);"> ${m.unit}</span></div>
+      ${spark(m.points)}
+      <div style="font-size:0.7rem; color:var(--text-muted);">${delta}</div></div>`;
+  }).join('');
+}
+
+function render(data) {
+  const raw = data.raw || [];
+  const trend = data.trend || [];
+  const svg = document.getElementById('wgSvg');
+  const empty = document.getElementById('wgEmpty');
+  const headline = document.getElementById('wgHeadline');
+
+  document.getElementById('wgRangeLabel').textContent =
+    data.periodStart && data.periodEnd
+      ? `${new Date(data.periodStart).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})} – ${new Date(data.periodEnd).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`
+      : '—';
+
+  if (!raw.length && !trend.length) {
+    svg.innerHTML = '';
+    empty.style.display = '';
+    headline.style.display = 'none';
+    return;
+  }
+  empty.style.display = 'none';
+
+  // ── Headline ──────────────────────────────────────────────────────
+  if (data.summary) {
+    headline.style.display = '';
+    const s = data.summary;
+    const big = document.getElementById('wgBig');
+    const cls = s.changeKg < -0.05 ? 'loss' : (s.changeKg > 0.05 ? 'gain' : 'flat');
+    big.className = 'wg-big ' + cls;
+    const arrow = s.changeKg < -0.05 ? '&#8595;' : (s.changeKg > 0.05 ? '&#8593;' : '');
+    big.innerHTML = `${arrow} ${fmtDeltaMain(Math.abs(s.changeKg) < 0.05 ? 0 : s.changeKg)}`;
+    document.getElementById('wgPill').textContent = 'Change this period (trend)';
+    let sub = `${fmtDeltaMain(s.weeklyRateKg)}/week average this period`;
+    if (s.changeSinceDietStartKg != null) {
+      sub += `<br>${fmtDeltaMain(s.changeSinceDietStartKg)} since diet start (${fmtDeltaMain(s.dietWeeklyRateKg)}/week avg)`;
+    }
+    document.getElementById('wgSub').innerHTML = sub;
+  } else {
+    headline.style.display = 'none';
+  }
+
+  drawChart(raw, trend, data);
+}
+
+function drawChart(raw, trend, data) {
+  const svg = document.getElementById('wgSvg');
+  const W = 800, H = 420;
+  const padL = 20, padR = 56, padT = 16, padB = 36;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+
+  const start = new Date(data.periodStart);
+  const end   = new Date(data.periodEnd);
+  const spanMs = Math.max(1, end - start);
+
+  const allKg = raw.map(p => p.kg).concat(trend.map(p => p.kg)).concat(data.stoneLines || []);
+  let minKg = Math.min(...allKg), maxKg = Math.max(...allKg);
+  if (minKg === maxKg) { minKg -= 1; maxKg += 1; }
+  const pad = (maxKg - minKg) * 0.12 || 1;
+  minKg -= pad; maxKg += pad;
+
+  const x = (d) => padL + ((new Date(d) - start) / spanMs) * plotW;
+  const y = (kg) => padT + (1 - (kg - minKg) / (maxKg - minKg)) * plotH;
+
+  let svgEls = [];
+
+  // Gridlines (5 ticks) with weight labels on the right
+  const ticks = 5;
+  for (let i = 0; i <= ticks; i++) {
+    const kg = minKg + (maxKg - minKg) * (i / ticks);
+    const yy = y(kg);
+    svgEls.push(`<line x1="${padL}" y1="${yy}" x2="${W-padR}" y2="${yy}" stroke="var(--border)" stroke-dasharray="3,4" stroke-width="1"/>`);
+    svgEls.push(`<text x="${W-padR+8}" y="${yy+4}" font-size="12" fill="var(--text-muted)">${fmtWeight(kg)}</text>`);
+  }
+
+  // Stone milestone lines
+  (data.stoneLines || []).forEach((kg, i) => {
+    if (kg < minKg || kg > maxKg) return;
+    const yy = y(kg);
+    svgEls.push(`<line x1="${padL}" y1="${yy}" x2="${W-padR}" y2="${yy}" stroke="var(--accent)" stroke-opacity="0.35" stroke-dasharray="1,3" stroke-width="1.5"/>`);
+    svgEls.push(`<text x="${padL+4}" y="${yy-4}" font-size="10" fill="var(--accent)" opacity="0.8">-${i+1}st</text>`);
+  });
+
+  // Diet start marker
+  if (data.dietStartDate) {
+    const ds = new Date(data.dietStartDate);
+    if (ds >= start && ds <= end) {
+      const xx = x(ds);
+      svgEls.push(`<line x1="${xx}" y1="${padT}" x2="${xx}" y2="${H-padB}" stroke="var(--warning)" stroke-dasharray="4,3" stroke-width="1.5"/>`);
+      svgEls.push(`<text x="${xx+4}" y="${padT+12}" font-size="10" fill="var(--warning)">Diet start</text>`);
+    }
+  }
+
+  // Month initials along the bottom
+  const monthsShown = new Set();
+  let cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+  while (cursor <= end) {
+    if (cursor >= start) {
+      const xx = x(cursor);
+      svgEls.push(`<text x="${xx}" y="${H-padB+18}" font-size="11" fill="var(--text-muted)" text-anchor="middle">${MONTH_INITIALS[cursor.getMonth()]}</text>`);
+    }
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth()+1, 1);
+  }
+
+  // Trend line (smooth-ish polyline through daily EMA points)
+  if (trend.length > 1) {
+    const pts = trend.map(p => `${x(p.date).toFixed(1)},${y(p.kg).toFixed(1)}`).join(' ');
+    svgEls.push(`<polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`);
+  } else if (trend.length === 1) {
+    svgEls.push(`<circle cx="${x(trend[0].date)}" cy="${y(trend[0].kg)}" r="4" fill="var(--accent)"/>`);
+  }
+
+  // Raw weigh-in dots
+  raw.forEach(p => {
+    const scale = p.source === 'homeassistant';
+    svgEls.push(`<circle cx="${x(p.date).toFixed(1)}" cy="${y(p.kg).toFixed(1)}" r="${scale ? 5 : 4}" fill="${scale ? 'var(--accent)' : 'var(--text)'}" stroke="var(--card-bg)" stroke-width="1.5"/>`);
+  });
+
+  svg.innerHTML = svgEls.join('');
+}
+
+// ── Init ──────────────────────────────────────────────────────────────
+(async () => {
+  const ws = await (await fetch('/nutrition/api/weight/settings')).json();
+  weightUnit = ws.unit || 'stlb';
+  loadGraph();
+})();
+</script>
+{% endblock %}

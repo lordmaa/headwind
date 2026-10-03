@@ -1,0 +1,4 @@
+// Minimal service worker — satisfies PWA installability check
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', e => e.waitUntil(clients.claim()));
+self.addEventListener('fetch', e => e.respondWith(fetch(e.request)));

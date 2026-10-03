@@ -1,0 +1,55 @@
+# Secrets
+.env
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+*.db.corrupted
+
+# Personal avatar photos
+static/avatars/rider_*.jpg
+
+# Garmin auth tokens
+.garmin_tokens/
+
+# Python
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Claude Code / dev tooling
+.claude/
+CLAUDE.md
+AGENTS.md
+
+# Editor / OS
+.DS_Store
+*.swp
+
+# Generated demo data
+demo_gpx/
+demo_gpx2/
+foodimg/
+
+# Personal — real home network IPs, credentials hints, biometric data, a real GPS activity, raw HA config dumps.
+# Found during 2026-09-29 release-prep review; never commit these. docs/ha/*.py (the actual HA integration
+# reference scripts) stay — checked individually, no secrets/IPs, config is read from Settings at runtime.
+docs/HANDOFF.md
+docs/removed/
+docs/ha/backup/
+docs/ha/pc/
+scripts/headwind-both.sh
+
+# Generated per-install secrets
+.secret_key
+.admin_login
+
+# Personal HA dashboards / per-person deploys (kept locally, not published)
+docs/ha/build_home.py
+docs/ha/deploy_home.py
+docs/ha/build_leanne.py
+docs/ha/deploy_leanne.py
+docs/ha/deploy_leanne_notifications.py
+docs/pi/*.orig
