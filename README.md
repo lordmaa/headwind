@@ -51,7 +51,7 @@ Everything else (OpenAI, MQTT, Garmin) is optional and documented in `.env.examp
 
 ## Phone app over HTTPS
 
-The Android app only talks to HTTPS servers. Put Headwind behind a TLS reverse proxy (Caddy, nginx, Cloudflare Tunnel, Tailscale serve) before pairing a phone; plain `http://localhost:5001` is fine for the browser UI.
+The Android app is a work in progress. It only talks to HTTPS servers. Put Headwind behind a TLS reverse proxy (Caddy, nginx, Cloudflare Tunnel, Tailscale serve) before pairing a phone; plain `http://localhost:5001` is fine for the browser UI.
 
 ## Telemetry
 
@@ -102,7 +102,7 @@ The social layer that makes Headwind different. Each instance exposes a token-au
 
 ### Ride tracking
 - **Garmin sync** — automatic activity + recovery sync, MFA-capable connect flow, no CLI needed
-- **Phone app** — record a ride live on Android, it syncs in the same way
+- **Phone app (work in progress)** — an Android app that records rides live and syncs them here; still in development, not publicly released
 - **File import** — `.fit`, `.gpx`, or a Strava data-export zip with live progress bar
 - **Multi-rider** — separate profiles, stats, PRs, best efforts, and trophy case per rider
 - **GPX export** — download any ride from the ride detail page
