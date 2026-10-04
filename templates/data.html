@@ -678,7 +678,7 @@ new Chart(document.getElementById('dowChart'), {
         if (cellDate > rangeEnd || cellDate > today) {
           cell.style.background = 'transparent';
         } else {
-          const ds = cellDate.toISOString().slice(0, 10);
+          const ds = cellDate.getFullYear() + '-' + String(cellDate.getMonth() + 1).padStart(2, '0') + '-' + String(cellDate.getDate()).padStart(2, '0');   // local date: toISOString() (UTC) shifts local-midnight cells a day in summer time
           const mi = heatmap[ds] || 0;
           cell.style.background = heatColor(mi);
           cell.title = mi > 0 ? `${fmtDate(ds)}: ${mi.toFixed(1)} mi` : fmtDate(ds);

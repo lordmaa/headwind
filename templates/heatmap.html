@@ -198,23 +198,24 @@ function setActive(btn) {
   if (btn) btn.classList.add('active');
 }
 
+function localIso(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 function applyPreset(btn, preset) {
   var today = new Date();
   var from  = '', to = '';
   if (preset === 'year') {
     from = today.getFullYear() + '-01-01';
-    to   = today.toISOString().slice(0, 10);
+    to   = localIso(today);
   } else if (preset === 'lastyear') {
     var y = today.getFullYear() - 1;
     from = y + '-01-01'; to = y + '-12-31';
   } else if (preset === '6m') {
     var d = new Date(today); d.setMonth(d.getMonth() - 6);
-    from = d.toISOString().slice(0, 10);
-    to   = today.toISOString().slice(0, 10);
+    from = localIso(d);
+    to   = localIso(today);
   } else if (preset === '30d') {
     var d = new Date(today); d.setDate(d.getDate() - 30);
-    from = d.toISOString().slice(0, 10);
-    to   = today.toISOString().slice(0, 10);
+    from = localIso(d);
+    to   = localIso(today);
   }
   document.getElementById('fromDate').value = from;
   document.getElementById('toDate').value   = to;

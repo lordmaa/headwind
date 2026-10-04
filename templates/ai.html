@@ -247,12 +247,13 @@
   addLabel(dots[dots.length-1].date, W - PAD, 'end');
 })();
 
+function localIso(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 function today() {
-  return new Date().toISOString().slice(0,10);
+  return localIso(new Date());
 }
 function daysAgo(n) {
   var d = new Date(); d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0,10);
+  return localIso(d);
 }
 
 function setPreset(days) {

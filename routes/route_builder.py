@@ -88,13 +88,17 @@ def list_routes():
     )
     result = []
     for row in rows:
-        wps = json.loads(row['waypoints'] or '[]')
+        try:
+            wps = json.loads(row['waypoints'] or '[]')
+            dist_mi = round(_total_mi(wps), 1)
+        except (ValueError, TypeError, KeyError):
+            continue            # a malformed saved route must not take the whole list (and the page) down
         result.append({
             'id':        row['id'],
             'name':      row['name'],
             'createdAt': row['createdAt'],
             'count':     len(wps),
-            'distMi':    round(_total_mi(wps), 1),
+            'distMi':    dist_mi,
         })
     return jsonify(result)
 

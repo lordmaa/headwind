@@ -87,7 +87,7 @@ async function save() {
 async function del(day) { await fetch('/nutrition/api/steps/' + day, {method:'DELETE'}); load(); }
 document.querySelectorAll('.st-chip').forEach(b => b.addEventListener('click', () => {
   const t = new Date($('stDate').max + 'T12:00:00'); t.setDate(t.getDate() - Number(b.dataset.off));
-  $('stDate').value = t.toISOString().slice(0, 10);
+  $('stDate').value = t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0');
   document.querySelectorAll('.st-chip').forEach(x => x.classList.toggle('on', x === b));
   $('stSteps').focus();
 }));

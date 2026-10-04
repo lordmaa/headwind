@@ -81,7 +81,9 @@ let wbUnit = 'stlb';
 let wbParsedRows = [];
 let wbOverwrite = false;
 
-function isoDate(d) { return d.toISOString().slice(0,10); }
+// the local calendar date — NOT toISOString(), which is UTC and flips the day for evening/after-midnight users
+function localIso(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function isoDate(d) { return localIso(d); }
 
 function addRow(dateVal, stVal, lbVal, kgVal) {
   const wrap = document.getElementById('wbRowsWrap');

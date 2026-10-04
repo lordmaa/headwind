@@ -94,15 +94,16 @@
 </div>
 
 <script>
-  let currentDate = new Date();
+  let currentDate = new Date(); currentDate.setHours(12, 0, 0, 0);
 
-  function isoDate(d) {
-    return d.toISOString().split('T')[0];
+  function isoDate(d) {   // local calendar date (toISOString is UTC and flips the day near midnight)
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
 
   function mondayOf(d) {
     const m = new Date(d);
-    m.setDate(d.getDate() - d.getDay() + 1);
+    m.setHours(12, 0, 0, 0);
+    m.setDate(d.getDate() - ((d.getDay() + 6) % 7));   // Monday; getDay() is 0 on Sunday, which used to jump to NEXT week
     return m;
   }
 
@@ -219,7 +220,7 @@
   }
 
   function thisWeek() {
-    currentDate = new Date();
+    currentDate = new Date(); currentDate.setHours(12, 0, 0, 0);
     loadWeek();
   }
 

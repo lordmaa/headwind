@@ -76,7 +76,9 @@ let period = 'M';
 let endDate = new Date(); endDate.setHours(12,0,0,0);
 let weightUnit = 'stlb';
 
-function isoDate(d) { return d.toISOString().slice(0,10); }
+// the local calendar date — NOT toISOString(), which is UTC and flips the day for evening/after-midnight users
+function localIso(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function isoDate(d) { return localIso(d); }
 
 function kgToLb(kg) { return kg * LB_PER_KG; }
 

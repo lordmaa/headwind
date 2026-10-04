@@ -1077,7 +1077,9 @@ let manualImageUrl = null;
 let mfImageUrl = null;
 let editingMyFoodId = null;
 
-function isoDate(d) { return d.toISOString().slice(0,10); }
+// the local calendar date — NOT toISOString(), which is UTC and flips the day for evening/after-midnight users
+function localIso(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function isoDate(d) { return localIso(d); }
 function yesterday() { const d=new Date(currentDate); d.setDate(d.getDate()-1); return d; }
 function fmtDateLabel(d) {
   const today = isoDate(new Date());
