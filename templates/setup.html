@@ -8,7 +8,9 @@
   <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
   <style>
     body {
+      height: auto;
       min-height: 100vh;
+      overflow-y: auto;
       display: flex;
       align-items: flex-start;
       justify-content: center;
@@ -257,10 +259,16 @@
       background: var(--main-bg);
       z-index: 1000;
       overflow-y: auto;
+      overscroll-behavior-y: contain;
       padding: 1.5rem 1.25rem;
     }
     .ha-overlay.open { display: block; }
     .ha-overlay-head {
+      position: sticky;
+      top: -1.5rem;
+      z-index: 1;
+      background: var(--main-bg);
+      padding: 0.5rem 0;
       display: flex;
       align-items: center;
       justify-content: space-between;
