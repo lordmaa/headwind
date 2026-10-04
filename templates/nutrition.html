@@ -935,6 +935,7 @@
       <label>Serving (g)</label>
       <input type="number" id="fdServingG" min="1" max="9999" step="1" placeholder="grams">
     </div>
+    <div class="fd-section-sub" id="fdWeightHint" style="margin:-0.2rem 0 0.6rem;"></div>
     <div class="serving-row">
       <label>Quantity</label>
       <input type="number" id="fdServingQty" min="0.5" max="20" step="0.5" value="1">
@@ -1070,6 +1071,7 @@ let ffTab = 'recent';
 let ffOffset = 0;
 let ffHasMore = false;
 let ffPickMode = null;          // null | 'buildmeal'
+let fdBaseG = null;             // grams the entry's current macros describe, when the entry itself didn't record a weight
 let fdContext = null;           // {mode:'per100'|'absolute', item, target:'log'|'editlog'|'buildmeal', entryId, sourceKind}
 let manualImageUrl = null;
 let mfImageUrl = null;
@@ -2131,6 +2133,14 @@ function openEntryDetail(entry) {
 }
 
 function openFoodDetail(item, ctx) {
+  // A logged entry stores TOTALS (macros and grams already include the quantity). The card works per single serving and
+  // multiplies by the quantity box, so convert once here — otherwise a quantity-2 entry opens (and re-saves) at double.
+  if (ctx.mode === 'absolute' && (item.quantity || 1) > 1) {
+    const q = item.quantity, per = v => (v == null ? v : v / q);
+    item = { ...item, calories: per(item.calories), protein: per(item.protein), carbs: per(item.carbs), fat: per(item.fat),
+             fibre: per(item.fibre), servingG: per(item.servingG) };
+  }
+  fdBaseG = null;
   fdContext = { ...ctx, item };
   const name  = item.name || item.foodName;
   const brand = item.brand || '';
@@ -2165,6 +2175,7 @@ function openFoodDetail(item, ctx) {
   }
   document.getElementById('fdServingG').value = defG;
   document.getElementById('fdServingQty').value = defQty;
+  fdUpdateWeightHint();
   document.getElementById('fdMealType').innerHTML = mealTypeOptions(item.mealType || currentMealType);
   document.getElementById('fdMealType').closest('.serving-row').style.display = ctx.target === 'buildmeal' ? 'none' : '';
 
@@ -2192,8 +2203,9 @@ function fdComputeTotals() {
     }
     servG = g ? g*qty : null;
   } else {
-    if (item.servingG && g && item.servingG !== g) {
-      const ratio = g / item.servingG * qty;
+    const baseG = item.servingG || fdBaseG;      // the weight the stored macros describe
+    if (baseG && g && baseG !== g) {
+      const ratio = g / baseG * qty;
       kcal  = item.calories != null ? item.calories * ratio : null;
       prot  = item.protein  != null ? item.protein  * ratio : null;
       carbs = item.carbs    != null ? item.carbs    * ratio : null;
@@ -2206,7 +2218,7 @@ function fdComputeTotals() {
       carbs = item.carbs    != null ? item.carbs    * qty : null;
       fat   = item.fat      != null ? item.fat      * qty : null;
       fibre = item.fibre    != null ? item.fibre    * qty : null;
-      servG = item.servingG ? item.servingG * qty : null;
+      servG = g ? g * qty : (item.servingG ? item.servingG * qty : null);
     }
   }
   return { kcal, prot, carbs, fat, fibre, servG, g, qty };
@@ -2234,7 +2246,24 @@ function updateFdMacros() {
     `<div class="fd-macro-tile"><div class="fd-macro-lbl ${cls}">${lbl}</div><div class="fd-macro-val">${val}</div></div>`
   ).join('');
 }
+function fdUpdateWeightHint() {
+  const el = document.getElementById('fdWeightHint');
+  if (!el || !fdContext) return;
+  const hasBase = fdContext.mode === 'per100' || fdContext.item.servingG || fdBaseG;
+  el.textContent = hasBase ? 'Change the weight and the calories and macros scale to match.'
+                           : "No weight recorded for this entry. Enter the weight of this portion once, then change it any time and the macros scale.";
+}
 document.getElementById('fdServingG').addEventListener('input', updateFdMacros);
+// First weight typed for an entry that never had one: it describes the macros as they are now, so it becomes the baseline
+// (committed on blur/enter, not per keystroke — "2", "25", "250" must not each rescale).
+document.getElementById('fdServingG').addEventListener('change', () => {
+  if (fdContext && fdContext.mode === 'absolute' && !fdContext.item.servingG && !fdBaseG) {
+    const g = parseFloat(document.getElementById('fdServingG').value);
+    if (g > 0) fdBaseG = g;
+  }
+  fdUpdateWeightHint();
+  updateFdMacros();
+});
 document.getElementById('fdServingQty').addEventListener('input', updateFdMacros);
 
 document.getElementById('fdBack').addEventListener('click', () => {
