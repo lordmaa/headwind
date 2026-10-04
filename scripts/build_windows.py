@@ -17,6 +17,7 @@ args = [
     '--add-data', f'{root / "templates"}{sep}templates', '--add-data', f'{root / "static"}{sep}static',
     '--add-data', f'{root / "version.py"}{sep}.',
     '--collect-all', 'curl_cffi', '--collect-all', 'garminconnect', '--hidden-import', 'waitress',
+    '--collect-data', 'tzdata', '--hidden-import', 'tzdata',   # zoneinfo on Windows reads timezones from this package
 ]
 for pkg in ('routes', 'services'):
     for f in sorted((root / pkg).glob('*.py')):
