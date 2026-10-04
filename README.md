@@ -13,7 +13,7 @@ Self-hosted cycling analytics, nutrition and body tracking — no cloud, no subs
 
 <img src="docs/screenshots/01-dashboard.jpg" alt="Headwind dashboard" width="900">
 
-<sub>Every screenshot in this README uses synthetic demo data: a fictional rider on real Peak District roads. No real rides, health data or names.</sub>
+
 
 </div>
 
