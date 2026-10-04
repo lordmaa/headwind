@@ -1368,9 +1368,13 @@ function renderNutriSheet() {
     body.innerHTML = `<div class="nn-h3">Total Nutrition</div><div class="nn-sub">Based on the items in this meal</div>
       ${nnTiles(sumEntries(list))}
       ${list.map(nnItem).join('') || '<div class="nn-sub">Nothing logged in this meal yet.</div>'}
+      ${list.length ? `<div class="nn-h3" style="margin-top:1rem;">Smaller or bigger portion?</div>
+        <div class="nn-sub">Scales the weight and macros of every item in this meal. Tap an item above to adjust just one.</div>
+        <div class="scale-btns" id="nnPortion">${[[0.5,'½'],[0.75,'¾'],[1.25,'1¼'],[1.5,'1½'],[2,'2×']].map(([f,l]) => `<button class="scale-btn" data-f="${f}">${l}</button>`).join('')}</div>` : ''}
       <button class="btn btn-primary nn-cta" id="nnAdd">Add More ${escHtml(meal.label)}</button>
       <div class="nn-h3" style="margin-top:1.2rem;">Compare Your Nutrients</div>${nnCompare(sumEntries(list))}`;
     body.querySelectorAll('.nn-item').forEach(b => b.addEventListener('click', () => openEntryDetail(list[+b.dataset.i])));
+    body.querySelectorAll('#nnPortion .scale-btn').forEach(b => b.addEventListener('click', () => scaleMealPortion(list, parseFloat(b.dataset.f), meal.label)));
     document.getElementById('nnAdd').addEventListener('click', () => { closeNutriSheet(); openFindFood(meal.key); });
   } else {
     document.getElementById('nnTitle').textContent = fmtDateLabel(currentDate);
@@ -1829,6 +1833,24 @@ async function postLog(fields) {
     body: JSON.stringify({date:isoDate(currentDate), ...fields}),
   });
   loadDay();
+}
+
+// Scale every logged item in a meal by one factor (weight + all macros), e.g. a smaller portion of a saved meal.
+async function scaleMealPortion(list, f, label) {
+  if (!list.length || !(f > 0)) return;
+  if (!confirm(`Scale everything in ${label} by ${f}×?`)) return;
+  const sc = v => (v == null ? null : Math.round(v * f * 10) / 10);
+  const date = isoDate(currentDate);
+  for (const e of list) {
+    await fetch('/nutrition/api/log', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({
+      id: e.id, date, name: e.foodName, barcode: e.barcode || null,
+      calories: sc(e.calories), protein: sc(e.protein), carbs: sc(e.carbs), fat: sc(e.fat), fibre: sc(e.fibre),
+      serving_g: e.servingG ? Math.round(e.servingG * f * 10) / 10 : null, quantity: e.quantity || 1,
+      meal_type: e.mealType || 'uncategorised', source: e.source || 'manual', brand: e.brand || null,
+      image_url: e.imageUrl || null, nutri_score_grade: e.nutriScoreGrade || null }) });
+  }
+  await loadDay();
+  renderNutriSheet();
 }
 
 // ── Thumbnails / badges (shared by Find-a-Food rows, day view, detail) ──
