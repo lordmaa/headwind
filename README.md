@@ -47,10 +47,19 @@ Everything else (OpenAI, MQTT, Garmin) is optional and documented in `.env.examp
 
 ## Windows (experimental)
 
-Download `Headwind-windows-x64.zip` from the [Releases](../../releases) page, extract it anywhere (not Program Files), and run `Headwind\Headwind.exe`. A console window opens and shows your first-login username and password, then your browser opens at `http://localhost:5001`. Keep the window open while you use Headwind; close it to stop.
+Download `Headwind-windows-x64.zip` from the [Releases](../../releases) page, extract it anywhere (not Program Files), and run `Headwind\Headwind.exe`. It runs as a normal desktop app: a Headwind icon appears in the system tray (bottom right, near the clock; you may need to click the ^ arrow) and Headwind opens in its own app-style window. On first run a dialog shows your sign-in.
 
-- Your data lives in `%LOCALAPPDATA%\Headwind` (database, photos, generated login, Garmin tokens) and survives updates — just replace the extracted folder.
+Tray menu (right-click the icon, or double-click it to open Headwind):
+- **Open Headwind**
+- **Show sign-in details**: your username and password again
+- **Open data folder**: `%LOCALAPPDATA%\Headwind` (database, photos, generated login, Garmin tokens, `headwind.log`)
+- **Start with Windows**: launch quietly to the tray at login
+- **Quit Headwind**: closing the window does *not* stop it (it keeps syncing in the background); use Quit.
+
+Notes:
+- Your data survives updates: just replace the extracted folder.
 - It listens on this PC only by default. To reach it from a phone on your network, set the environment variable `HEADWIND_HOST=0.0.0.0` before launching (Windows will ask about the firewall).
+- The window uses Microsoft Edge (or Chrome) in app mode, falling back to your default browser.
 - The build is **unsigned**, so Windows SmartScreen shows "unknown publisher" (More info → Run anyway) and some antivirus tools flag PyInstaller apps. If that worries you, use Docker or run from source.
 
 ## Backups

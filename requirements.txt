@@ -13,3 +13,4 @@ pytest>=8.0.0
 qrcode
 websockets>=12.0  # only used by the optional docs/ha/hawss.py dev tool, not the app itself
 tzdata; sys_platform == "win32"   # Windows has no system timezone database (zoneinfo needs this)
+pystray; sys_platform == "win32"   # system-tray icon for the Windows app

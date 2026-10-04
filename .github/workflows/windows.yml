@@ -27,7 +27,8 @@ jobs:
         shell: pwsh
         run: |
           $env:HEADWIND_DATA = "$PWD\smoke-data"; $env:PORT = "5099"; $env:TELEMETRY = "off"
-          $p = Start-Process -FilePath "dist\Headwind\Headwind.exe" -PassThru -RedirectStandardOutput smoke.out -RedirectStandardError smoke.err
+          $env:HEADWIND_NO_TRAY = "1"; $env:HEADWIND_NO_BROWSER = "1"
+          $p = Start-Process -FilePath "dist\Headwind\Headwind.exe" -PassThru
           Start-Sleep -Seconds 20
           try {
             $r = Invoke-WebRequest "http://127.0.0.1:5099/login" -UseBasicParsing
@@ -35,7 +36,8 @@ jobs:
             Write-Host "login=$($r.StatusCode) css=$($css.StatusCode)"
             if ($r.StatusCode -ne 200 -or $css.StatusCode -ne 200) { exit 1 }
           } finally {
-            Get-Content smoke.out, smoke.err -ErrorAction SilentlyContinue | Select-String -NotMatch "password" | Write-Host
+            # the windowed exe writes its console output to a log file
+            Get-Content "$env:HEADWIND_DATA\headwind.log" -ErrorAction SilentlyContinue | Select-String -NotMatch "password" | Write-Host
             Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
           }
       - name: Zip
