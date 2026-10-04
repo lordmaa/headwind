@@ -382,18 +382,18 @@ def _insert(db, act, rider_id=None):
            totalElevationGain, averageSpeed, maxSpeed,
            averageHeartrate, averageWatts,
            averageCadence, calories, startLat, startLng, streams,
-           rawData, riderId, createdAt, updatedAt)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
+           rawData, riderId, maxHeartrate, maxWatts, createdAt, updatedAt)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
     ''', [
         act.get('id'),            act.get('name'),          sport,
         sport,                    act.get('startDateLocal'), act.get('startDateLocal'),
         act.get('distance') or 0, act.get('movingTime') or 0, act.get('elapsedTime') or 0,
-        act.get('totalElevationGain') or 0, avg_speed, avg_speed,
+        act.get('totalElevationGain') or 0, avg_speed, act.get('maxSpeed') or 0,   # true max (was the average)
         act.get('averageHeartrate'), act.get('averageWatts'),
         act.get('averageCadence'), calories,
         act.get('startLat'),      act.get('startLng'),
         act.get('streams'),       '{}',
-        rider_id,
+        rider_id, act.get('maxHeartrate'), act.get('maxWatts'),
     ])
     if result.rowcount and act.get('startLat') and act.get('startLng'):
         try:

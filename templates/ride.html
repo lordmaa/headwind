@@ -198,6 +198,8 @@
           <span style="font-size:0.75rem; padding:0.15rem 0.45rem; border-radius:3px; font-weight:600; background:#14532d; color:#86efac;">Tailwind</span>
         {% elif activity.weatherWindRel == 'crosswind' %}
           <span style="font-size:0.75rem; padding:0.15rem 0.45rem; border-radius:3px; font-weight:600; background:#1e3a8a; color:#93c5fd;">Crosswind</span>
+        {% elif activity.weatherWindRel == 'mixed' %}
+          <span style="font-size:0.75rem; padding:0.15rem 0.45rem; border-radius:3px; font-weight:600; background:#3f3f46; color:#d4d4d8;" title="A loop: headwind on some stretches, tailwind on others">Mixed</span>
         {% else %}
           <span style="font-size:0.8125rem; color:var(--text-muted);">Calm</span>
         {% endif %}

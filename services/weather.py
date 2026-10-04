@@ -16,9 +16,27 @@ _WMO = {
 }
 
 
-def _route_bearing(streams_json):
-    """Approximate overall bearing of the route (first → last GPS point)."""
-    if not streams_json:
+def _bearing(a, b):
+    lat1, lat2 = math.radians(a[0]), math.radians(b[0])
+    dlng = math.radians(b[1] - a[1])
+    x = math.sin(dlng) * math.cos(lat2)
+    y = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(dlng)
+    return (math.degrees(math.atan2(x, y)) + 360) % 360
+
+
+def _dist_m(a, b):
+    dy = (b[0] - a[0]) * 111_000
+    dx = (b[1] - a[1]) * 111_000 * math.cos(math.radians((a[0] + b[0]) / 2))
+    return math.hypot(dx, dy)
+
+
+def _wind_exposure(streams_json, wind_dir):
+    """How the wind met the rider over the WHOLE route: (mean headwind component, is_loop).
+
+    The component per stretch is cos(angle between where the wind comes from and the direction of travel), weighted by
+    distance: +1 straight into the wind, -1 straight behind, 0 across. The old approach used one first-to-last-point bearing,
+    which is meaningless for a loop (start ~ finish) — a loop is half headwind, half tailwind."""
+    if not streams_json or wind_dir is None:
         return None
     import json
     try:
@@ -26,29 +44,34 @@ def _route_bearing(streams_json):
         pts = streams.get('latlng', {}).get('data', [])
         if len(pts) < 10:
             return None
-        lat1r = math.radians(pts[0][0])
-        lat2r = math.radians(pts[-1][0])
-        dlng  = math.radians(pts[-1][1] - pts[0][1])
-        x = math.sin(dlng) * math.cos(lat2r)
-        y = (math.cos(lat1r) * math.sin(lat2r)
-             - math.sin(lat1r) * math.cos(lat2r) * math.cos(dlng))
-        return (math.degrees(math.atan2(x, y)) + 360) % 360
+        step = max(1, len(pts) // 120)
+        total = weighted = 0.0
+        for i in range(step, len(pts), step):
+            a, b = pts[i - step], pts[i]
+            d = _dist_m(a, b)
+            if d < 5:
+                continue
+            weighted += math.cos(math.radians(wind_dir - _bearing(a, b))) * d
+            total += d
+        if total <= 0:
+            return None
+        return weighted / total, _dist_m(pts[0], pts[-1]) < 0.2 * total
     except Exception:
         return None
 
 
-def _wind_relative(route_bearing, wind_dir, wind_kph):
-    """Classify wind relative to route direction."""
+def _wind_relative(exposure, wind_kph):
+    """Classify the wind relative to the route: calm / headwind / tailwind / crosswind / mixed (loops that get both)."""
     if wind_kph is None or wind_kph < 6:
         return 'calm'
-    if route_bearing is None or wind_dir is None:
+    if exposure is None:
         return None
-    diff = ((wind_dir - route_bearing) + 360) % 360
-    if diff <= 45 or diff >= 315:
+    mean, is_loop = exposure
+    if mean >= 0.4:
         return 'headwind'
-    elif 135 <= diff <= 225:
+    if mean <= -0.4:
         return 'tailwind'
-    return 'crosswind'
+    return 'mixed' if is_loop else 'crosswind'
 
 
 def fetch_weather(lat, lng, start_dt_local, streams_json=None):
@@ -142,8 +165,7 @@ def fetch_weather(lat, lng, start_dt_local, streams_json=None):
     humidity = _val('relativehumidity_2m')
     wmo      = _val('weathercode')
 
-    bearing   = _route_bearing(streams_json)
-    wind_rel  = _wind_relative(bearing, wind_dir, wind_kph)
+    wind_rel  = _wind_relative(_wind_exposure(streams_json, wind_dir), wind_kph)
 
     # Build a short human-readable summary
     parts = []
@@ -157,7 +179,7 @@ def fetch_weather(lat, lng, start_dt_local, streams_json=None):
             wind_str += f' (gusts {gust_kph:.0f}kph)'
         parts.append(wind_str)
         if wind_rel and wind_rel not in ('calm', None):
-            parts.append(wind_rel)
+            parts.append('variable wind direction' if wind_rel == 'mixed' else wind_rel)
     if rain_mm and rain_mm > 0.1:
         parts.append(f'{rain_mm:.1f}mm rain')
 

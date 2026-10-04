@@ -258,7 +258,7 @@ def _build_weather_context(activity):
     # Wind relative to route
     if wind_rel and wind_rel not in ('calm', None):
         if wind_kph and wind_kph >= 15:
-            parts.append(f'mostly {wind_rel}')
+            parts.append('wind direction varied round the loop' if wind_rel == 'mixed' else f'mostly {wind_rel}')
 
     # Rain
     if rain_mm and rain_mm >= 1.0:

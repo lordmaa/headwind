@@ -65,6 +65,51 @@ def _map_sport(s):
     return _SPORT_MAP.get(str(s).lower().strip(), 'Ride')
 
 
+_MAX_PLAUSIBLE = {'speed': 30.0, 'hr': 250, 'watts': 2500, 'cadence': 250}   # m/s (108 km/h), bpm, W, rpm — beyond this is sensor/GPS noise
+
+
+def _windowed_max_speed(streams, window_s=10):
+    """Max speed (m/s) for files with no speed stream (GPX): distance over >= window_s seconds, so a single GPS
+    jump can't create a 90 mph "max". Distance comes from the stream or, failing that, from the GPS trace."""
+    t = (streams.get('time') or {}).get('data') or []
+    d = (streams.get('distance') or {}).get('data') or []
+    if len(d) != len(t):
+        ll = (streams.get('latlng') or {}).get('data') or []
+        if len(ll) == len(t) and len(ll) > 1:
+            d, acc = [0.0], 0.0
+            for i in range(1, len(ll)):
+                acc += _haversine(ll[i - 1][0], ll[i - 1][1], ll[i][0], ll[i][1])
+                d.append(acc)
+    if len(t) < 3 or len(d) != len(t):
+        return None
+    best, lo = 0.0, 0
+    for hi in range(1, len(t)):
+        while lo < hi - 1 and t[hi] - t[lo + 1] >= window_s:
+            lo += 1
+        dt = t[hi] - t[lo]
+        if dt >= window_s:
+            v = (d[hi] - d[lo]) / dt
+            if v <= _MAX_PLAUSIBLE['speed']:      # a window containing a GPS jump is skipped, not allowed to set the max
+                best = max(best, v)
+    return best if best > 0 else None
+
+
+def extremes_from_streams(streams):
+    """Max speed / heart rate / power / cadence from the streams, ignoring impossible spikes. Missing -> absent keys."""
+    out = {}
+    def mx(key, cap):
+        vals = [v for v in ((streams.get(key) or {}).get('data') or []) if v is not None and 0 < v <= cap]
+        return max(vals) if vals else None
+    spd = mx('velocity_smooth', _MAX_PLAUSIBLE['speed'])
+    if spd is None:
+        spd = _windowed_max_speed(streams)
+    for name, val in (('maxSpeed', spd), ('maxHeartrate', mx('heartrate', _MAX_PLAUSIBLE['hr'])),
+                      ('maxWatts', mx('watts', _MAX_PLAUSIBLE['watts'])), ('maxCadence', mx('cadence', _MAX_PLAUSIBLE['cadence']))):
+        if val is not None:
+            out[name] = round(float(val), 3) if name == 'maxSpeed' else round(float(val), 1)
+    return out
+
+
 def parse_gpx(data: bytes):
     import gpxpy
 
@@ -96,7 +141,7 @@ def parse_gpx(data: bytes):
     moving_time = moving_data.moving_time if moving_data else 0
     uphill, _ = gpx.tracks[0].get_uphill_downhill() if gpx.tracks else (0, 0)
 
-    latlng, altitude, hr_s, cad_s, time_s, dist_s = [], [], [], [], [], []
+    latlng, altitude, hr_s, cad_s, time_s, dist_s, pwr_s = [], [], [], [], [], [], []
     acc_dist = 0.0
     prev_ll = None
 
@@ -118,16 +163,26 @@ def parse_gpx(data: bytes):
         cad = _ext_value(pt.extensions, 'cad') or _ext_value(pt.extensions, 'cadence')
         if cad is not None:
             cad_s.append(int(cad))
+        pwr = _ext_value(pt.extensions, 'power')
+        if pwr is None:
+            pwr = _ext_value(pt.extensions, 'powerinwatts')
+        if pwr is None:
+            pwr = _ext_value(pt.extensions, 'watts')
+        if pwr is not None:
+            pwr_s.append(int(pwr))
 
     streams = {}
     if latlng:    streams['latlng']   = {'data': latlng}
     if altitude:  streams['altitude'] = {'data': altitude}
     if hr_s:      streams['heartrate'] = {'data': hr_s}
     if cad_s:     streams['cadence']  = {'data': cad_s}
+    if pwr_s:     streams['watts']    = {'data': pwr_s}
     if time_s:    streams['time']     = {'data': time_s}
     if dist_s:    streams['distance'] = {'data': dist_s}
 
     avg_hr = (sum(hr_s) / len(hr_s)) if hr_s else None
+    avg_pwr = (sum(pwr_s) / len(pwr_s)) if pwr_s else None
+    extremes = extremes_from_streams(streams)
     avg_speed = (distance / moving_time) if moving_time > 0 else None
 
     timed = [p.time for p in points if p.time is not None]
@@ -144,6 +199,8 @@ def parse_gpx(data: bytes):
         'totalElevationGain': round(uphill or 0, 1),
         'averageSpeed':       round(avg_speed, 4) if avg_speed else None,
         'averageHeartrate':   round(avg_hr, 1) if avg_hr else None,
+        'averageWatts':       round(avg_pwr, 1) if avg_pwr else None,
+        **extremes,
         'startLat':           latlng[0][0] if latlng else None,
         'startLng':           latlng[0][1] if latlng else None,
         'streams':            json.dumps(streams),
@@ -184,7 +241,7 @@ def parse_fit(data: bytes):
     elev_gain  = float(s.get('total_ascent') or 0)
     avg_hr     = s.get('avg_heart_rate')
     avg_watts  = s.get('avg_power')
-    avg_speed  = s.get('avg_speed')
+    avg_speed  = s.get('avg_speed') if s.get('avg_speed') is not None else s.get('enhanced_avg_speed')
     avg_cad    = s.get('avg_cadence')
     calories   = s.get('total_calories')
     sport_type = _map_sport(s.get('sport', 'cycling'))
@@ -196,7 +253,7 @@ def parse_fit(data: bytes):
         lng = r.get('position_long')
         if lat is not None and lng is not None:
             latlng.append([lat * 180 / 2 ** 31, lng * 180 / 2 ** 31])
-        alt = r.get('altitude')
+        alt = r.get('altitude') if r.get('altitude') is not None else r.get('enhanced_altitude')   # newer devices write only enhanced_*
         if alt is not None:
             alt_s.append(round(float(alt), 1))
         hr = r.get('heart_rate')
@@ -208,7 +265,7 @@ def parse_fit(data: bytes):
         cad = r.get('cadence')
         if cad is not None:
             cad_s.append(int(cad))
-        spd = r.get('speed')
+        spd = r.get('speed') if r.get('speed') is not None else r.get('enhanced_speed')
         if spd is not None:
             spd_s.append(round(float(spd), 3))
         ts = r.get('timestamp')
@@ -233,6 +290,18 @@ def parse_fit(data: bytes):
     if avg_speed is None and distance and moving_time:
         avg_speed = distance / moving_time
 
+    # Maxima: prefer what the device recorded for the whole session, else derive from the streams.
+    extremes = extremes_from_streams(streams)
+    dev_max = {'maxSpeed': s.get('enhanced_max_speed') if s.get('enhanced_max_speed') is not None else s.get('max_speed'),
+               'maxHeartrate': s.get('max_heart_rate'), 'maxWatts': s.get('max_power'), 'maxCadence': s.get('max_cadence')}
+    for k, v in dev_max.items():
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            continue
+        if 0 < v <= {'maxSpeed': 30.0, 'maxHeartrate': 250, 'maxWatts': 2500, 'maxCadence': 250}[k]:
+            extremes[k] = round(v, 3) if k == 'maxSpeed' else round(v, 1)
+
     return {
         'id':                 _stable_id(start, distance),
         'name':               sport_type + ' Activity',
@@ -246,6 +315,7 @@ def parse_fit(data: bytes):
         'averageHeartrate':   round(float(avg_hr), 1) if avg_hr else None,
         'averageWatts':       round(float(avg_watts), 1) if avg_watts else None,
         'averageCadence':     round(float(avg_cad), 1) if avg_cad else None,
+        **extremes,
         'calories':           round(float(calories), 1) if calories else None,
         'startLat':           latlng[0][0] if latlng else None,
         'startLng':           latlng[0][1] if latlng else None,

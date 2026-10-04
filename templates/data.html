@@ -754,8 +754,9 @@ new Chart(document.getElementById('dowChart'), {
     tailwind:   'rgba(102,187,106,0.6)',
     crosswind:  'rgba(255,183,77,0.6)',
     calm:       'rgba(100,181,246,0.6)',
+    mixed:      'rgba(170,170,180,0.6)',
   };
-  const labels = { headwind: 'Headwind', tailwind: 'Tailwind', crosswind: 'Crosswind', calm: 'Calm' };
+  const labels = { headwind: 'Headwind', tailwind: 'Tailwind', crosswind: 'Crosswind', calm: 'Calm', mixed: 'Mixed (loop)' };
   const datasets = {};
   for (let i = 0; i < windX.length; i++) {
     const r = rels[i] || 'calm';
