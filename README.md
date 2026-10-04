@@ -4,7 +4,7 @@
 
 **Your rides. Your food. Your hardware. Your friends.**
 
-Self-hosted cycling analytics and nutrition tracking with no cloud, no subscription, and no one else touching your data. Run it solo on a Raspberry Pi or connect with friends directly — instance to instance, no central server involved.
+Self-hosted cycling analytics and nutrition tracking with no cloud, no subscription, and no one else touching your data. Run it solo on your own server or connect with friends directly — instance to instance, no central server involved.
 
 ## Why Headwind
 
@@ -31,7 +31,7 @@ docker logs headwind 2>&1 | grep -A3 "generated one"   # first-login username + 
 
 Optional: `mv .env.example .env` and set `SECRET_KEY`, `APP_USERNAME`, `APP_PASSWORD` before `docker compose up` to choose your own. If you leave them blank (or at the example placeholders), Headwind generates a random signing key and admin password on first start and stores them in `./data`.
 
-Docker pulls the pre-built image automatically (multi-arch — this also just works on a Raspberry Pi). Data lives in `./data` (database, avatars, food photos, generated login) and `./garmin_tokens` next to your `docker-compose.yml`, so it survives restarts and upgrades.
+Docker pulls the pre-built image automatically (currently **amd64 only** — Raspberry Pi / ARM images are not published yet). Data lives in `./data` (database, avatars, food photos, generated login) and `./garmin_tokens` next to your `docker-compose.yml`, so it survives restarts and upgrades.
 
 First run takes you through a setup wizard. AI, MQTT, and Garmin are all optional — you can import `.fit` / `.gpx` files straight away without any of them configured.
 
@@ -47,7 +47,7 @@ Everything else (OpenAI, MQTT, Garmin) is optional and documented in `.env.examp
 
 ## Backups
 
-**Settings → Backup** downloads a zip with your database, rider avatars and food photos; restoring it (Settings, or the setup wizard on a fresh install) replaces the current data after an integrity check and keeps a `.pre-restore` copy of what was there. It deliberately does **not** include credentials — Garmin login tokens, your admin password/signing key (`./data/.admin_login`, `./data/.secret_key`) and `.env` — so on a new host you re-enter your Garmin login and set a password. Treat backup files as private: they contain your health and GPS history.
+**Settings → Backup** downloads a zip with your database, rider avatars and food photos; restoring it (Settings, or the setup wizard on a fresh install) replaces the current data after an integrity check and keeps a `.pre-restore` copy of what was there. It does **not** include the Garmin login-token files, your admin password/signing key (`./data/.admin_login`, `./data/.secret_key`) or `.env` — but the database itself holds anything you configured in Settings (Garmin email/password, AI/OpenAI key, MQTT and Home Assistant credentials), so **a backup file contains those credentials plus your health and GPS history. Treat it as a secret.** On a new host you'll re-enter your Garmin login and set a password.
 
 ## Phone app over HTTPS
 
@@ -58,7 +58,7 @@ The Android app is a work in progress. It only talks to HTTPS servers. Put Headw
 On first setup, Headwind sends **one single, one-time, anonymous ping** — a random install id and the version
 number, nothing else — so we have a rough idea how many instances exist. No rides, food, weight, location, or
 anything else is ever sent, then or later. The setup wizard shows exactly this text and a permanent opt-out
-toggle before it happens; `TELEMETRY=off` in `.env` skips asking entirely. The code is in `services/telemetry.py`
+toggle before it happens; `TELEMETRY=off` in the `.env` next to your `docker-compose.yml` skips asking entirely. The code is in `services/telemetry.py`
 if you want to read exactly what it does rather than take our word for it.
 
 ### Portainer

@@ -94,6 +94,7 @@ def restore():
         tmp_dir, tmp_db, assets = backup.stage_upload(f)
         if backup.validate(tmp_db) == 0:
             return render_template('setup.html', step='1', error='That backup has no riders — download a backup from a working Headwind instance.')
+        backup.prepare(tmp_db)
         backup.apply(_db_path(), tmp_db, assets, _avatar_dir())
         migrate_db()
     except backup.BackupError as e:

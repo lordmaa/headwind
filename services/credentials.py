@@ -52,34 +52,52 @@ def _login_file():
     return _path('.admin_login')
 
 
-def admin_login():
-    """(username, password, generated). Env credentials win when real; otherwise the file written by the
-    settings page or first boot."""
-    user = os.environ.get('APP_USERNAME', '').strip() or 'admin'
-    pw = os.environ.get('APP_PASSWORD', '')
-    if pw not in PLACEHOLDER_PASSWORDS:
-        return user, pw, False
+def _env_sig():
+    """Fingerprint of the credentials currently supplied through the environment (Compose / .env)."""
+    import hashlib
+    return hashlib.sha256(f"{os.environ.get('APP_USERNAME', '')}\0{os.environ.get('APP_PASSWORD', '')}".encode()).hexdigest()[:16]
+
+
+def _read_login_file():
     try:
         with open(_login_file()) as f:
             d = json.load(f)
-        if d.get('password'):
-            return d.get('username') or user, d['password'], True
-    except (FileNotFoundError, ValueError):
-        pass
+        return d if isinstance(d, dict) and d.get('password') else None
+    except (FileNotFoundError, ValueError, OSError):
+        return None
+
+
+def admin_login():
+    """(username, password, from_file). One rule: the saved login (first-boot generated, or changed in Settings) wins
+    for as long as the environment credentials are the same ones it was saved against; if the operator edits the
+    environment/.env to something new, that wins instead. So a Settings password change survives container recreation
+    even when Compose keeps supplying the original credentials, but editing .env still takes effect."""
+    env_user = os.environ.get('APP_USERNAME', '').strip() or 'admin'
+    env_pw = os.environ.get('APP_PASSWORD', '')
+    env_real = env_pw not in PLACEHOLDER_PASSWORDS
+    d = _read_login_file()
+    if d:
+        recorded = d.get('env_sig')
+        # files written before env_sig existed: honour them only in the old situation (placeholder env)
+        if recorded == _env_sig() or (recorded is None and not env_real):
+            return d.get('username') or env_user, d['password'], True
+    if env_real:
+        return env_user, env_pw, False
     pw = secrets.token_urlsafe(12)
     try:
-        _write_private(_login_file(), json.dumps({'username': user, 'password': pw}))
+        _write_private(_login_file(), json.dumps({'username': env_user, 'password': pw, 'env_sig': _env_sig()}))
     except OSError as e:
         log.warning('Could not persist generated admin password (%s)', e)
     log.warning('\n%s\n  No admin password configured — generated one for first login:\n    username: %s\n    password: %s\n'
-                '  Change it under Settings. Stored in %s\n%s', '=' * 64, user, pw, _login_file(), '=' * 64)
-    return user, pw, True
+                '  Change it under Settings. Stored in %s\n%s', '=' * 64, env_user, pw, _login_file(), '=' * 64)
+    return env_user, pw, True
 
 
 def save_login(username, password):
-    """Persist changed login details so they survive container recreation (the .env copy does not)."""
+    """Persist changed login details (survive container recreation — the .env copy does not). Records the environment
+    credentials in force, so the saved login keeps winning until the operator changes the environment."""
     cur_user, cur_pw, _ = admin_login()
-    _write_private(_login_file(), json.dumps({'username': username or cur_user, 'password': password or cur_pw}))
+    _write_private(_login_file(), json.dumps({'username': username or cur_user, 'password': password or cur_pw, 'env_sig': _env_sig()}))
 
 
 def auth_version():

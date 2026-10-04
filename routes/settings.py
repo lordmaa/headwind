@@ -387,6 +387,7 @@ def backup_import():
     try:
         tmp_dir, tmp_db, assets = backup.stage_upload(f)
         backup.validate(tmp_db)
+        backup.prepare(tmp_db)   # migrate + smoke-test the staged copy before anything live changes
         backup.apply(_db_path(), tmp_db, assets, _avatar_dir())
         migrate_db()   # an older backup may predate current columns/tables
     except backup.BackupError as e:

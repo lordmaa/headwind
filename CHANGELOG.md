@@ -16,7 +16,8 @@ The project history was reset for this release; earlier internal version numbers
 - **No default login.** If `SECRET_KEY` / `APP_PASSWORD` are unset (or still placeholders), a random signing key and admin
   password are generated on first start and stored in your data directory; the password is printed once in the logs
   (`docker logs headwind`). Set your own in `.env` if you prefer.
-- Backup restore validates the database and is applied atomically; uploads can't choose file paths.
+- Backup restore migrates and smoke-tests the uploaded database before touching live data, then swaps it in atomically; uploads can't choose file paths. Backups contain the credentials you configured in Settings — keep them private.
+- A password changed in Settings now persists across container recreation (unless you later edit the credentials in `.env`).
 - Login throttling, session invalidation on password change, cross-site request blocking, input size limits.
 - One optional, consent-gated, anonymous install ping (random id + version only) — opt out in the setup wizard or with
   `TELEMETRY=off`.

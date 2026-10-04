@@ -91,9 +91,37 @@ def validate(db_path):
         raise BackupError(f'Not a valid SQLite database: {e}')
 
 
+SMOKE_QUERIES = (
+    'SELECT id, name FROM Rider LIMIT 1',
+    'SELECT id, riderId, startDateLocal, distance, streams FROM Activity LIMIT 1',
+    'SELECT * FROM Settings LIMIT 1',
+)
+
+
+def prepare(staged_db):
+    """Migrate the *staged* database to the current schema and smoke-test it, so a backup this version can't use is
+    rejected before anything live is touched. Run after validate(), before apply()."""
+    from flask import Flask
+    from database import close_db, get_db, migrate_db
+    app = Flask(__name__)
+    app.config['DATABASE'] = staged_db
+    app.teardown_appcontext(close_db)
+    try:
+        with app.app_context():
+            migrate_db()
+            db = get_db()
+            for q in SMOKE_QUERIES:
+                db.execute(q).fetchone()
+            db.commit()
+    except Exception as e:
+        raise BackupError(f'This backup is not compatible with this version of Headwind ({e}). Nothing was changed.')
+    validate(staged_db)
+
+
 def apply(live_db, staged_db, assets, avatar_dest):
-    """Snapshot the live DB to <live>.pre-restore (consistent, includes WAL), then copy the staged DB over it
-    via the backup API in one atomic step. Leaves the live DB untouched if anything fails."""
+    """Snapshot the live DB to <live>.pre-restore (consistent, includes WAL), copy the photo files, and only then swap
+    the (already migrated) staged DB in via the backup API in one atomic step. The DB swap is last on purpose: if
+    anything earlier fails the live database has not been touched, so there is nothing to roll back."""
     snap = sqlite3.connect(live_db + '.pre-restore')
     live = sqlite3.connect(live_db, timeout=60)
     try:
@@ -101,6 +129,12 @@ def apply(live_db, staged_db, assets, avatar_dest):
     finally:
         snap.close()
         live.close()
+    for key, dest in (('avatars', avatar_dest), ('foodimg', os.path.join(os.path.dirname(os.path.abspath(live_db)), 'foodimg'))):
+        src_dir = (assets or {}).get(key)
+        if src_dir and os.path.isdir(src_dir):
+            os.makedirs(dest, exist_ok=True)
+            for name in os.listdir(src_dir):
+                shutil.copy2(os.path.join(src_dir, name), os.path.join(dest, name))
     src = sqlite3.connect(f'file:{staged_db}?mode=ro', uri=True)
     dst = sqlite3.connect(live_db, timeout=60)
     try:
@@ -108,9 +142,3 @@ def apply(live_db, staged_db, assets, avatar_dest):
     finally:
         src.close()
         dst.close()
-    for key, dest in (('avatars', avatar_dest), ('foodimg', os.path.join(os.path.dirname(os.path.abspath(live_db)), 'foodimg'))):
-        src_dir = (assets or {}).get(key)
-        if src_dir and os.path.isdir(src_dir):
-            os.makedirs(dest, exist_ok=True)
-            for name in os.listdir(src_dir):
-                shutil.copy2(os.path.join(src_dir, name), os.path.join(dest, name))
