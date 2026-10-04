@@ -11,7 +11,7 @@ Self-hosted cycling analytics, nutrition and body tracking — no cloud, no subs
 [![Docker](https://img.shields.io/badge/docker-amd64%20%7C%20arm64-2496ED.svg?logo=docker&logoColor=white)](https://hub.docker.com/r/lordmerchant99/headwind)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Support-FFDD00?logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/lordmerchant)
 
-<img src="docs/screenshots/dashboard.jpg" alt="Headwind dashboard" width="900">
+<img src="docs/promo/headwind-hero.jpg" alt="Headwind: your rides, your data. A self-hosted cycling archive." width="900">
 
 
 
@@ -83,6 +83,13 @@ Headwind **0.1.0-beta** is the first public release. It is a real, working appli
 
 > All images: demo data — a fictional rider "Alex" riding real roads around Hathersage, Castleton, Edale and Bakewell.
 
+<img src="docs/promo/riding-analytics.jpg" alt="Built around the riding: every ride, and everywhere you've ridden" width="900">
+
+### Dashboard
+Lifetime totals, a 12-week performance chart you can flip between distance, elevation, speed and calories, and your recent rides.
+
+<img src="docs/screenshots/dashboard.jpg" alt="Dashboard" width="900">
+
 ### Ride detail
 Satellite map, elevation + heart-rate and cadence charts, weather at the start (temperature, wind speed/direction and a headwind / tailwind / crosswind call computed from your route bearing), and effort comparison.
 
@@ -102,6 +109,8 @@ Draw a segment on any ride; Headwind scans your whole history, ranks every effor
 Speed over time, monthly distance, year-on-year, ride-length distribution, day-of-week, weather scatter charts — all filterable by sport.
 
 <img src="docs/screenshots/analytics.jpg" alt="Analytics" width="900">
+
+<img src="docs/promo/performance-context.jpg" alt="The stuff around the ride matters too: recovery, bodyweight and nutrition beside your cycling data" width="900">
 
 ### Nutrition
 A diary built for speed: barcode scan, per-meal recent foods, saved meals, hydration, macro rings, and calorie goals that include what you burned riding.
