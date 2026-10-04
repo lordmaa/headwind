@@ -45,6 +45,14 @@ First run takes you through a setup wizard. AI, MQTT, and Garmin are all optiona
 
 Everything else (OpenAI, MQTT, Garmin) is optional and documented in `.env.example`.
 
+## Windows (experimental)
+
+Download `Headwind-windows-x64.zip` from the [Releases](../../releases) page, extract it anywhere (not Program Files), and run `Headwind\Headwind.exe`. A console window opens and shows your first-login username and password, then your browser opens at `http://localhost:5001`. Keep the window open while you use Headwind; close it to stop.
+
+- Your data lives in `%LOCALAPPDATA%\Headwind` (database, photos, generated login, Garmin tokens) and survives updates — just replace the extracted folder.
+- It listens on this PC only by default. To reach it from a phone on your network, set the environment variable `HEADWIND_HOST=0.0.0.0` before launching (Windows will ask about the firewall).
+- The build is **unsigned**, so Windows SmartScreen shows "unknown publisher" (More info → Run anyway) and some antivirus tools flag PyInstaller apps. If that worries you, use Docker or run from source.
+
 ## Backups
 
 **Settings → Backup** downloads a zip with your database, rider avatars and food photos; restoring it (Settings, or the setup wizard on a fresh install) replaces the current data after an integrity check and keeps a `.pre-restore` copy of what was there. It does **not** include the Garmin login-token files, your admin password/signing key (`./data/.admin_login`, `./data/.secret_key`) or `.env` — but the database itself holds anything you configured in Settings (Garmin email/password, AI/OpenAI key, MQTT and Home Assistant credentials), so **a backup file contains those credentials plus your health and GPS history. Treat it as a secret.** On a new host you'll re-enter your Garmin login and set a password.

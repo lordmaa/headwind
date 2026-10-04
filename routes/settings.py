@@ -321,7 +321,7 @@ def _db_path():
 
 
 def _avatar_dir():
-    return os.path.join(current_app.root_path, 'static', 'avatars')
+    return os.environ.get('AVATAR_DIR') or os.path.join(current_app.root_path, 'static', 'avatars')
 
 
 def _validate_db(path):

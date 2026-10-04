@@ -369,7 +369,7 @@ def _compute_badges(rid, totals):
 
 
 def _avatar_dir():
-    return os.path.join(current_app.root_path, 'static', 'avatars')
+    return os.environ.get('AVATAR_DIR') or os.path.join(current_app.root_path, 'static', 'avatars')
 
 
 @bp.route('/riders')

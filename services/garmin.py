@@ -15,7 +15,8 @@ _SKIP_TYPES = {
     'breathwork', 'meditation',
 }
 
-TOKEN_DIR = Path(__file__).parent.parent / '.garmin_tokens'
+import os as _os
+TOKEN_DIR = Path(_os.environ['HEADWIND_TOKEN_DIR']) if _os.environ.get('HEADWIND_TOKEN_DIR') else Path(__file__).parent.parent / '.garmin_tokens'
 
 # In-memory holding pen for logins paused on an MFA challenge. Keyed by a random
 # token handed to the browser (kept in the Flask session, not a cookie itself);

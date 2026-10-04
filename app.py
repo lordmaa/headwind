@@ -282,7 +282,7 @@ def create_app():
     # ── Auth guard ───────────────────────────────────────────────
     _PUBLIC = {'login.login_page', 'login.logout', 'static',
                'friends.feed', 'friends.riders_list', 'import_rides.api_upload_ride',
-               'friends.foods_feed', 'friends.food_image', 'telemetry_forward.ping'}
+               'friends.foods_feed', 'friends.food_image', 'telemetry_forward.ping', 'avatar_files'}
 
     # The phone app authenticates with a per-device Bearer token (services/device_auth.py) instead of a login session — accepted
     # only on the app's own API paths, never on the web pages.
@@ -326,6 +326,15 @@ def create_app():
     @app.context_processor
     def inject_units():
         return {'units': _get_units()}
+
+    # Packaged/desktop installs keep photos in the user's data folder instead of the app folder (AVATAR_DIR); serve them at
+    # the same /static/avatars/ URLs the templates already use.
+    if os.environ.get('AVATAR_DIR'):
+        from flask import send_from_directory
+
+        @app.route('/static/avatars/<path:filename>')
+        def avatar_files(filename):
+            return send_from_directory(os.environ['AVATAR_DIR'], filename)
 
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(rides_bp,    url_prefix='/rides')

@@ -1,0 +1,54 @@
+name: Windows build
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install
+        run: pip install -r requirements.txt waitress pyinstaller
+      - name: Tests
+        run: python -m pytest tests -q
+      - name: Build Headwind.exe
+        run: python scripts/build_windows.py dist
+      - name: Smoke test the packaged app
+        shell: pwsh
+        run: |
+          $env:HEADWIND_DATA = "$PWD\smoke-data"; $env:PORT = "5099"; $env:TELEMETRY = "off"
+          $p = Start-Process -FilePath "dist\Headwind\Headwind.exe" -PassThru -RedirectStandardOutput smoke.out -RedirectStandardError smoke.err
+          Start-Sleep -Seconds 20
+          try {
+            $r = Invoke-WebRequest "http://127.0.0.1:5099/login" -UseBasicParsing
+            $css = Invoke-WebRequest "http://127.0.0.1:5099/static/css/style.css" -UseBasicParsing
+            Write-Host "login=$($r.StatusCode) css=$($css.StatusCode)"
+            if ($r.StatusCode -ne 200 -or $css.StatusCode -ne 200) { exit 1 }
+          } finally {
+            Get-Content smoke.out, smoke.err -ErrorAction SilentlyContinue | Select-String -NotMatch "password" | Write-Host
+            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          }
+      - name: Zip
+        shell: pwsh
+        run: Compress-Archive -Path dist\Headwind -DestinationPath Headwind-windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Headwind-windows-x64
+          path: Headwind-windows-x64.zip
+      - name: Attach to GitHub release (tag builds only)
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$env:GITHUB_REF_NAME" Headwind-windows-x64.zip --prerelease --title "Headwind $env:GITHUB_REF_NAME" --notes "Experimental beta. Windows build: extract the zip and run Headwind\Headwind.exe (see the README's Windows section). Unsigned, so SmartScreen will warn."
