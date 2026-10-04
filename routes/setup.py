@@ -33,6 +33,9 @@ def wizard():
     if request.method == 'POST':
         if step == '1':
             names = [n.strip() for n in request.form.getlist('riders[]') if n.strip()]
+            from services.rider_mode import multi_rider
+            if not multi_rider():
+                names = names[:1]
             if not names:
                 return render_template('setup.html', step='1')
             db = get_db()

@@ -327,6 +327,13 @@ def create_app():
     def inject_units():
         return {'units': _get_units()}
 
+    @app.context_processor
+    def inject_rider_mode():
+        from services.rider_mode import multi_rider, owner_rider_id
+        if not hasattr(g, 'multi_rider'):
+            g.multi_rider = multi_rider()
+        return {'multi_rider': g.multi_rider, 'owner_rider_id': owner_rider_id()}
+
     # Packaged/desktop installs keep photos in the user's data folder instead of the app folder (AVATAR_DIR); serve them at
     # the same /static/avatars/ URLs the templates already use.
     if os.environ.get('AVATAR_DIR'):

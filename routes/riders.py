@@ -374,6 +374,9 @@ def _avatar_dir():
 
 @bp.route('/riders')
 def index():
+    from services.rider_mode import multi_rider, owner_rider_id
+    if not multi_rider() and owner_rider_id():       # one person per instance: this page is just your profile
+        return redirect(url_for('riders.detail', rid=owner_rider_id()))
     riders = query_db('''
         SELECT r.*,
                COUNT(a.id) AS ride_count,
@@ -547,6 +550,9 @@ def delete(rid):
 
 @bp.route('/riders/create', methods=['POST'])
 def create():
+    from services.rider_mode import multi_rider
+    if not multi_rider():
+        abort(403)    # one person per instance; set HEADWIND_MULTI_RIDER=1 for the advanced multi-rider mode
     name = (request.form.get('name') or '').strip() or 'New Rider'
     db = get_db()
     db.execute('INSERT INTO Rider (name, isDefault) VALUES (?, 0)', [name])

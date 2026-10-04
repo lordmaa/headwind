@@ -25,8 +25,11 @@ The project history was reset for this release; earlier internal version numbers
 ### Platforms
 - Docker (amd64 + arm64) and an experimental Windows build (`Headwind-windows-x64.zip`, see the README).
 
+### One person per instance
+- New installs track one person (the setup wizard asks for one name; the Riders page becomes a profile). A second person runs their own instance and links as a friend. `HEADWIND_MULTI_RIDER=1` (or an install that already had several local riders) keeps the multi-rider UI.
+
 ### Known limitations (beta)
-- One shared admin login; phone tokens are not scoped per rider.
+- One shared admin login; in the advanced multi-rider mode phone tokens are not scoped per rider.
 - Admin password is stored in plaintext in your data directory / `.env` (file mode 600 for generated ones).
 - The Android app is a work in progress — expect rough edges and no public release yet.
 - The arm64 (Raspberry Pi) image is new and has had little real-world testing. The Windows build is experimental and unsigned.

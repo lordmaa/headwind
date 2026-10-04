@@ -306,6 +306,7 @@
   {% if step == '1' %}
   <div class="step-label">Step 1 of 6 — Riders</div>
 
+  {% if multi_rider %}
   <!-- Architecture explanation -->
   <div class="arch-box">
     <div class="arch-box-title">How riders work</div>
@@ -337,12 +338,33 @@
     </div>
   </div>
 
+  {% else %}
+  <div class="arch-box">
+    <div class="arch-box-title">One person per Headwind</div>
+    <div class="arch-row">
+      <span class="arch-icon">🚴</span>
+      <span>
+        Headwind tracks <strong>one person</strong>: your rides, nutrition, weight and AI coaching. Connect Garmin for automatic
+        sync, or import FIT/GPX files or a Strava export — both are optional.
+      </span>
+    </div>
+    <div class="arch-row">
+      <span class="arch-icon">👥</span>
+      <span>
+        Want someone else tracked too? Give them their own Headwind (a second instance), then connect the two as
+        <strong>friends</strong> to share segments and leaderboards.
+      </span>
+    </div>
+  </div>
+
+  {% endif %}
+
   <form method="POST" action="/setup" id="setupForm">
 
     <!-- Owner rider -->
     <div style="margin-bottom:1.25rem;">
       <div class="section-label">
-        Your name <span class="owner-badge">Owner</span>
+        Your name {% if multi_rider %}<span class="owner-badge">Owner</span>{% endif %}
       </div>
       <div class="rider-row">
         <input
@@ -358,6 +380,7 @@
       </p>
     </div>
 
+    {% if multi_rider %}
     <!-- Additional riders -->
     <div class="section-label" style="margin-bottom:0.5rem;">
       Additional riders <span style="font-weight:400; text-transform:none; letter-spacing:0;">(optional)</span>
@@ -365,6 +388,7 @@
     <div id="extraRiders"></div>
     <button type="button" class="btn-add" onclick="addRider()">+ Add another rider</button>
 
+    {% endif %}
     <button type="submit" class="btn btn-primary submit-btn">Continue →</button>
   </form>
 

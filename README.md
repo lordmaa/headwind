@@ -45,6 +45,25 @@ First run takes you through a setup wizard. AI, MQTT, and Garmin are all optiona
 
 Everything else (OpenAI, MQTT, Garmin) is optional and documented in `.env.example`.
 
+## One person per Headwind
+
+Headwind is built for **one person per instance** — one set of rides, nutrition, weight and AI coaching. To track someone else, give them their own Headwind and link the two as friends (shared segments and leaderboards). A second instance is just another container with its own data folder and port:
+
+```yaml
+services:
+  headwind-partner:
+    image: lordmerchant99/headwind:latest
+    container_name: headwind-partner
+    ports: ["5002:5001"]
+    volumes: ["./data-partner:/data", "./garmin_tokens-partner:/app/.garmin_tokens"]
+    environment:
+      - DATABASE_URL=/data/bike.db
+      - APP_URL=http://localhost:5002
+    restart: unless-stopped
+```
+
+*Advanced:* `HEADWIND_MULTI_RIDER=1` re-enables adding several local riders on one instance (separate ride stats and PRs per rider). Nutrition, weight, the phone API and Home Assistant sensors still only follow the owner, and phone devices aren't scoped per rider, so this mode is best left for a trusted household. Instances that already had more than one local rider keep it automatically.
+
 ## Windows (experimental)
 
 Download `Headwind-windows-x64.zip` from the [Releases](../../releases) page, extract it anywhere (not Program Files), and run `Headwind\Headwind.exe`. It runs as a normal desktop app: a Headwind icon appears in the system tray (bottom right, near the clock; you may need to click the ^ arrow) and Headwind opens in its own app-style window. On first run a dialog shows your sign-in.
@@ -121,7 +140,7 @@ The social layer that makes Headwind different. Each instance exposes a token-au
 - **Garmin sync** — automatic activity + recovery sync, MFA-capable connect flow, no CLI needed
 - **Phone app (work in progress)** — an Android app that records rides live and syncs them here; still in development, not publicly released
 - **File import** — `.fit`, `.gpx`, or a Strava data-export zip with live progress bar
-- **Multi-rider** — separate profiles, stats, PRs, best efforts, and trophy case per rider
+- **One person per instance** — your own stats, PRs, best efforts and trophy case. (An advanced multi-rider mode exists: set `HEADWIND_MULTI_RIDER=1`; see below.)
 - **GPX export** — download any ride from the ride detail page
 
 ### Ride detail

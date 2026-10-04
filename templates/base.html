@@ -69,7 +69,7 @@
       <div class="nav-section-label">System</div>
       <a href="{{ url_for('riders.index') }}"
          class="nav-item {% if request.blueprint == 'riders' %}active{% endif %}">
-        {% include 'icons/_users.svg' %} Riders
+        {% include 'icons/_users.svg' %} {{ 'Riders' if multi_rider else 'Profile' }}
       </a>
       <a href="{{ url_for('phones.index') }}"
          class="nav-item {% if request.blueprint == 'phones' %}active{% endif %}">

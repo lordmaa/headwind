@@ -4,8 +4,8 @@
 {% block page_title %}{{ rider.name }}{% endblock %}
 
 {% block topbar_actions %}
-  <a href="{{ url_for('riders.index') }}" class="btn btn-secondary">← Riders</a>
-  {% if not rider.isDefault %}
+  {% if multi_rider %}<a href="{{ url_for('riders.index') }}" class="btn btn-secondary">← Riders</a>{% endif %}
+  {% if multi_rider and not rider.isDefault %}
   <form method="POST" action="{{ url_for('riders.delete', rid=rider.id) }}" style="display:inline;"
         data-confirm="Delete {{ rider.name }} and all their rides? This cannot be undone." onsubmit="return confirm(this.dataset.confirm)">
     <button class="btn" style="background:var(--danger,#ef4444);color:#fff;border:none;">Delete Rider</button>
