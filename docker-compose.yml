@@ -15,6 +15,5 @@ services:
       - APP_USERNAME=${APP_USERNAME:-admin}
       - APP_PASSWORD=${APP_PASSWORD:-}
       - APP_URL=http://localhost:5001
-      - OPENAI_API_KEY=
       - TELEMETRY=${TELEMETRY:-}   # set TELEMETRY=off in .env to skip the one-time anonymous install ping entirely (also opt-out-able in the setup wizard)
     restart: unless-stopped
