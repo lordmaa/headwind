@@ -90,6 +90,7 @@
 
   <div class="card map-card">
     <div id="segMap" style="height:520px;"></div>
+    <div id="segMapNote" style="display:none;padding:0.6rem 1rem;font-size:0.8125rem;color:var(--text-muted);"></div>
   </div>
 
   {% if trend | length > 1 %}
@@ -231,9 +232,14 @@ function filterEfforts() {
 
 // ── Mini map ─────────────────────────────────────────────────────
 (function() {
-  const startLat = {{ seg.startLat }}, startLng = {{ seg.startLng }};
-  const endLat   = {{ seg.endLat }},   endLng   = {{ seg.endLng }};
-  const polyline = {{ seg.polyline | safe if seg.polyline else 'null' }};
+  // Server-validated data (see routes/segments.py): numbers only, injected as JSON — never raw stored text.
+  const mapData = {{ map_data | tojson }};
+  const note = document.getElementById('segMapNote');
+  if (!mapData.start || !mapData.end) {
+    document.getElementById('segMap').style.display = 'none';
+    if (note) { note.textContent = 'Map unavailable — this segment has no valid start/finish position.'; note.style.display = 'block'; }
+    return;
+  }
 
   const map = L.map('segMap');
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
@@ -243,17 +249,21 @@ function filterEfforts() {
     maxZoom: 19, opacity: 1
   }).addTo(map);
 
-  const routeCoords = polyline || [[startLat, startLng], [endLat, endLng]];
-  const line = L.polyline(routeCoords,
-    { color: '#fc4c02', weight: 3, ...(polyline ? {} : { dashArray: '6 4' }) }).addTo(map);
-
-  L.circleMarker([startLat, startLng], { color:'#10b981', fillColor:'#10b981', fillOpacity:1, radius:7 })
+  L.circleMarker(mapData.start, { color:'#10b981', fillColor:'#10b981', fillOpacity:1, radius:7 })
    .addTo(map).bindPopup('Start');
-  L.marker([endLat, endLng], {
+  L.marker(mapData.end, {
     icon: L.divIcon({ html: '<div style="font-size:20px;line-height:1;">🏁</div>', className: '', iconAnchor: [10, 20] })
   }).addTo(map).bindPopup('Finish');
 
-  map.fitBounds(line.getBounds(), { padding: [30, 30] });
+  let bounds;
+  if (mapData.shape) {
+    bounds = L.polyline(mapData.shape, { color: '#fc4c02', weight: 3 }).addTo(map).getBounds();
+  } else {
+    // No verified route shape: show just the two ends and say so, rather than a straight line that looks like the route.
+    bounds = L.latLngBounds([mapData.start, mapData.end]);
+    if (note) { note.textContent = 'Route shape unavailable — showing start and finish only.'; note.style.display = 'block'; }
+  }
+  map.fitBounds(bounds, { padding: [30, 30], maxZoom: 17 });
 })();
 
 // ── Trend chart ───────────────────────────────────────────────────

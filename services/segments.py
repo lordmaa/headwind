@@ -1,6 +1,6 @@
 import json
 import logging
-from math import atan2, cos, radians, sin, sqrt
+from math import atan2, ceil, cos, isfinite, radians, sin, sqrt
 
 log = logging.getLogger(__name__)
 
@@ -15,6 +15,98 @@ def _haversine(lat1, lon1, lat2, lon2):
     dp, dl  = radians(lat2 - lat1), radians(lon2 - lon1)
     a = sin(dp / 2) ** 2 + cos(p1) * cos(p2) * sin(dl / 2) ** 2
     return 2 * R * atan2(sqrt(a), sqrt(1 - a))
+
+
+def valid_coord(lat, lng):
+    """(lat, lng) as floats if they are a real position, else None. Friends can supply segments, so never trust stored values."""
+    try:
+        la, ln = float(lat), float(lng)
+    except (TypeError, ValueError):
+        return None
+    if not (isfinite(la) and isfinite(ln)) or abs(la) > 90 or abs(ln) > 180:
+        return None
+    return [round(la, 6), round(ln, 6)]
+
+
+def clean_polyline(raw, max_points=1500):
+    """Parse + validate a segment shape (JSON text or list of [lat, lng]). Returns a clean list, downsampled if huge, or None if
+    it is missing, malformed or contains any impossible point. Rejecting the whole shape beats drawing part of a bad one."""
+    try:
+        pts = json.loads(raw) if isinstance(raw, (str, bytes)) else raw
+    except ValueError:
+        return None
+    if not isinstance(pts, list):
+        return None
+    out = []
+    for p in pts:
+        try:
+            c = valid_coord(p[0], p[1])
+        except (TypeError, IndexError, KeyError):
+            return None
+        if c is None:
+            return None
+        out.append(c)
+    if len(out) < 2:
+        return None
+    if len(out) > max_points:
+        step = ceil(len(out) / max_points)
+        out = out[::step] + ([out[-1]] if (len(out) - 1) % step else [])
+    return out
+
+
+def _path_length_m(pts):
+    return sum(_haversine(a[0], a[1], b[0], b[1]) for a, b in zip(pts, pts[1:]))
+
+
+def _slice_between(streams_json, seg, tol_m=150, dist_tol=0.35):
+    """The part of a ride's GPS trace that runs from the segment's start to its finish, or None if this ride doesn't clearly
+    follow it: both ends must be near, in the right order, and the path length must agree with the segment distance."""
+    try:
+        ll = ((json.loads(streams_json or '{}').get('latlng') or {}).get('data')) or []
+    except ValueError:
+        return None
+    pts = [valid_coord(p[0], p[1]) for p in ll if isinstance(p, (list, tuple)) and len(p) >= 2]
+    pts = [p for p in pts if p]
+    start, end = valid_coord(seg['startLat'], seg['startLng']), valid_coord(seg['endLat'], seg['endLng'])
+    if len(pts) < 2 or not start or not end:
+        return None
+    si = min(range(len(pts)), key=lambda i: _haversine(start[0], start[1], pts[i][0], pts[i][1]))
+    if _haversine(start[0], start[1], pts[si][0], pts[si][1]) > tol_m:
+        return None
+    after = range(si + 1, len(pts))
+    if not after:
+        return None
+    ei = min(after, key=lambda i: _haversine(end[0], end[1], pts[i][0], pts[i][1]))
+    if _haversine(end[0], end[1], pts[ei][0], pts[ei][1]) > tol_m:
+        return None
+    piece = pts[si:ei + 1]
+    if len(piece) < 2:
+        return None
+    dist = seg['distanceM']
+    if dist:
+        length = _path_length_m(piece)
+        if abs(length - float(dist)) / float(dist) > dist_tol:
+            return None
+    return clean_polyline(piece, max_points=400)
+
+
+def recover_polyline(db, seg):
+    """Rebuild a missing segment shape from the ride it was drawn on, else from the fastest matching efforts. None if no ride
+    verifiably follows the segment — callers should then say the shape is unavailable rather than draw a straight line."""
+    tried = set()
+    ids = [seg['sourceActivityId']] if seg['sourceActivityId'] else []
+    ids += [r[0] for r in db.execute(
+        'SELECT activityId FROM SegmentEffort WHERE segmentId=? ORDER BY elapsedSecs ASC LIMIT 6', [seg['id']])]
+    for aid in ids:
+        if not aid or aid in tried:
+            continue
+        tried.add(aid)
+        row = db.execute('SELECT streams FROM Activity WHERE id=?', [aid]).fetchone()
+        if row and row[0]:
+            shape = _slice_between(row[0], seg)
+            if shape:
+                return shape
+    return None
 
 
 def _sample_checkpoints(polyline_json, n=CHECKPOINT_N):

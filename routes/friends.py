@@ -338,6 +338,13 @@ def _do_ride_sync(friend_id):
                     db.execute('UPDATE Rider SET name=? WHERE id=?', [name, rider_id])
 
             elif t == 'segment':
+                from services.segments import clean_polyline, valid_coord
+                _sc = valid_coord(obj.get('startLat'), obj.get('startLng'))
+                _ec = valid_coord(obj.get('endLat'), obj.get('endLng'))
+                if not _sc or not _ec:
+                    continue                       # a friend's segment with impossible coordinates is ignored
+                _shape = clean_polyline(obj.get('polyline'))
+                _poly = json.dumps(_shape) if _shape else None
                 existing = db.execute(
                     'SELECT id FROM Segment WHERE friendId=? AND sourceSegId=?',
                     [friend_id, obj['id']]
@@ -345,9 +352,8 @@ def _do_ride_sync(friend_id):
                 if existing:
                     db.execute('''UPDATE Segment SET name=?, startLat=?, startLng=?, endLat=?, endLng=?,
                                       distanceM=?, elevationGainM=?, polyline=? WHERE id=?''', [
-                        obj.get('name'), obj.get('startLat'), obj.get('startLng'),
-                        obj.get('endLat'), obj.get('endLng'),
-                        obj.get('distanceM'), obj.get('elevationGainM'), obj.get('polyline'),
+                        obj.get('name'), _sc[0], _sc[1], _ec[0], _ec[1],
+                        obj.get('distanceM'), obj.get('elevationGainM'), _poly,
                         existing[0],
                     ])
                     imported_seg_ids.append(existing[0])
@@ -355,9 +361,8 @@ def _do_ride_sync(friend_id):
                     db.execute('''INSERT INTO Segment (name, startLat, startLng, endLat, endLng,
                                       distanceM, elevationGainM, polyline, friendId, sourceSegId)
                                   VALUES (?,?,?,?,?,?,?,?,?,?)''', [
-                        obj.get('name'), obj.get('startLat'), obj.get('startLng'),
-                        obj.get('endLat'), obj.get('endLng'),
-                        obj.get('distanceM'), obj.get('elevationGainM'), obj.get('polyline'),
+                        obj.get('name'), _sc[0], _sc[1], _ec[0], _ec[1],
+                        obj.get('distanceM'), obj.get('elevationGainM'), _poly,
                         friend_id, obj['id'],
                     ])
                     imported_seg_ids.append(db.execute('SELECT last_insert_rowid()').fetchone()[0])

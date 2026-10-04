@@ -4,7 +4,8 @@ import logging
 from flask import Blueprint, abort, jsonify, redirect, render_template, request, url_for
 
 from database import get_db, query_db
-from services.segments import scan_all_activities, scan_activity_against_segments, _refresh_prs
+from services.segments import (scan_all_activities, scan_activity_against_segments, _refresh_prs,
+                               clean_polyline, recover_polyline, valid_coord)
 
 log = logging.getLogger(__name__)
 
@@ -145,6 +146,10 @@ def create():
         distance_m  = float(request.form.get('distanceM') or 0)
         activity_id = request.form.get('activityId') or None
         polyline    = request.form.get('polyline') or None
+        if not valid_coord(start_lat, start_lng) or not valid_coord(end_lat, end_lng):
+            abort(400)
+        shape = clean_polyline(polyline)
+        polyline = json.dumps(shape) if shape else None
         elev_gain   = request.form.get('elevGainM')
         elev_gain   = float(elev_gain) if elev_gain else None
     except (KeyError, ValueError):
@@ -213,6 +218,17 @@ def detail(sid):
         except Exception:
             pass
 
+    # Shape for the map: validated stored shape, else rebuilt from the source ride / a matching effort (and saved so matching
+    # gets its interior checkpoints back). If neither works the page says so — it never invents a straight line.
+    shape = clean_polyline(seg['polyline'])
+    if shape is None:
+        shape = recover_polyline(db, seg)
+        if shape:
+            db.execute('UPDATE Segment SET polyline=? WHERE id=?', [json.dumps(shape), sid])
+            db.commit()
+    map_data = {'start': valid_coord(seg['startLat'], seg['startLng']),
+                'end': valid_coord(seg['endLat'], seg['endLng']), 'shape': shape}
+
     efforts = query_db('''
         SELECT e.*, a.name AS ride_name, a.sportType, a.id AS ride_id,
                r.id AS rider_id, r.name AS rider_name, r.avatarPath AS rider_avatar, r.isDefault AS rider_is_default
@@ -245,7 +261,7 @@ def detail(sid):
     all_segs = query_db('SELECT * FROM Segment')
     diff_label, diff_colour, sub_segs = _difficulty(seg, all_segs)
 
-    return render_template('segment.html', seg=seg, efforts=efforts,
+    return render_template('segment.html', seg=seg, efforts=efforts, map_data=map_data,
                            trend=trend, trend_rolling=trend_rolling,
                            stats=stats, diff_label=diff_label,
                            diff_colour=diff_colour, sub_segs=sub_segs)
