@@ -22,8 +22,11 @@ The project history was reset for this release; earlier internal version numbers
 - One optional, consent-gated, anonymous install ping (random id + version only) — opt out in the setup wizard or with
   `TELEMETRY=off`.
 
+### Platforms
+- Docker (amd64 + arm64) and an experimental Windows build (`Headwind-windows-x64.zip`, see the README).
+
 ### Known limitations (beta)
 - One shared admin login; phone tokens are not scoped per rider.
 - Admin password is stored in plaintext in your data directory / `.env` (file mode 600 for generated ones).
 - The Android app is a work in progress — expect rough edges and no public release yet.
-- Multi-arch (ARM) images are not yet published.
+- The arm64 (Raspberry Pi) image is new and has had little real-world testing. The Windows build is experimental and unsigned.

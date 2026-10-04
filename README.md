@@ -4,7 +4,7 @@
 
 **Your rides. Your food. Your hardware. Your friends.**
 
-Self-hosted cycling analytics and nutrition tracking with no cloud, no subscription, and no one else touching your data. Run it solo on your own server or connect with friends directly — instance to instance, no central server involved.
+Self-hosted cycling analytics and nutrition tracking with no cloud, no subscription, and no one else touching your data. Run it solo on your own server, a Raspberry Pi or a Windows PC, or connect with friends directly — instance to instance, no central server involved.
 
 ## Why Headwind
 
@@ -31,7 +31,7 @@ docker logs headwind 2>&1 | grep -A3 "generated one"   # first-login username + 
 
 Optional: `mv .env.example .env` and set `SECRET_KEY`, `APP_USERNAME`, `APP_PASSWORD` before `docker compose up` to choose your own. If you leave them blank (or at the example placeholders), Headwind generates a random signing key and admin password on first start and stores them in `./data`.
 
-Docker pulls the pre-built image automatically (currently **amd64 only** — Raspberry Pi / ARM images are not published yet). Data lives in `./data` (database, avatars, food photos, generated login) and `./garmin_tokens` next to your `docker-compose.yml`, so it survives restarts and upgrades.
+Docker pulls the pre-built image automatically (multi-arch: amd64 and arm64, so it also runs on a Raspberry Pi 4/5 — the ARM image is new and less tested). Data lives in `./data` (database, avatars, food photos, generated login) and `./garmin_tokens` next to your `docker-compose.yml`, so it survives restarts and upgrades.
 
 First run takes you through a setup wizard. AI, MQTT, and Garmin are all optional — you can import `.fit` / `.gpx` files straight away without any of them configured.
 
