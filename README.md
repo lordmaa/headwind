@@ -11,7 +11,7 @@ Self-hosted cycling analytics, nutrition and body tracking — no cloud, no subs
 [![Docker](https://img.shields.io/badge/docker-amd64%20%7C%20arm64-2496ED.svg?logo=docker&logoColor=white)](https://hub.docker.com/r/lordmerchant99/headwind)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Support-FFDD00?logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/lordmerchant)
 
-<img src="docs/screenshots/01-dashboard.jpg" alt="Headwind dashboard" width="900">
+<img src="docs/screenshots/dashboard.jpg" alt="Headwind dashboard" width="900">
 
 
 
@@ -24,6 +24,7 @@ Self-hosted cycling analytics, nutrition and body tracking — no cloud, no subs
 - [What is Headwind?](#what-is-headwind)
 - [Beta status — read this first](#beta-status--read-this-first)
 - [A quick tour](#a-quick-tour)
+- [Every page and feature](#every-page-and-feature)
 - [Features](#features)
 - [Install](#install) — [Docker](#docker-recommended) · [Raspberry Pi](#raspberry-pi) · [Windows](#windows-experimental) · [From source](#from-source)
 - [First run: the setup wizard](#first-run-the-setup-wizard)
@@ -85,52 +86,290 @@ Headwind **0.1.0-beta** is the first public release. It is a real, working appli
 ### Ride detail
 Satellite map, elevation + heart-rate and cadence charts, weather at the start (temperature, wind speed/direction and a headwind / tailwind / crosswind call computed from your route bearing), and effort comparison.
 
-<img src="docs/screenshots/02-ride-detail.jpg" alt="Ride detail" width="900">
+<img src="docs/screenshots/ride-detail.jpg" alt="Ride detail" width="900">
 
 ### Heatmap
 Everywhere you've ridden, filterable by date range and sport, with HD export (3440×1440).
 
-<img src="docs/screenshots/03-heatmap.jpg" alt="Heatmap" width="900">
+<img src="docs/screenshots/heatmap.jpg" alt="Heatmap" width="900">
 
 ### Segments and leaderboards
 Draw a segment on any ride; Headwind scans your whole history, ranks every effort, charts your trend, rates the difficulty and tracks PRs. Linked friends' segments and efforts appear on the same leaderboard.
 
-<img src="docs/screenshots/04-segment-leaderboard.jpg" alt="Segment leaderboard" width="900">
+<img src="docs/screenshots/segment-leaderboard.jpg" alt="Segment leaderboard" width="900">
 
 ### Analytics
 Speed over time, monthly distance, year-on-year, ride-length distribution, day-of-week, weather scatter charts — all filterable by sport.
 
-<img src="docs/screenshots/05-analytics.jpg" alt="Analytics" width="900">
+<img src="docs/screenshots/analytics.jpg" alt="Analytics" width="900">
 
 ### Nutrition
 A diary built for speed: barcode scan, per-meal recent foods, saved meals, hydration, macro rings, and calorie goals that include what you burned riding.
 
-<img src="docs/screenshots/06-nutrition-day.jpg" alt="Nutrition diary" width="900">
+<img src="docs/screenshots/nutrition-day.jpg" alt="Nutrition diary" width="900">
 
 ### Smaller (or bigger) portions
 Saved a meal but ate less? Scale the whole meal in one tap — weight and every macro together — or open any item and change its weight.
 
-<img src="docs/screenshots/07-meal-portion-scaling.jpg" alt="Meal portion scaling" width="900">
+<img src="docs/screenshots/nutrition-meal-portion.jpg" alt="Meal portion scaling" width="900">
 
 ### Change the weight, macros follow
 Edit the weight of any logged item and calories, protein, carbs, fat and fibre scale in proportion. Entries with no recorded weight get a baseline from the first weight you type.
 
-<img src="docs/screenshots/08-weight-edit-macros.jpg" alt="Editing a food's weight" width="900">
+<img src="docs/screenshots/nutrition-weight-edit.jpg" alt="Editing a food's weight" width="900">
 
 ### Weight trend
 Daily weigh-ins with a smoothed trend line, rate of change, and progress against your goal.
 
-<img src="docs/screenshots/09-weight-trend.jpg" alt="Weight trend" width="900">
+<img src="docs/screenshots/weight-trend.jpg" alt="Weight trend" width="900">
 
 ### Route planner
 Plan a route on the map, see distance and the elevation profile, and export it as GPX.
 
-<img src="docs/screenshots/10-route-planner.jpg" alt="Route planner" width="900">
+<img src="docs/screenshots/route-planner.jpg" alt="Route planner" width="900">
 
 <details>
 <summary>More: the segments list</summary>
 
-<img src="docs/screenshots/11-segments.jpg" alt="Segments list" width="900">
+<img src="docs/screenshots/segments.jpg" alt="Segments list" width="900">
+
+</details>
+
+---
+
+## Every page and feature
+
+All 61 screens below use the same synthetic demo data (a fictional rider on real roads). Open a group to browse it.
+
+<details>
+<summary><b>Riding</b> (13 screens)</summary>
+
+**Dashboard: lifetime totals, a 12-week performance chart (distance, elevation, speed, calories) and your recent rides.**
+
+<img src="docs/screenshots/dashboard.jpg" alt="Dashboard: lifetime totals, a 12-week performance chart (distance, elevation, speed, calories) and your recent rides." width="800">
+
+**Ride detail: satellite map, elevation and heart-rate charts, cadence, weather at the start and a headwind/tailwind/crosswind call.**
+
+<img src="docs/screenshots/ride-detail.jpg" alt="Ride detail: satellite map, elevation and heart-rate charts, cadence, weather at the start and a headwind/tailwind/crosswind call." width="800">
+
+**A full ride page with the AI coach's analysis, segment efforts and ride notes.**
+
+<img src="docs/screenshots/ride-detail-ai.jpg" alt="A full ride page with the AI coach's analysis, segment efforts and ride notes." width="800">
+
+**Creating a segment: slide the start and finish markers along the ride, then name it.**
+
+<img src="docs/screenshots/ride-create-segment.jpg" alt="Creating a segment: slide the start and finish markers along the ride, then name it." width="800">
+
+**Segments list with efforts and difficulty.**
+
+<img src="docs/screenshots/segments.jpg" alt="Segments list with efforts and difficulty." width="800">
+
+**Segment leaderboard: every effort ranked, your trend over time, and linked friends' efforts on the same board.**
+
+<img src="docs/screenshots/segment-leaderboard.jpg" alt="Segment leaderboard: every effort ranked, your trend over time, and linked friends' efforts on the same board." width="800">
+
+**GPS heatmap of everywhere you've ridden, filterable by date range and sport.**
+
+<img src="docs/screenshots/heatmap.jpg" alt="GPS heatmap of everywhere you've ridden, filterable by date range and sport." width="800">
+
+**The same heatmap on satellite imagery (also Dark, Light and Satellite + labels, with HD export).**
+
+<img src="docs/screenshots/heatmap-satellite.jpg" alt="The same heatmap on satellite imagery (also Dark, Light and Satellite + labels, with HD export)." width="800">
+
+**Analytics: best efforts, climbing records, speed trend, monthly distance, distribution, weather scatters, and more.**
+
+<img src="docs/screenshots/analytics.jpg" alt="Analytics: best efforts, climbing records, speed trend, monthly distance, distribution, weather scatters, and more." width="800">
+
+**Profile and trophy case: lifetime stats, segment PRs, best efforts and badges.**
+
+<img src="docs/screenshots/profile.jpg" alt="Profile and trophy case: lifetime stats, segment PRs, best efforts and badges." width="800">
+
+**Route planner with a saved route loaded: distance, waypoints and GPX export.**
+
+<img src="docs/screenshots/route-planner.jpg" alt="Route planner with a saved route loaded: distance, waypoints and GPX export." width="800">
+
+**Walks, runs and hikes are kept separate from rides so they never change your ride stats.**
+
+<img src="docs/screenshots/workouts.jpg" alt="Walks, runs and hikes are kept separate from rides so they never change your ride stats." width="800">
+
+**Import: drop in .fit / .gpx files or a full Strava export zip.**
+
+<img src="docs/screenshots/import.jpg" alt="Import: drop in .fit / .gpx files or a full Strava export zip." width="800">
+
+</details>
+
+<details>
+<summary><b>Health and recovery</b> (4 screens)</summary>
+
+**Recovery from Garmin: resting heart rate, body battery, sleep, steps and stress, with 30/60/90-day views.**
+
+<img src="docs/screenshots/recovery.jpg" alt="Recovery from Garmin: resting heart rate, body battery, sleep, steps and stress, with 30/60/90-day views." width="800">
+
+**Steps with a daily goal; log a day by hand if you have no tracker.**
+
+<img src="docs/screenshots/steps.jpg" alt="Steps with a daily goal; log a day by hand if you have no tracker." width="800">
+
+**Weight trend: daily weigh-ins, a smoothed line and your rate of change.**
+
+<img src="docs/screenshots/weight-trend.jpg" alt="Weight trend: daily weigh-ins, a smoothed line and your rate of change." width="800">
+
+**Backfill past weigh-ins in bulk.**
+
+<img src="docs/screenshots/weight-backfill.jpg" alt="Backfill past weigh-ins in bulk." width="800">
+
+</details>
+
+<details>
+<summary><b>Nutrition</b> (19 screens)</summary>
+
+**The diary: calories and macro rings, meals, hydration and your weight.**
+
+<img src="docs/screenshots/nutrition-day.jpg" alt="The diary: calories and macro rings, meals, hydration and your weight." width="800">
+
+**"View Nutrition": the day's totals against your goals, by meal, with a macro split.**
+
+<img src="docs/screenshots/nutrition-meal-sheet-day.jpg" alt=""View Nutrition": the day's totals against your goals, by meal, with a macro split." width="800">
+
+**Add food: this meal's recent and most-logged foods first, one tap to log.**
+
+<img src="docs/screenshots/nutrition-find-food-recent.jpg" alt="Add food: this meal's recent and most-logged foods first, one tap to log." width="800">
+
+**Search Open Food Facts by name (barcode scanning is next to it).**
+
+<img src="docs/screenshots/nutrition-search-results.jpg" alt="Search Open Food Facts by name (barcode scanning is next to it)." width="800">
+
+**Go-Tos: your favourites.**
+
+<img src="docs/screenshots/nutrition-find-food-gotos.jpg" alt="Go-Tos: your favourites." width="800">
+
+**Recipes and saved meals, loggable at ½×, 1×, 1½× or 2×.**
+
+<img src="docs/screenshots/nutrition-find-food-recipes.jpg" alt="Recipes and saved meals, loggable at ½×, 1×, 1½× or 2×." width="800">
+
+**My Foods: your own foods, per 100 g.**
+
+<img src="docs/screenshots/nutrition-find-food-myfoods.jpg" alt="My Foods: your own foods, per 100 g." width="800">
+
+**Change a food's weight and the calories and macros follow.**
+
+<img src="docs/screenshots/nutrition-weight-edit.jpg" alt="Change a food's weight and the calories and macros follow." width="800">
+
+**"Smaller or bigger portion?": scale every item in a meal at once.**
+
+<img src="docs/screenshots/nutrition-meal-portion.jpg" alt=""Smaller or bigger portion?": scale every item in a meal at once." width="800">
+
+**Manual entry for anything without a barcode.**
+
+<img src="docs/screenshots/nutrition-manual-entry.jpg" alt="Manual entry for anything without a barcode." width="800">
+
+**Daily goals, weight unit, diet start date and goal weight.**
+
+<img src="docs/screenshots/nutrition-goals.jpg" alt="Daily goals, weight unit, diet start date and goal weight." width="800">
+
+**Copy yesterday: a whole day or just one meal.**
+
+<img src="docs/screenshots/nutrition-copy-day.jpg" alt="Copy yesterday: a whole day or just one meal." width="800">
+
+**Weigh in.**
+
+<img src="docs/screenshots/nutrition-weigh-in.jpg" alt="Weigh in." width="800">
+
+**AI food-photo estimate (needs your own AI key).**
+
+<img src="docs/screenshots/nutrition-photo-estimate.jpg" alt="AI food-photo estimate (needs your own AI key)." width="800">
+
+**Import a food diary or recipe from screenshots of another app (needs your own AI key).**
+
+<img src="docs/screenshots/nutrition-screenshot-import.jpg" alt="Import a food diary or recipe from screenshots of another app (needs your own AI key)." width="800">
+
+**Build a meal or recipe from ingredients.**
+
+<img src="docs/screenshots/nutrition-recipe-builder.jpg" alt="Build a meal or recipe from ingredients." width="800">
+
+**Save what you've logged as a reusable meal.**
+
+<img src="docs/screenshots/nutrition-save-as-meal.jpg" alt="Save what you've logged as a reusable meal." width="800">
+
+**Create your own food.**
+
+<img src="docs/screenshots/nutrition-my-food-editor.jpg" alt="Create your own food." width="800">
+
+**Weekly summary: eaten, burned, net and macros per day.**
+
+<img src="docs/screenshots/nutrition-week.jpg" alt="Weekly summary: eaten, burned, net and macros per day." width="800">
+
+</details>
+
+<details>
+<summary><b>Social, coaching and settings</b> (7 screens)</summary>
+
+**Friends: your feed token, add a friend by URL + token, and auto-sync.**
+
+<img src="docs/screenshots/friends.jpg" alt="Friends: your feed token, add a friend by URL + token, and auto-sync." width="800">
+
+**AI Coach: your coaching goals, and bulk analysis of rides by date range.**
+
+<img src="docs/screenshots/ai-coach.jpg" alt="AI Coach: your coaching goals, and bulk analysis of rides by date range." width="800">
+
+**Settings: units, login details, AI provider, Garmin Connect, weather backfill, backup and restore.**
+
+<img src="docs/screenshots/settings.jpg" alt="Settings: units, login details, AI provider, Garmin Connect, weather backfill, backup and restore." width="800">
+
+**Home Assistant: connect with a long-lived token and import health readings.**
+
+<img src="docs/screenshots/settings-home-assistant.jpg" alt="Home Assistant: connect with a long-lived token and import health readings." width="800">
+
+**Pair a phone with a QR code and a per-device token (HTTPS required).**
+
+<img src="docs/screenshots/phones-pairing.jpg" alt="Pair a phone with a QR code and a per-device token (HTTPS required)." width="800">
+
+**About: what's in the app.**
+
+<img src="docs/screenshots/about.jpg" alt="About: what's in the app." width="800">
+
+**Sign in.**
+
+<img src="docs/screenshots/login.jpg" alt="Sign in." width="800">
+
+</details>
+
+<details>
+<summary><b>The setup wizard</b> (7 screens)</summary>
+
+**Step 1: your name (or restore from a backup).**
+
+<img src="docs/screenshots/wizard-1-name.jpg" alt="Step 1: your name (or restore from a backup)." width="800">
+
+**Step 2: units.**
+
+<img src="docs/screenshots/wizard-2-units.jpg" alt="Step 2: units." width="800">
+
+**Step 3: Garmin Connect (optional, MFA-capable).**
+
+<img src="docs/screenshots/wizard-3-garmin.jpg" alt="Step 3: Garmin Connect (optional, MFA-capable)." width="800">
+
+**Step 4: Home Assistant (optional).**
+
+<img src="docs/screenshots/wizard-4-home-assistant.jpg" alt="Step 4: Home Assistant (optional)." width="800">
+
+**Choosing a health entity from Home Assistant.**
+
+<img src="docs/screenshots/wizard-4b-ha-entity-picker.jpg" alt="Choosing a health entity from Home Assistant." width="800">
+
+**Step 5: the one-time anonymous install ping, with a permanent opt-out.**
+
+<img src="docs/screenshots/wizard-5-telemetry.jpg" alt="Step 5: the one-time anonymous install ping, with a permanent opt-out." width="800">
+
+**Step 6: done.**
+
+<img src="docs/screenshots/wizard-6-done.jpg" alt="Step 6: done." width="800">
+
+</details>
+
+<details>
+<summary><b>On your phone (the nutrition tracker installs as a PWA)</b> (11 screens)</summary>
+
+<p><img src="docs/screenshots/m-dashboard.jpg" alt="Dashboard." width="200" title="Dashboard."> <img src="docs/screenshots/m-ride-detail.jpg" alt="Ride detail." width="200" title="Ride detail."> <img src="docs/screenshots/m-heatmap.jpg" alt="Heatmap." width="200" title="Heatmap."> <img src="docs/screenshots/m-segment-leaderboard.jpg" alt="Segment leaderboard." width="200" title="Segment leaderboard."> <img src="docs/screenshots/m-recovery.jpg" alt="Recovery." width="200" title="Recovery."> <img src="docs/screenshots/m-nutrition-day.jpg" alt="Diary." width="200" title="Diary."> <img src="docs/screenshots/m-nutrition-add-food.jpg" alt="Add food: recent first." width="200" title="Add food: recent first."> <img src="docs/screenshots/m-nutrition-meal-portion.jpg" alt="Meal portion scaling." width="200" title="Meal portion scaling."> <img src="docs/screenshots/m-nutrition-food-detail.jpg" alt="Weight edit with macros following." width="200" title="Weight edit with macros following."> <img src="docs/screenshots/m-weight-trend.jpg" alt="Weight trend." width="200" title="Weight trend."> <img src="docs/screenshots/m-settings.jpg" alt="Settings." width="200" title="Settings."></p>
 
 </details>
 
