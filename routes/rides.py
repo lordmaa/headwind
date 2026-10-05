@@ -221,7 +221,7 @@ def detail(rid):
         dups.append({'id': d['id'], 'source': d['source'], 'reason': d['reason'], 'start': r.get('startDateLocal'), 'distance': r.get('distance'),
                      'moving': r.get('movingTime'), 'hr': r.get('averageHeartrate'), 'watts': r.get('averageWatts')})
 
-    return render_template('ride.html', activity=activity, coords=coords, dups=dups, gear_bikes=gear_bikes, gear_error=request.args.get('error'),
+    return render_template('ride.html', activity=activity, coords=coords, dups=dups, gear_bikes=gear_bikes, gear_error=request.args.get('error'), sports=['Ride', 'VirtualRide', 'Walk', 'Run', 'Hike'],
                            charts=charts, has_memory=memory_count > 0,
                            seg_efforts=seg_efforts, alt_raw=alt_raw,
                            co_riders=co_riders, seg_rivals=seg_rivals,
@@ -330,6 +330,21 @@ def delete(rid):
     db.execute('DELETE FROM RideMemory WHERE rideId=?', [rid])
     db.commit()
     return redirect(url_for('dashboard.dashboard'))
+
+
+@bp.route('/<rid>/sport', methods=['POST'])
+def change_sport(rid):
+    """Change what this activity is (e.g. a walk that was recorded as a ride). A walk/run/hike leaves the rides list and appears under Workouts."""
+    from services import convert
+    db = get_db()
+    try:
+        res = convert.change_sport(db, 'ride', rid, request.form.get('sport'))
+        db.commit()
+    except ValueError as e:
+        db.rollback()
+        from urllib.parse import quote
+        return redirect(url_for('rides.detail', rid=rid) + '?error=' + quote(str(e)))
+    return redirect(url_for('workouts_ui.workouts_page') if res['kind'] == 'workout' else url_for('rides.detail', rid=res['id']))
 
 
 @bp.route('/<rid>/duplicate/<dup_id>/<action>', methods=['POST'])

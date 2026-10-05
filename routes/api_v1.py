@@ -15,7 +15,7 @@ import tempfile
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from flask import redirect, Blueprint, current_app, jsonify, render_template, request
+from flask import abort, redirect, Blueprint, current_app, jsonify, render_template, request
 
 from database import get_db, query_db
 
@@ -490,6 +490,28 @@ def _refresh_after_change(kind):
         log.warning('sensor refresh failed (non-fatal): %s', e)
 
 
+@bp.route('/rides/<kind>/<rid>/sport', methods=['POST'])
+def change_sport(kind, rid):
+    """Change what an activity is, e.g. a walk that was recorded as a ride: JSON {sport: Ride|VirtualRide|Walk|Run|Hike}. Moves it between the ride and
+    workout tables when needed, so the id can change: the response carries the new kind and id."""
+    from services import convert
+    rider = _rider()
+    db = get_db()
+    tbl = {'ride': 'Activity', 'workout': 'Workout'}.get(kind)
+    row = db.execute(f'SELECT riderId FROM {tbl} WHERE id=?', [rid]).fetchone() if tbl else None
+    if not rider or not row or row['riderId'] != rider['id']:
+        return jsonify({'error': 'not found'}), 404
+    try:
+        res = convert.change_sport(db, kind, rid, (request.get_json(silent=True) or {}).get('sport'))
+        db.commit()
+    except ValueError as e:
+        db.rollback()
+        return jsonify({'error': str(e)}), 400
+    if res['changed']:
+        _refresh_after_change('ride'); _refresh_after_change('workout')
+    return jsonify(res)
+
+
 @bp.route('/rides/ride/<rid>/duplicate/<dup_id>/<action>', methods=['POST'])
 def resolve_duplicate(rid, dup_id, action):
     """The same ride recorded twice: action = swap (use the other recording) | keep (both are real rides) | discard (delete the other one)."""
@@ -561,6 +583,25 @@ def workouts_new():
         return redirect('/workouts?error=' + quote(str(e)))
     _refresh_after_change('workout' if f.get('sport') in ('Walk', 'Run', 'Hike') else 'ride')
     return redirect('/workouts')
+
+
+@ui.route('/workouts/<wid>/sport', methods=['POST'])
+def workouts_sport(wid):
+    from services import convert
+    rider = _rider()
+    db = get_db()
+    row = db.execute('SELECT riderId FROM Workout WHERE id=?', [wid]).fetchone()
+    if not rider or not row or row['riderId'] != rider['id']:
+        abort(404)
+    try:
+        res = convert.change_sport(db, 'workout', wid, request.form.get('sport'))
+        db.commit()
+    except ValueError as e:
+        db.rollback()
+        from urllib.parse import quote
+        return redirect('/workouts?error=' + quote(str(e)))
+    _refresh_after_change('ride'); _refresh_after_change('workout')
+    return redirect(url_for('rides.detail', rid=res['id']) if res['kind'] == 'ride' else '/workouts')
 
 
 @ui.route('/workouts/<wid>/delete', methods=['POST'])

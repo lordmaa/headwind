@@ -286,7 +286,7 @@ def ride_bike(rid):
 def assign_page():
     db = get_db()
     rid = _rider_id()
-    return render_template('gear_assign.html', bikes=gear.list_bikes(db, rid), span=gear.ride_span(db, rid), rid=rid, today=gear.today().isoformat(),
+    return render_template('gear_assign.html', bikes=gear.list_bikes(db, rid), span=gear.ride_span(db, rid), rid=rid, today=gear.today().isoformat(), preselect=request.args.get('bike', type=int),
                            riders=query_db('SELECT id, name FROM Rider ORDER BY isDefault DESC, name') if multi_rider() else [])
 
 

@@ -75,4 +75,19 @@ ok('ride detail lists the parked duplicate', len(d['duplicates']) == 1 and d['du
 did = d['duplicates'][0]['id']
 r = phone.post(f'/api/v1/rides/ride/garmin_77/duplicate/{did}/swap', headers=H); ok('phone can swap', r.status_code == 200 and r.get_json()['ride_id'] == did)
 ok('wrong action -> 400, wrong ride -> 404', phone.post(f'/api/v1/rides/ride/{did}/duplicate/garmin_77/nope', headers=H).status_code == 400 and phone.post('/api/v1/rides/ride/zzz/duplicate/garmin_77/swap', headers=H).status_code == 404)
+# 5) a walk recorded as a ride can be changed to a walk (API, ride page, workouts page)
+slow = datetime(2026, 8, 20, 17, 0, 0, tzinfo=timezone.utc)
+j = upload(slow).get_json(); rid = j['ride']['id']
+r = phone.post(f'/api/v1/rides/ride/{rid}/sport', headers=H, json={'sport': 'Walk'}); body = r.get_json()
+ok('phone: change a ride to a Walk', r.status_code == 200 and body['kind'] == 'workout' and body['changed'] and rid not in live(), body)
+w = con.execute('select sport, calories from Workout where id=?', [body['id']]).fetchone()
+ok('...it is now a workout with a walking calorie estimate', w['sport'] == 'Walk' and w['calories'] is not None)
+ok('wrong type / unknown id / other kind are clean errors', phone.post(f"/api/v1/rides/workout/{body['id']}/sport", headers=H, json={'sport': 'Swim'}).status_code == 400
+   and phone.post('/api/v1/rides/ride/nope/sport', headers=H, json={'sport': 'Walk'}).status_code == 404)
+back = phone.post(f"/api/v1/rides/workout/{body['id']}/sport", headers=H, json={'sport': 'Ride'}).get_json()
+ok('...and back to a ride', back['kind'] == 'ride' and back['id'] in live(), back)
+r = c.post(f"/rides/{back['id']}/sport", data={'sport': 'Run'}); ok('web: ride page changes it to a Run (lands on Workouts)', r.status_code == 302 and '/workouts' in r.headers['Location'])
+wid = con.execute("select id from Workout where sport='Run' and source='converted'").fetchone()[0]
+r = c.post(f'/workouts/{wid}/sport', data={'sport': 'Walk'}); ok('web: workouts page changes it to a Walk', r.status_code == 302 and con.execute('select sport from Workout where id=?', [wid]).fetchone()[0] == 'Walk')
+ok('the ride page shows the Type control', b'What kind of activity was this?' in c.get(f"/rides/{[x for x in live() if x.startswith('garmin') or x.startswith('imp_')][0]}").data)
 print('ALL PASS')

@@ -51,6 +51,25 @@
 </div>
 {% endif %}
 
+<div class="card" id="assign" style="margin-bottom:1rem;">
+  <div class="card-title">Assign rides to {{ bike.name }}</div>
+  <p class="hint" style="margin:.1rem 0 .6rem;">Pick a date range and every ride in it goes on this bike, so its stats and part mileage include them. Or <a href="{{ url_for('gear.assign_page', rider=bike.riderId, bike=bike.id) }}">pick individual days on the calendar</a>.</p>
+  <div class="gform" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));align-items:end;">
+    <label>From<input type="date" id="bFrom" max="{{ today }}"></label>
+    <label>To<input type="date" id="bTo" max="{{ today }}"></label>
+    <label style="flex-direction:row;align-items:center;gap:.5rem;"><input type="checkbox" id="bPresent"> ...to today</label>
+    <label style="flex-direction:row;align-items:center;gap:.5rem;"><input type="checkbox" id="bOnlyUn" checked> Leave rides on another bike alone</label>
+  </div>
+  <div class="quick">
+    <button class="btn btn-secondary btn-sm" type="button" data-q="year">This year</button>
+    <button class="btn btn-secondary btn-sm" type="button" data-q="30">Last 30 days</button>
+    <button class="btn btn-secondary btn-sm" type="button" data-q="all">Everything unassigned</button>
+  </div>
+  <div class="preview" id="bPreview">Choose a start date to see how many rides will move onto {{ bike.name }}.</div>
+  <button class="btn btn-primary" type="button" id="bApply" disabled>Put these rides on {{ bike.name }}</button>
+  <span class="hint" id="bResult" style="margin-left:.6rem;"></span>
+</div>
+
 <div class="card" id="parts" style="margin-bottom:1rem;">
   <div class="card-title">Parts on this bike</div>
   {% if not parts %}<p class="hint">Nothing tracked yet. Add the chain, tyres, cassette, bar tape and so on below, and Headwind will count the miles on each from the day you fitted it.</p>{% endif %}
@@ -156,6 +175,8 @@
 </div>
 {% endif %}
 
+<script>window.GEAR_BIKE = { bike: {{ bike.id }}, name: {{ bike.name | tojson }}, rider: {{ bike.riderId }}, today: {{ today | tojson }} };</script>
+<script src="{{ url_for('static', filename='js/gear_bike_assign.js') }}"></script>
 <script>
   const CATALOG = {{ catalog | tojson }};
   const UNITS_LABEL = {{ ('km' if units == 'metric' else 'mi') | tojson }};

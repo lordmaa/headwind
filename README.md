@@ -148,6 +148,8 @@ Add your bikes (with photos), pick a default, and every new ride lands on it. Th
 
 <img src="docs/screenshots/gear-bike.jpg" alt="A bike: odometer, stats, parts with wear bars and the service log" width="900">
 
+<img src="docs/screenshots/gear-bike-assign.jpg" alt="Assign a date range of rides to a bike from the bike's own page" width="900">
+
 <img src="docs/screenshots/gear-assign.jpg" alt="Assign rides to bikes by picking days or a date range on a calendar, with a preview of what will change" width="900">
 
 <img src="docs/screenshots/gear-ride-bike.jpg" alt="The bike picker at the top of a ride" width="900">
@@ -165,7 +167,7 @@ Add your bikes (with photos), pick a default, and every new ride lands on it. Th
 
 ## Every page and feature
 
-All 67 screens below use the same synthetic demo data (a fictional rider on real roads). Open a group to browse it.
+All 68 screens below use the same synthetic demo data (a fictional rider on real roads). Open a group to browse it.
 
 <details>
 <summary><b>Riding</b> (13 screens)</summary>
@@ -225,7 +227,7 @@ All 67 screens below use the same synthetic demo data (a fictional rider on real
 </details>
 
 <details>
-<summary><b>Gear</b> (6 screens)</summary>
+<summary><b>Gear</b> (7 screens)</summary>
 
 **Gear: your bikes with photos, odometers and what needs attention (overdue / due / soon).**
 
@@ -234,6 +236,10 @@ All 67 screens below use the same synthetic demo data (a fictional rider on real
 **A bike: odometer, stats, a distance-by-year chart, every part with replace/check wear bars, and the service log.**
 
 <img src="docs/screenshots/gear-bike.jpg" alt="A bike: odometer, stats, distance by year, parts with wear bars and the service log." width="800">
+
+**On each bike's page: pick a date range and every ride in it goes on that bike (with a live count first).**
+
+<img src="docs/screenshots/gear-bike-assign.jpg" alt="Assign a date range of rides to a bike from the bike's own page." width="800">
 
 **Assign rides to bikes: pick days or a date range on the calendar, choose the bike, see exactly how many rides will change, apply.**
 

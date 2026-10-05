@@ -64,6 +64,14 @@ ap = c.post('/gear/api/assign', json={'bike': 1, 'dates': ['2026-09-01'], 'from'
 ok('apply: one picked day + a to-present range', ap['changed'] == 4 and con.execute('select count(*) from Activity where bikeId=1').fetchone()[0] == 4, ap)
 ok('assign errors are clean', c.post('/gear/api/assign', json={'bike': 1}).status_code == 400 and c.post('/gear/api/assign', json={'bike': 99, 'dates': ['2026-09-01']}).status_code == 400)
 
+# 4b) the bike page has its own date-range picker, and the full calendar can open with that bike chosen
+bp_ = c.get('/gear/bike/1')
+ok('bike page has the date-range assign card', b'Assign rides to Roubaix' in bp_.data and b'gear_bike_assign.js' in bp_.data and c.get('/static/js/gear_bike_assign.js').status_code == 200)
+ok('calendar opens with the bike preselected', b'value="2" selected' in c.get('/gear/assign?bike=2').data)
+con.execute('update Activity set bikeId=NULL'); con.commit()
+ap = c.post('/gear/api/assign?rider=1', json={'bike': 1, 'dates': [], 'from': '2026-09-01', 'to': '2026-09-30', 'only_unassigned': True}).get_json()
+ok('range apply (what the bike-page picker sends) works', ap['changed'] == 4 and con.execute('select count(*) from Activity where bikeId=1').fetchone()[0] == 4, ap)
+
 # 5) parts, service, alerts
 r = c.post('/gear/bike/1/part', data={'kind': 'chain', 'installedOn': '2026-09-01', 'replaceEvery': '20', 'checkEvery': '10', 'notify': '1'})
 ok('part added', r.status_code == 302 and con.execute('select count(*) from Part').fetchone()[0] == 1)

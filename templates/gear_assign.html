@@ -41,7 +41,7 @@
     </div>
     <h3>2. Choose the bike</h3>
     <div class="gform" style="grid-template-columns:1fr;">
-      <label><select id="bikeSel">{% for b in bikes %}<option value="{{ b.id }}">{{ b.name }}</option>{% endfor %}<option value="">No bike (clear)</option></select></label>
+      <label><select id="bikeSel">{% for b in bikes %}<option value="{{ b.id }}" {{ 'selected' if preselect == b.id }}>{{ b.name }}</option>{% endfor %}<option value="">No bike (clear)</option></select></label>
       <label style="flex-direction:row;align-items:center;gap:.5rem;"><input type="checkbox" id="onlyUn" checked> Leave rides that already have a bike alone</label>
     </div>
     <div class="preview" id="preview">Pick some days or a range to see what will change.</div>

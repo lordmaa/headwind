@@ -51,7 +51,12 @@
       <div class="wo-ico">{{ '🏃' if w.sport == 'Run' else ('🥾' if w.sport == 'Hike' else '🚶') }}</div>
       <div class="wo-main"><b>{{ w.name or w.sport }}</b><small>{{ w.startDateLocal[:10] | fmt_date }} · {{ w.startDateLocal[11:16] }}{% if w.weatherSummary %} · {{ w.weatherSummary }}{% endif %}</small></div>
       <div class="wo-num">{{ '%.2f' | format(mi) }} mi<small>{{ (secs // 3600) ~ 'h ' if secs >= 3600 else '' }}{{ '%02d' | format((secs % 3600) // 60) if secs >= 3600 else ((secs // 60) ~ 'm') }}{% if w.calories %} · {{ w.calories | round | int }} kcal{% endif %}{% if w.steps %} · {{ '{:,}'.format(w.steps) }} steps{% endif %}</small></div>
-          <form method="POST" action="{{ url_for('workouts_ui.workouts_delete', wid=w.id) }}" onsubmit="return confirm('Delete this activity? This cannot be undone.')"><button class="wo-del" type="submit" title="Delete">Delete</button></form>
+          <form method="POST" action="{{ url_for('workouts_ui.workouts_sport', wid=w.id) }}" style="margin:0;display:flex;gap:.3rem;" title="Recorded as the wrong type?">
+        <select name="sport" aria-label="Activity type" onchange="if (this.value !== '{{ w.sport }}' && confirm('Change this to a ' + this.value.replace('VirtualRide','indoor ride').toLowerCase() + '?')) this.form.submit(); else this.value='{{ w.sport }}';" style="font-size:.78rem;padding:.2rem .3rem;">
+          {% for sp in ['Walk','Run','Hike','Ride','VirtualRide'] %}<option value="{{ sp }}" {{ 'selected' if w.sport == sp }}>{{ 'Indoor ride' if sp == 'VirtualRide' else sp }}</option>{% endfor %}
+        </select>
+      </form>
+      <form method="POST" action="{{ url_for('workouts_ui.workouts_delete', wid=w.id) }}" onsubmit="return confirm('Delete this activity? This cannot be undone.')"><button class="wo-del" type="submit" title="Delete">Delete</button></form>
     </div>
   {% endfor %}
 </div>
