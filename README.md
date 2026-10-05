@@ -49,6 +49,7 @@ Self-hosted cycling analytics, nutrition and body tracking — no cloud, no subs
 Headwind is a single self-hosted web app that brings together the things most riders spread across four or five services:
 
 - **Ride analytics** — import from Garmin Connect, FIT/GPX files or a Strava export; see maps, streams, weather, wind, personal bests, segments and a GPS heatmap of everywhere you've ridden.
+- **Gear and maintenance** — your bikes with photos, a default bike per rider (changeable per ride), a calendar to say which bike rode which rides, and mileage on the parts that wear out (chains, cassettes, tyres, bar tape, sealant...) with service log and "due" alerts.
 - **Nutrition and body tracking** — a fast food diary with barcode scanning, per-meal "recent foods", saved meals, hydration, weight trend and calorie goals that account for your riding.
 - **Coaching and automation** — optional AI ride analysis with your own key (or local Ollama), Home Assistant sensors over MQTT, and push notifications.
 - **A social layer without a central server** — link your instance to a friend's directly and share segment leaderboards.
@@ -137,6 +138,22 @@ Plan a route on the map, see distance and the elevation profile, and export it a
 
 <img src="docs/screenshots/route-planner.jpg" alt="Route planner" width="900">
 
+### Gear: bikes, parts and service
+Add your bikes (with photos), pick a default, and every new ride lands on it. The calendar assigns older rides to a bike by date or range, and each bike tracks the mileage on its replaceable parts with a service log and alerts. Full guide: [docs/GEAR.md](docs/GEAR.md).
+
+<img src="docs/screenshots/gear-overview.jpg" alt="Gear: your bikes, with what needs attention" width="900">
+
+<details>
+<summary>More: a bike's parts and service log, the assign-by-calendar screen and the per-ride bike picker</summary>
+
+<img src="docs/screenshots/gear-bike.jpg" alt="A bike: odometer, stats, parts with wear bars and the service log" width="900">
+
+<img src="docs/screenshots/gear-assign.jpg" alt="Assign rides to bikes by picking days or a date range on a calendar, with a preview of what will change" width="900">
+
+<img src="docs/screenshots/gear-ride-bike.jpg" alt="The bike picker at the top of a ride" width="900">
+
+</details>
+
 <details>
 <summary>More: the segments list</summary>
 
@@ -148,7 +165,7 @@ Plan a route on the map, see distance and the elevation profile, and export it a
 
 ## Every page and feature
 
-All 61 screens below use the same synthetic demo data (a fictional rider on real roads). Open a group to browse it.
+All 67 screens below use the same synthetic demo data (a fictional rider on real roads). Open a group to browse it.
 
 <details>
 <summary><b>Riding</b> (13 screens)</summary>
@@ -204,6 +221,29 @@ All 61 screens below use the same synthetic demo data (a fictional rider on real
 **Import: drop in .fit / .gpx files or a full Strava export zip.**
 
 <img src="docs/screenshots/import.jpg" alt="Import: drop in .fit / .gpx files or a full Strava export zip." width="800">
+
+</details>
+
+<details>
+<summary><b>Gear</b> (6 screens)</summary>
+
+**Gear: your bikes with photos, odometers and what needs attention (overdue / due / soon).**
+
+<img src="docs/screenshots/gear-overview.jpg" alt="Gear: your bikes with photos, odometers and what needs attention." width="800">
+
+**A bike: odometer, stats, a distance-by-year chart, every part with replace/check wear bars, and the service log.**
+
+<img src="docs/screenshots/gear-bike.jpg" alt="A bike: odometer, stats, distance by year, parts with wear bars and the service log." width="800">
+
+**Assign rides to bikes: pick days or a date range on the calendar, choose the bike, see exactly how many rides will change, apply.**
+
+<img src="docs/screenshots/gear-assign.jpg" alt="Assign rides to bikes by calendar with a live preview." width="800">
+
+**Every ride has a Bike picker at the top (new rides get your default bike).**
+
+<img src="docs/screenshots/gear-ride-bike.jpg" alt="The Bike picker on a ride." width="800">
+
+<p><img src="docs/screenshots/m-gear.jpg" alt="Gear on a phone." width="200" title="Gear on a phone."> <img src="docs/screenshots/m-gear-assign.jpg" alt="Assign rides on a phone." width="200" title="Assign rides on a phone."></p>
 
 </details>
 
@@ -420,6 +460,15 @@ All 61 screens below use the same synthetic demo data (a fictional rider on real
 - Optional **AI food-photo estimate** and **screenshot import** (e.g. from another food app) with your own key.
 - Installable as a PWA on iOS/Android.
 
+### Gear and maintenance
+- **Bikes** with photos, type, brand/model/year and any mileage from before Headwind; a **default bike per rider**, stamped on every new ride (Garmin sync, file import, phone recording, typed-in activity).
+- **Assign by calendar** — click days or set a range ("everything from 1 March to today"), choose the bike and see exactly how many rides change before you apply. A **Bike picker** on every ride changes just that one.
+- **Per-bike stats** — odometer, rides, distance, time, climbing, average speed, longest ride and distance by year.
+- **Replaceable parts** — chain, cassette, chainrings, tyres, tubeless sealant, brake pads/rotors/fluid, cables, bar tape, headset and wheel bearings, bottom bracket, cleats, suspension service or your own, each with editable *check* and *replace* intervals by distance and/or days.
+- **Service log** — replaced, serviced, inspected, cleaned...; replacing a part retires it (keeping its lifetime) and fits a fresh one.
+- **Alerts** — soon / due / overdue, once each, via ntfy and Home Assistant push; a dashboard card shows what needs attention.
+- Mileage is always **computed from your rides**, so fixing a ride's bike fixes every part. Photos are included in backups. See [docs/GEAR.md](docs/GEAR.md).
+
 ### Social (peer-to-peer)
 - Add a friend's Headwind by URL + feed token; their rides, segments and shared foods sync directly into your database. No central server.
 - Auto-sync every 15 minutes by default (off / 15 / 30 / 60 / 120).
@@ -555,6 +604,7 @@ Garmin credentials, the MQTT broker, Home Assistant URL/token and mappings, AI p
 | `/data/bike.db` | The SQLite database (WAL mode) — rides, food, weight, settings, **including credentials you enter in Settings**. |
 | `/data/avatars/` | Profile photos. |
 | `/data/foodimg/` | Food photos fetched or uploaded. |
+| `/data/bikeimg/` | Bike photos (Gear). |
 | `/data/.secret_key`, `/data/.admin_login` | The generated session key and login (mode 600). |
 | `/app/.garmin_tokens/` | Garmin login tokens (so MFA isn't needed every sync). |
 
@@ -713,7 +763,7 @@ tests/              unit tests
 docs/               Home Assistant builders, screenshots, notes
 ```
 
-**Data model (SQLite)** — `Activity` (rides, with GPS/HR/power streams), `BestEffort`, `Segment` + `SegmentEffort`, `Workout`, `FoodLog`, `HydrationLog`, `WeightLog`, `SavedMeal(+Item)`, `FoodFavourite`, `CustomFood`/`FoodOverride`, `Friend` (+ imported riders/segments/shared foods), `Settings`, `Rider`. Schema changes are applied at start-up by `migrate_db()`; restoring an older backup migrates it first.
+**Data model (SQLite)** — `Activity` (rides, with GPS/HR/power streams), `BestEffort`, `Segment` + `SegmentEffort`, `Workout`, `Bike` + `Part` + `ServiceLog` (Gear), `FoodLog`, `HydrationLog`, `WeightLog`, `SavedMeal(+Item)`, `FoodFavourite`, `CustomFood`/`FoodOverride`, `Friend` (+ imported riders/segments/shared foods), `Settings`, `Rider`. Schema changes are applied at start-up by `migrate_db()`; restoring an older backup migrates it first.
 
 ---
 

@@ -10,7 +10,7 @@
 {% if not bikes %}
   <div class="card" style="text-align:center;padding:2rem 1rem;"><p class="hint">Add a bike first, then come back here to say which bike rode which rides.</p><a class="btn btn-primary" href="{{ url_for('gear.bike_form', rider=rid) }}">+ Add a bike</a></div>
 {% else %}
-<p class="hint" style="margin-top:0;">Click days to pick them (shift-click to pick a stretch), or set a date range on the right, then choose a bike and apply. Days with rides that have no bike yet are outlined in orange. Walks and runs are never touched.</p>
+<p class="hint" style="margin-top:0;">Click days to pick them (shift-click to pick a stretch), or set a date range, then choose a bike and apply. Days with rides that have no bike yet are outlined in orange. Walks and runs are never touched.</p>
 <div class="cal-wrap">
   <div class="card">
     <div class="cal-bar">

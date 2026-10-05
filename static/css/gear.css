@@ -10,7 +10,7 @@
 .bike-card h3 { margin:0; font-size:1.1rem; }
 .bike-card .sub { color:var(--text-muted); font-size:.82rem; }
 .bike-card .odo { font-size:1.5rem; font-weight:700; font-variant-numeric:tabular-nums; }
-.chip { display:inline-block; font-size:.7rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; padding:.12rem .55rem; border-radius:99px; border:1px solid var(--border); color:var(--text-muted); }
+.chip { display:inline-block; line-height:1.45; font-size:.7rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; padding:.12rem .55rem; border-radius:99px; border:1px solid var(--border); color:var(--text-muted); }
 .chip.default { background:var(--accent); border-color:var(--accent); color:#fff; }
 .chip.ok { color:#10b981; border-color:rgba(16,185,129,.5); }
 .chip.soon { color:#f59e0b; border-color:rgba(245,158,11,.6); }
@@ -67,3 +67,9 @@ details.gcard > summary { cursor:pointer; font-weight:600; }
 .panel h3 { margin:.1rem 0 .6rem; font-size:.78rem; letter-spacing:.08em; text-transform:uppercase; color:var(--text-muted); }
 .quick { display:flex; gap:.4rem; flex-wrap:wrap; margin:.4rem 0 .8rem; }
 .preview { background:#08182a; border:1px solid var(--border); border-radius:10px; padding:.6rem .8rem; margin:.7rem 0; font-size:.88rem; min-height:3.2rem; }
+
+/* link + select polish (the base theme gives selects 100% width and leaves plain links browser-blue) */
+.due-row a:not(.btn), .gear-note a:not(.btn), .gtable a:not(.btn), .bike-card h3 a { color: var(--text); text-decoration: underline; text-decoration-color: rgba(255,255,255,.25); text-underline-offset: 3px; }
+.due-row a:not(.btn):hover, .gtable a:not(.btn):hover { text-decoration-color: var(--accent); }
+.cal-bar select { width: auto; min-width: 8rem; }
+.cal-bar { align-items: center; }

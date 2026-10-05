@@ -59,12 +59,12 @@
     <thead><tr><th>Part</th><th>Fitted</th><th>Used</th><th>Replace</th><th>Check</th><th></th></tr></thead>
     <tbody>
     {% set ns = namespace(group='') %}
-    {% for item in parts | sort(attribute='part.kind') %}
+    {% for item in parts %}
       {% set p = item.part %}{% set st = item.status %}
-      {% set grp = (catalog | selectattr('kind', 'equalto', p.kind) | map(attribute='group') | first) or 'Other' %}
+      {% set grp = item.group %}
       {% if grp != ns.group %}{% set ns.group = grp %}<tr class="grp"><td colspan="6">{{ grp }}</td></tr>{% endif %}
       <tr>
-        <td><strong>{{ p.name }}</strong>{% if p.notes %}<div class="hint">{{ p.notes }}</div>{% endif %}{% if not p.notify %}<div class="hint">alerts off</div>{% endif %}</td>
+        <td><strong>{{ p.name }}</strong>{% if item.label != p.name %}<div class="hint">{{ item.label }}</div>{% endif %}{% if p.notes %}<div class="hint">{{ p.notes }}</div>{% endif %}{% if not p.notify %}<div class="hint">alerts off</div>{% endif %}</td>
         <td>{{ p.installedOn | fmt_date }}<div class="hint">{{ st.days }} days ago</div></td>
         <td>{{ st.meters | fmt_dist }}</td>
         <td style="min-width:150px;">{% if p.replaceEveryM or p.replaceEveryDays %}{{ bar(st.replace.level, st.replace.ratio) }}<div class="hint"><span class="chip {{ st.replace.level }}">{{ st.replace.level }}</span> every {{ interval(p.replaceEveryM, p.replaceEveryDays) }}</div>{% else %}<span class="hint">no interval</span>{% endif %}</td>
@@ -177,7 +177,7 @@
     const rows = {{ by_year | safe }}, imp = {{ (units != 'metric') | tojson }}, div = imp ? 1609.344 : 1000;
     if (!window.Chart) return;
     new Chart(document.getElementById('yearChart'), { type: 'bar',
-      data: { labels: rows.map(r => r.year), datasets: [{ data: rows.map(r => Math.round(r.distance / div)), backgroundColor: '#fc4c02', borderRadius: 4 }] },
+      data: { labels: rows.map(r => r.year), datasets: [{ data: rows.map(r => Math.round(r.distance / div)), backgroundColor: '#fc4c02', borderRadius: 4, maxBarThickness: 64 }] },
       options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.parsed.y.toLocaleString() + ' ' + (imp ? 'mi' : 'km') + ' · ' + rows[c.dataIndex].rides + ' rides' } } },
         scales: { x: { ticks: { color: '#7a9aad' }, grid: { display: false } }, y: { ticks: { color: '#7a9aad' }, grid: { color: 'rgba(255,255,255,.06)' } } } } });
   })();

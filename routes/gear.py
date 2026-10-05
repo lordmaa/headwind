@@ -118,7 +118,11 @@ def bike(bike_id):
     b = _bike_or_404(bike_id)
     units = _units()
     st = gear.bike_stats(db, bike_id)
-    parts = [{'part': p, 'status': gear.part_status(db, p)} for p in gear.part_rows(db, bike_id)]
+    from services.gear_catalog import BY_KIND
+    def _group(p):
+        return (BY_KIND.get(p['kind']) or BY_KIND['custom'])['group']
+    parts = sorted(({'part': p, 'status': gear.part_status(db, p), 'group': _group(p), 'label': (BY_KIND.get(p['kind']) or BY_KIND['custom'])['label']} for p in gear.part_rows(db, bike_id)),
+                   key=lambda x: (GROUPS.index(x['group']) if x['group'] in GROUPS else 99, x['part']['kind'], x['part']['installedOn']))
     retired = [{'part': p, 'status': gear.part_status(db, p)} for p in gear.part_rows(db, bike_id, include_retired=True) if p['retiredOn']]
     recent = db.execute('SELECT id, name, startDateLocal, distance, movingTime, totalElevationGain FROM Activity WHERE bikeId=? ORDER BY startDateLocal DESC LIMIT 8', [bike_id]).fetchall()
     default = query_db('SELECT defaultBikeId FROM Rider WHERE id=?', [b['riderId']], one=True)
