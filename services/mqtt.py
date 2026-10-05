@@ -526,7 +526,7 @@ def _history_payloads():
             'd': [f"{r['y']}-01-01" for r in yrs], 'rides': [int(r['n']) for r in yrs],
             'mi': [round((r['d'] or 0) / 1609.344) for r in yrs], 'h': [round((r['t'] or 0) / 3600) for r in yrs],
             'ft': [round((r['e'] or 0) * 3.28084) for r in yrs], 'mi_to_date': [round((r['d2d'] or 0) / 1609.344) for r in yrs],
-            'as_of': today.strftime('%-d %b'), 'this_year': today.year,
+            'as_of': __import__('services.dates', fromlist=['x']).day_month(today), 'this_year': today.year,
         }
     except Exception as e:
         log.warning('ride years failed: %s', e)

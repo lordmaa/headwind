@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta, timezone
 from flask import Blueprint, redirect, render_template, request
 
 from database import get_db, query_db
+from services.dates import day_month
 
 bp = Blueprint('dashboard', __name__)
 
@@ -22,7 +23,7 @@ def _weekly_data(rider_id):
         )
         total_mi = (row['total'] or 0) / 1609.344
         total_ft = (row['elev'] or 0) * 3.28084
-        weeks.append({'label': ws.strftime('%-d %b'), 'mi': round(total_mi, 1), 'ft': round(total_ft), 'cals': round(row['cals'] or 0), 'current': i == 0})
+        weeks.append({'label': day_month(ws), 'mi': round(total_mi, 1), 'ft': round(total_ft), 'cals': round(row['cals'] or 0), 'current': i == 0})
     return weeks
 
 
@@ -52,7 +53,7 @@ def _group_activities(activities):
                 d_elev = sum(a['totalElevationGain'] or 0 for a in acts)
                 dt_day = datetime(year, mo, dy)
                 days.append({
-                    'label':      dt_day.strftime('%-d %b'),
+                    'label':      day_month(dt_day),
                     'activities': acts,
                     'count':      len(acts),
                     'dist':       d_dist,

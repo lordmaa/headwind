@@ -231,7 +231,8 @@ def create_app():
     @app.template_filter('fmt_date')
     def fmt_date(val):
         try:
-            return datetime.fromisoformat(str(val)[:19]).strftime('%-d %b %Y')
+            from services.dates import day_month_year
+            return day_month_year(datetime.fromisoformat(str(val)[:19]))
         except Exception:
             return str(val or '')
 

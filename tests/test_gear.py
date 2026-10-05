@@ -221,7 +221,8 @@ def test_photo_is_resized_to_jpeg_old_one_removed_and_junk_rejected(db):
     buf = io.BytesIO(); Image.new('RGB', (3000, 2000), (10, 200, 30)).save(buf, 'PNG')
     n1 = gear.save_photo(db, a, buf.getvalue(), dbpath(db))
     assert gear.valid_photo_name(n1)
-    im = Image.open(__import__('os').path.join(gear.photo_dir(dbpath(db)), n1)); assert max(im.size) <= 1400 and im.format == 'JPEG'
+    with Image.open(__import__('os').path.join(gear.photo_dir(dbpath(db)), n1)) as im:       # closed again: Windows cannot delete a file that is still open
+        assert max(im.size) <= 1400 and im.format == 'JPEG'
     n2 = gear.save_photo(db, a, buf.getvalue(), dbpath(db))
     assert n2 != n1 and not __import__('os').path.exists(__import__('os').path.join(gear.photo_dir(dbpath(db)), n1))
     with pytest.raises(ValueError):

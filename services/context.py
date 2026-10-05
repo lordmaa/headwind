@@ -67,7 +67,8 @@ def _fmt_date(d):
     try:
         from datetime import datetime
         dt = datetime.strptime(str(d)[:10], '%Y-%m-%d')
-        return dt.strftime('%-d %b %Y')
+        from services.dates import day_month_year
+        return day_month_year(dt)
     except Exception:
         return str(d)[:10]
 
