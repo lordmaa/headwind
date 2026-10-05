@@ -8,7 +8,7 @@ from pathlib import Path
 import PyInstaller.__main__
 
 root = Path(__file__).resolve().parent.parent
-out = Path(sys.argv[1]) if len(sys.argv) > 1 else root / 'dist'
+out = (Path(sys.argv[1]) if len(sys.argv) > 1 else root / 'dist').resolve()   # absolute: PyInstaller resolves relative --icon/--specpath paths against the spec folder
 sep = os.pathsep   # ';' on Windows, ':' elsewhere
 out.mkdir(parents=True, exist_ok=True)
 (out / 'build').mkdir(exist_ok=True)

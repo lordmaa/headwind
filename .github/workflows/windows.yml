@@ -35,6 +35,18 @@ jobs:
             $css = Invoke-WebRequest "http://127.0.0.1:5099/static/css/style.css" -UseBasicParsing
             Write-Host "login=$($r.StatusCode) css=$($css.StatusCode)"
             if ($r.StatusCode -ne 200 -or $css.StatusCode -ne 200) { exit 1 }
+            # sign in with the first-run password and load pages that exercise date formatting and the Gear module
+            $log = Get-Content "$env:HEADWIND_DATA\headwind.log" -Raw
+            $pw = [regex]::Match($log, 'password[^\r\n]*?:\s*(\S+)', 'IgnoreCase').Groups[1].Value
+            if ($pw) {
+              $body = @{ username = 'admin'; password = $pw }
+              Invoke-WebRequest "http://127.0.0.1:5099/login" -Method Post -Body $body -SessionVariable ws -UseBasicParsing -MaximumRedirection 0 -ErrorAction SilentlyContinue | Out-Null
+              foreach ($u in '/gear/', '/gear/assign', '/workouts', '/static/js/gear_assign.js') {
+                $x = Invoke-WebRequest "http://127.0.0.1:5099$u" -WebSession $ws -UseBasicParsing -ErrorAction SilentlyContinue
+                Write-Host "$u=$($x.StatusCode)"
+                if ($x.StatusCode -ne 200) { exit 1 }
+              }
+            } else { Write-Host "(first-run password not found in log; skipped the signed-in checks)" }
           } finally {
             # the windowed exe writes its console output to a log file
             Get-Content "$env:HEADWIND_DATA\headwind.log" -ErrorAction SilentlyContinue | Select-String -NotMatch "password" | Write-Host
