@@ -39,6 +39,10 @@
          class="nav-item {% if request.blueprint == 'segments' %}active{% endif %}">
         {% include 'icons/_flag.svg' %} Segments
       </a>
+      <a href="{{ url_for('gear.index') }}"
+         class="nav-item {% if request.blueprint == 'gear' %}active{% endif %}">
+        {% include 'icons/_gear.svg' %} Gear
+      </a>
       <a href="{{ url_for('heatmap.index') }}"
          class="nav-item {% if request.blueprint == 'heatmap' %}active{% endif %}">
         {% include 'icons/_pin.svg' %} Heatmap

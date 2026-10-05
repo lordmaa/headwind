@@ -205,6 +205,8 @@ def _process_single_file(path, original_name, rider_id=None):
         dup = None
         try:                                            # same ride already recorded by another device? keep the better one
             dup = duplicates.resolve(db, act['id'])
+            from services import gear
+            gear.on_ride_added(db, (dup or {}).get('kept', act['id']))
             db.commit()
         except Exception as e:
             log.error('Duplicate resolution failed for %s: %s', act['id'], e)
@@ -304,6 +306,8 @@ def _process_strava_export(zf, names, rider_id=None):
             save_best_efforts(db, act.get('id'), act.get('startDateLocal'), act.get('streams'))
             from services import duplicates
             duplicates.resolve(db, act.get('id'))
+            from services import gear
+            gear.on_ride_added(db, act.get('id'))
             db.commit()
             imported += 1
         except Exception as e:
@@ -345,6 +349,8 @@ def _process_generic_zip(zf, names, rider_id=None):
                     save_best_efforts(db, act.get('id'), act.get('startDateLocal'), act.get('streams'))
                     from services import duplicates
                     duplicates.resolve(db, act.get('id'))
+                    from services import gear
+                    gear.on_ride_added(db, act.get('id'))
                     db.commit()
                     imported += 1
             else:

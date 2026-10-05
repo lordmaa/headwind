@@ -32,6 +32,15 @@
       {% if rider.isDefault %}
       <span style="font-size:0.75rem; background:var(--accent); color:#fff; padding:0.15rem 0.5rem; border-radius:999px;">Owner</span>
       {% endif %}
+      <form method="POST" action="{{ url_for('gear.set_default') }}" style="margin-top:.8rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+        <input type="hidden" name="rider" value="{{ rider.id }}">
+        <label style="font-size:.78rem;color:var(--text-muted);">Default bike for new rides</label>
+        <select name="bike" onchange="this.form.submit()">
+          <option value="" {{ 'selected' if not rider.defaultBikeId }}>None</option>
+          {% for b in rider_bikes %}<option value="{{ b.id }}" {{ 'selected' if rider.defaultBikeId == b.id }}>{{ b.name }}</option>{% endfor %}
+        </select>
+        <a href="{{ url_for('gear.index', rider=rider.id) }}" style="font-size:.8rem;">Manage gear</a>
+      </form>
     </div>
     <div style="display:flex; flex-direction:column; gap:0.75rem; align-items:flex-start;">
       <!-- Avatar upload -->

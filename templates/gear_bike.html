@@ -1,0 +1,186 @@
+{% extends 'base.html' %}
+{% block title %}{{ bike.name }}{% endblock %}
+{% block page_title %}{{ bike.name }}{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/gear.css') }}">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+{% block topbar_actions %}<a class="btn btn-secondary" href="{{ url_for('gear.index', rider=bike.riderId) }}">&larr; Gear</a>{% endblock %}
+
+{% macro bar(level, ratio) %}<div class="bar {{ level }}"><i style="width:{{ [100, ((ratio or 0) * 100) | round | int] | min }}%"></i></div>{% endmacro %}
+{% macro interval(m, days) %}{% if m %}{{ m | fmt_dist }}{% endif %}{% if m and days %} or {% endif %}{% if days %}{{ days }} days{% endif %}{% endmacro %}
+
+{% block content %}
+{% if error %}<div class="gear-err">{{ error }}</div>{% endif %}
+
+<div class="gear-head">
+  <div class="big-ph">{% if bike.photo %}<img src="{{ url_for('gear.photo', name=bike.photo) }}" alt="{{ bike.name }}">{% else %}<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="16" r="3.5"/><circle cx="18.5" cy="16" r="3.5"/><path d="M5.5 16 9 8h5l4.5 8M9 8l3.5 8M14 8l-1-3h-2"/></svg>{% endif %}</div>
+  <div class="meta">
+    <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;">
+      <span class="chip">{{ kinds.get(bike.kind, 'Bike') }}</span>
+      {% if is_default %}<span class="chip default">Default for new rides</span>{% endif %}
+      {% if bike.archived %}<span class="chip">Archived</span>{% endif %}
+    </div>
+    <h2>{{ bike.name }}</h2>
+    <div class="hint">{{ [bike.brand, bike.model, bike.year] | select | join(' ') }}{% if bike.boughtOn %} · bought {{ bike.boughtOn | fmt_date }}{% endif %}</div>
+    <div style="font-size:2rem;font-weight:700;font-variant-numeric:tabular-nums;margin-top:.4rem;">{{ odometer | fmt_dist }}</div>
+    <div class="hint">odometer{% if bike.startMeters %} (includes {{ bike.startMeters | fmt_dist }} before Headwind){% endif %}</div>
+    {% if bike.notes %}<p class="hint" style="margin:.5rem 0 0;">{{ bike.notes }}</p>{% endif %}
+    <div class="gear-actions">
+      {% if not is_default and not bike.archived %}<form method="POST" action="{{ url_for('gear.bike_default', bike_id=bike.id) }}"><button class="btn btn-secondary btn-sm">Make default</button></form>{% endif %}
+      <a class="btn btn-secondary btn-sm" href="{{ url_for('gear.bike_form', bike_id=bike.id) }}">Edit</a>
+      <form method="POST" action="{{ url_for('gear.bike_archive', bike_id=bike.id) }}">{% if bike.archived %}<input type="hidden" name="undo" value="1">{% endif %}<button class="btn btn-secondary btn-sm">{{ 'Restore' if bike.archived else 'Archive' }}</button></form>
+      <form method="POST" action="{{ url_for('gear.bike_delete', bike_id=bike.id) }}" onsubmit="return confirm('Delete {{ bike.name | e }}, its parts and its service log? Its rides stay, but will have no bike. This cannot be undone.')"><button class="btn btn-danger btn-sm">Delete</button></form>
+    </div>
+  </div>
+</div>
+
+<div class="stats-grid" style="margin-bottom:1rem;">
+  <div class="stat-card"><div class="stat-value">{{ '{:,}'.format(stats.rides) }}</div><div class="stat-label">Rides</div></div>
+  <div class="stat-card"><div class="stat-value">{{ stats.distance | fmt_dist }}</div><div class="stat-label">Distance on Headwind rides</div></div>
+  <div class="stat-card"><div class="stat-value">{{ stats.moving | fmt_duration }}</div><div class="stat-label">Moving time</div></div>
+  <div class="stat-card"><div class="stat-value">{{ stats.gain | fmt_elev }}</div><div class="stat-label">Climbing</div></div>
+  {% if stats.avg_speed %}<div class="stat-card"><div class="stat-value">{{ stats.avg_speed | fmt_speed }}</div><div class="stat-label">Average speed</div></div>{% endif %}
+  {% if stats.longest %}<div class="stat-card"><div class="stat-value">{{ stats.longest | fmt_dist }}</div><div class="stat-label">Longest ride</div></div>{% endif %}
+</div>
+
+{% if stats.by_year | length > 0 %}
+<div class="card" style="margin-bottom:1rem;">
+  <div class="card-title">Distance by year</div>
+  <div style="height:190px;"><canvas id="yearChart"></canvas></div>
+</div>
+{% endif %}
+
+<div class="card" id="parts" style="margin-bottom:1rem;">
+  <div class="card-title">Parts on this bike</div>
+  {% if not parts %}<p class="hint">Nothing tracked yet. Add the chain, tyres, cassette, bar tape and so on below, and Headwind will count the miles on each from the day you fitted it.</p>{% endif %}
+  {% if parts %}
+  <table class="gtable">
+    <thead><tr><th>Part</th><th>Fitted</th><th>Used</th><th>Replace</th><th>Check</th><th></th></tr></thead>
+    <tbody>
+    {% set ns = namespace(group='') %}
+    {% for item in parts | sort(attribute='part.kind') %}
+      {% set p = item.part %}{% set st = item.status %}
+      {% set grp = (catalog | selectattr('kind', 'equalto', p.kind) | map(attribute='group') | first) or 'Other' %}
+      {% if grp != ns.group %}{% set ns.group = grp %}<tr class="grp"><td colspan="6">{{ grp }}</td></tr>{% endif %}
+      <tr>
+        <td><strong>{{ p.name }}</strong>{% if p.notes %}<div class="hint">{{ p.notes }}</div>{% endif %}{% if not p.notify %}<div class="hint">alerts off</div>{% endif %}</td>
+        <td>{{ p.installedOn | fmt_date }}<div class="hint">{{ st.days }} days ago</div></td>
+        <td>{{ st.meters | fmt_dist }}</td>
+        <td style="min-width:150px;">{% if p.replaceEveryM or p.replaceEveryDays %}{{ bar(st.replace.level, st.replace.ratio) }}<div class="hint"><span class="chip {{ st.replace.level }}">{{ st.replace.level }}</span> every {{ interval(p.replaceEveryM, p.replaceEveryDays) }}</div>{% else %}<span class="hint">no interval</span>{% endif %}</td>
+        <td style="min-width:150px;">{% if p.checkEveryM or p.checkEveryDays %}{{ bar(st.check.level, st.check.ratio) }}<div class="hint"><span class="chip {{ st.check.level }}">{{ st.check.level }}</span> every {{ interval(p.checkEveryM, p.checkEveryDays) }} · last {{ st.last_check | fmt_date }}</div>{% else %}<span class="hint">no interval</span>{% endif %}</td>
+        <td><div class="mini-actions"><button class="btn btn-secondary btn-sm" type="button" onclick="logFor({{ p.id }})">Log service</button>
+          <button class="btn btn-secondary btn-sm" type="button" onclick="document.getElementById('edit{{ p.id }}').toggleAttribute('hidden')">Edit</button></div></td>
+      </tr>
+      <tr id="edit{{ p.id }}" hidden><td colspan="6">
+        <form method="POST" action="{{ url_for('gear.part_edit', part_id=p.id) }}" class="gform">
+          <label>Name<input name="name" value="{{ p.name }}" maxlength="80"></label>
+          <label>Fitted on<input type="date" name="installedOn" value="{{ p.installedOn }}"></label>
+          <label>Already worn when fitted ({{ 'km' if units == 'metric' else 'mi' }})<input type="number" step="1" min="0" name="initial" value="{{ ((p.initialMeters or 0) / (1000 if units == 'metric' else 1609.344)) | round | int if p.initialMeters else '' }}"></label>
+          <label>Replace every ({{ 'km' if units == 'metric' else 'mi' }})<input type="number" step="1" min="0" name="replaceEvery" value="{{ ((p.replaceEveryM / (1000 if units == 'metric' else 1609.344)) | round | int) if p.replaceEveryM else '' }}"></label>
+          <label>...or every (days)<input type="number" step="1" min="0" name="replaceDays" value="{{ p.replaceEveryDays or '' }}"></label>
+          <label>Check every ({{ 'km' if units == 'metric' else 'mi' }})<input type="number" step="1" min="0" name="checkEvery" value="{{ ((p.checkEveryM / (1000 if units == 'metric' else 1609.344)) | round | int) if p.checkEveryM else '' }}"></label>
+          <label>...or every (days)<input type="number" step="1" min="0" name="checkDays" value="{{ p.checkEveryDays or '' }}"></label>
+          <label>Alerts<select name="notify"><option value="1" {{ 'selected' if p.notify }}>On</option><option value="0" {{ 'selected' if not p.notify }}>Off</option></select></label>
+          <label class="wide">Notes<input name="notes" value="{{ p.notes or '' }}" maxlength="500"></label>
+          <div class="wide"><button class="btn btn-primary btn-sm" type="submit">Save part</button></div>
+        </form>
+      </td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  <details class="gcard" style="margin:1rem 0 0;" {% if not parts %}open{% endif %}>
+    <summary>+ Add a part</summary>
+    <form method="POST" action="{{ url_for('gear.part_add', bike_id=bike.id) }}" class="gform" id="partForm">
+      <label>What is it?
+        <select name="kind" id="partKind">
+          {% for g in groups %}<optgroup label="{{ g }}">{% for c in catalog if c.group == g %}<option value="{{ c.kind }}">{{ c.label }}</option>{% endfor %}</optgroup>{% endfor %}
+        </select></label>
+      <label>Name / model<input name="name" id="partName" maxlength="80" placeholder="e.g. KMC X11, GP5000 28mm"></label>
+      <label>Fitted on<input type="date" name="installedOn" value="{{ today }}" max="{{ today }}"></label>
+      <label>Already worn when fitted ({{ 'km' if units == 'metric' else 'mi' }})<input type="number" name="initial" min="0" step="1" placeholder="0 if new"></label>
+      <label>Replace every ({{ 'km' if units == 'metric' else 'mi' }})<input type="number" name="replaceEvery" id="pReplace" min="0" step="1"></label>
+      <label>...or every (days)<input type="number" name="replaceDays" id="pReplaceDays" min="0" step="1"></label>
+      <label>Check every ({{ 'km' if units == 'metric' else 'mi' }})<input type="number" name="checkEvery" id="pCheck" min="0" step="1"></label>
+      <label>...or every (days)<input type="number" name="checkDays" id="pCheckDays" min="0" step="1"></label>
+      <label>Cost (optional)<input type="number" name="cost" min="0" step="0.01"></label>
+      <label>Alert me<select name="notify"><option value="1">Yes</option><option value="0">No</option></select></label>
+      <label class="wide">Notes<input name="notes" maxlength="500"></label>
+      <div class="wide"><button class="btn btn-primary" type="submit">Add part</button> <span class="hint" id="partNote"></span></div>
+    </form>
+    <p class="hint">The intervals are sensible starting points for each part: change them to suit how and where you ride. Leave a box empty to ignore that kind of interval.</p>
+  </details>
+</div>
+
+<div class="card" id="log" style="margin-bottom:1rem;">
+  <div class="card-title">Service log</div>
+  <details class="gcard" style="margin:0 0 1rem;" open>
+    <summary>+ Log some work</summary>
+    <form method="POST" action="{{ url_for('gear.service_add', bike_id=bike.id) }}" class="gform" id="logForm">
+      <label>What happened<select name="action" id="logAction">{% for a, l in actions %}<option value="{{ a }}">{{ l }}</option>{% endfor %}</select></label>
+      <label>Which part<select name="part" id="logPart"><option value="">The bike in general</option>{% for item in parts %}<option value="{{ item.part.id }}">{{ item.part.name }}</option>{% endfor %}</select></label>
+      <label>Date<input type="date" name="date" value="{{ today }}" max="{{ today }}"></label>
+      <label>Cost (optional)<input type="number" name="cost" min="0" step="0.01"></label>
+      <label class="wide">Notes<input name="notes" maxlength="500" placeholder="e.g. 0.5% stretch, replaced with the new one"></label>
+      <div id="replaceBox" class="wide" hidden style="display:none;">
+        <label style="flex-direction:row;align-items:center;gap:.5rem;"><input type="checkbox" id="fitNew" checked onchange="document.getElementById('fitNewVal').value = this.checked ? '1' : '0'"> Fit a new one now (same intervals, starts counting today)</label>
+        <input type="hidden" name="fit_new" id="fitNewVal" value="1">
+        <label>New part name (optional)<input name="new_name" maxlength="80"></label>
+      </div>
+      <div class="wide"><button class="btn btn-primary" type="submit">Save</button></div>
+    </form>
+  </details>
+  {% if log %}
+  <table class="gtable">
+    <thead><tr><th>Date</th><th>What</th><th>Part</th><th>Odometer</th><th>Cost</th><th>Notes</th><th></th></tr></thead>
+    <tbody>{% for s in log %}
+      <tr><td>{{ s.date | fmt_date }}</td><td>{{ s.action | replace('_', ' ') | capitalize }}</td><td>{{ s.partName or 'Whole bike' }}</td><td>{{ s.odometerM | fmt_dist if s.odometerM is not none else '' }}</td><td>{{ '%.2f' | format(s.cost) if s.cost else '' }}</td><td>{{ s.notes or '' }}</td>
+        <td><form method="POST" action="{{ url_for('gear.log_delete', log_id=s.id) }}" onsubmit="return confirm('Remove this log entry?')"><button class="btn btn-secondary btn-sm">Remove</button></form></td></tr>
+    {% endfor %}</tbody>
+  </table>
+  {% else %}<p class="hint">Nothing logged yet. Record a chain swap, a clean, a bleed, anything: it also resets that part's "last checked" clock.</p>{% endif %}
+</div>
+
+{% if retired %}
+<details class="gcard"><summary>Retired parts ({{ retired | length }})</summary>
+  <table class="gtable" style="margin-top:.6rem;"><thead><tr><th>Part</th><th>Fitted</th><th>Retired</th><th>Lasted</th></tr></thead>
+    <tbody>{% for item in retired %}<tr><td>{{ item.part.name }}</td><td>{{ item.part.installedOn | fmt_date }}</td><td>{{ item.part.retiredOn | fmt_date }}</td><td>{{ item.status.meters | fmt_dist }} · {{ item.status.days }} days</td></tr>{% endfor %}</tbody></table>
+</details>
+{% endif %}
+
+{% if recent %}
+<div class="card"><div class="card-title">Recent rides on this bike</div>
+  <table class="gtable"><tbody>{% for r in recent %}<tr><td>{{ r.startDateLocal[:10] | fmt_date }}</td><td><a href="{{ url_for('rides.detail', rid=r.id) }}">{{ r.name }}</a></td><td>{{ r.distance | fmt_dist }}</td><td>{{ r.movingTime | fmt_duration }}</td><td>{{ r.totalElevationGain | fmt_elev }}</td></tr>{% endfor %}</tbody></table>
+</div>
+{% endif %}
+
+<script>
+  const CATALOG = {{ catalog | tojson }};
+  const UNITS_LABEL = {{ ('km' if units == 'metric' else 'mi') | tojson }};
+  const kindSel = document.getElementById('partKind');
+  function fillFromKind() {
+    const c = CATALOG.find(x => x.kind === kindSel.value); if (!c) return;
+    document.getElementById('pReplace').value = c.replace; document.getElementById('pCheck').value = c.check;
+    document.getElementById('pReplaceDays').value = c.replace_days || ''; document.getElementById('pCheckDays').value = c.check_days || '';
+    document.getElementById('partNote').textContent = c.note || '';
+    const nm = document.getElementById('partName'); if (kindSel.value !== 'custom') nm.placeholder = c.label + ' (name or model, optional)';
+  }
+  if (kindSel) { kindSel.onchange = fillFromKind; fillFromKind(); }
+  const act = document.getElementById('logAction');
+  function syncLog() { const show = act.value === 'replaced' && document.getElementById('logPart').value; const b = document.getElementById('replaceBox'); b.hidden = !show; b.style.display = show ? '' : 'none'; }
+  act.onchange = syncLog; document.getElementById('logPart').onchange = syncLog;
+  function logFor(id) { document.getElementById('logPart').value = id; document.getElementById('logForm').scrollIntoView({behavior: 'smooth'}); syncLog(); }
+  {% if stats.by_year | length > 0 %}
+  (function () {
+    const rows = {{ by_year | safe }}, imp = {{ (units != 'metric') | tojson }}, div = imp ? 1609.344 : 1000;
+    if (!window.Chart) return;
+    new Chart(document.getElementById('yearChart'), { type: 'bar',
+      data: { labels: rows.map(r => r.year), datasets: [{ data: rows.map(r => Math.round(r.distance / div)), backgroundColor: '#fc4c02', borderRadius: 4 }] },
+      options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.parsed.y.toLocaleString() + ' ' + (imp ? 'mi' : 'km') + ' · ' + rows[c.dataIndex].rides + ' rides' } } },
+        scales: { x: { ticks: { color: '#7a9aad' }, grid: { display: false } }, y: { ticks: { color: '#7a9aad' }, grid: { color: 'rgba(255,255,255,.06)' } } } } });
+  })();
+  {% endif %}
+</script>
+{% endblock %}

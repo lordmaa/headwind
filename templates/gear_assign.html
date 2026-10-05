@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% block title %}Assign rides to bikes{% endblock %}
+{% block page_title %}Assign rides to bikes{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/gear.css') }}">{% endblock %}
+{% block topbar_actions %}
+  {% if riders %}<form method="GET" style="display:inline;"><select name="rider" onchange="this.form.submit()">{% for r in riders %}<option value="{{ r.id }}" {{ 'selected' if r.id == rid }}>{{ r.name }}</option>{% endfor %}</select></form>{% endif %}
+  <a class="btn btn-secondary" href="{{ url_for('gear.index', rider=rid) }}">&larr; Gear</a>
+{% endblock %}
+{% block content %}
+{% if not bikes %}
+  <div class="card" style="text-align:center;padding:2rem 1rem;"><p class="hint">Add a bike first, then come back here to say which bike rode which rides.</p><a class="btn btn-primary" href="{{ url_for('gear.bike_form', rider=rid) }}">+ Add a bike</a></div>
+{% else %}
+<p class="hint" style="margin-top:0;">Click days to pick them (shift-click to pick a stretch), or set a date range on the right, then choose a bike and apply. Days with rides that have no bike yet are outlined in orange. Walks and runs are never touched.</p>
+<div class="cal-wrap">
+  <div class="card">
+    <div class="cal-bar">
+      <button class="btn btn-secondary btn-sm" id="prev" type="button">&lsaquo;</button>
+      <select id="monthSel"></select><select id="yearSel"></select>
+      <button class="btn btn-secondary btn-sm" id="next" type="button">&rsaquo;</button>
+      <button class="btn btn-secondary btn-sm" id="goUn" type="button" title="Jump to your oldest ride with no bike">Oldest unassigned</button>
+      <button class="btn btn-secondary btn-sm" id="goToday" type="button">Today</button>
+      <span class="hint" id="monthInfo" style="margin-left:auto;"></span>
+    </div>
+    <div class="legend" id="legend"></div>
+    <div class="cal-grid" id="calGrid"></div>
+  </div>
+  <div class="panel">
+    <h3>1. Pick the rides</h3>
+    <div class="hint" id="selInfo">Nothing picked yet.</div>
+    <div class="gform" style="grid-template-columns:1fr 1fr;margin-bottom:.2rem;">
+      <label>From<input type="date" id="from" max="{{ today }}"></label>
+      <label>To<input type="date" id="to" max="{{ today }}"></label>
+      <label class="wide" style="flex-direction:row;align-items:center;gap:.5rem;"><input type="checkbox" id="toPresent"> ...all the way to today</label>
+    </div>
+    <div class="quick">
+      <button class="btn btn-secondary btn-sm" id="qFromDay" type="button" title="Uses the first day you clicked">From picked day to today</button>
+      <button class="btn btn-secondary btn-sm" id="qMonth" type="button">This month</button>
+      <button class="btn btn-secondary btn-sm" id="qYear" type="button">This year</button>
+      <button class="btn btn-secondary btn-sm" id="qAllUn" type="button">All unassigned rides</button>
+      <button class="btn btn-secondary btn-sm" id="qClear" type="button">Clear</button>
+    </div>
+    <h3>2. Choose the bike</h3>
+    <div class="gform" style="grid-template-columns:1fr;">
+      <label><select id="bikeSel">{% for b in bikes %}<option value="{{ b.id }}">{{ b.name }}</option>{% endfor %}<option value="">No bike (clear)</option></select></label>
+      <label style="flex-direction:row;align-items:center;gap:.5rem;"><input type="checkbox" id="onlyUn" checked> Leave rides that already have a bike alone</label>
+    </div>
+    <div class="preview" id="preview">Pick some days or a range to see what will change.</div>
+    <button class="btn btn-primary" id="apply" type="button" disabled style="width:100%;">Apply</button>
+    <div class="hint" id="result" style="margin-top:.6rem;"></div>
+  </div>
+</div>
+<script>
+  window.GEAR_ASSIGN = { bikes: {{ bikes | map(attribute='id') | list | tojson }}, names: {{ (bikes | map(attribute='name') | list) | tojson }}, span: {{ span | tojson }}, today: {{ today | tojson }}, rider: {{ rid | tojson }} };
+</script>
+<script src="{{ url_for('static', filename='js/gear_assign.js') }}"></script>
+{% endif %}
+{% endblock %}

@@ -508,8 +508,11 @@ def sync_garmin_activities(email, password, rider_id):
                     pass
 
             try:
-                if duplicates.resolve(db, db_id):
+                dup = duplicates.resolve(db, db_id)
+                if dup:
                     log.warning('Garmin activity %s matched an existing recording; kept the better one', activity_id)
+                from services import gear
+                gear.on_ride_added(db, (dup or {}).get('kept', db_id))
             except Exception as e:
                 log.error('Duplicate resolution failed for %s: %s', db_id, e)
             imported += 1

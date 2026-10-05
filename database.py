@@ -527,6 +527,8 @@ def migrate_db():
 
     from services.duplicates import ensure_schema as _dup_schema
     _dup_schema(db)
+    from services.gear import ensure_schema as _gear_schema
+    _gear_schema(db)
 
     # One row per paired phone/app. Only a SHA-256 of the token is stored; the token itself is shown once at pairing time.
     db.execute('''

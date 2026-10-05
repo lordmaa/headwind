@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from flask import Blueprint, redirect, render_template, request
 
-from database import query_db
+from database import get_db, query_db
 
 bp = Blueprint('dashboard', __name__)
 
@@ -188,8 +188,15 @@ def dashboard():
         except ValueError:
             pass
 
+    try:
+        from services import gear
+        gear_due = gear.due_items(get_db(), rid, include_soon=False)[:4]
+    except Exception:
+        gear_due = []
+
     return render_template(
         'dashboard.html',
+        gear_due=gear_due,
         athlete=athlete,
         totals=totals,
         activities=activities,

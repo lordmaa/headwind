@@ -49,6 +49,24 @@
 
 {% block content %}
 
+{% if is_ride and (gear_bikes or activity.riderId) %}
+<div class="card" style="margin-bottom:1rem;display:flex;gap:.8rem;align-items:center;flex-wrap:wrap;padding:.7rem 1rem;">
+  <span style="color:var(--text-muted);font-size:.78rem;letter-spacing:.07em;text-transform:uppercase;font-weight:700;">Bike</span>
+  {% if gear_bikes %}
+  <form method="POST" action="{{ url_for('gear.ride_bike', rid=activity.id) }}" style="margin:0;">
+    <select name="bike" onchange="this.form.submit()" aria-label="Which bike did you ride?">
+      <option value="" {{ 'selected' if not activity.bikeId }}>No bike chosen</option>
+      {% for b in gear_bikes %}<option value="{{ b.id }}" {{ 'selected' if activity.bikeId == b.id }}>{{ b.name }}</option>{% endfor %}
+    </select>
+  </form>
+  {% if activity.bikeId %}<a class="btn btn-secondary btn-sm" style="padding:.25rem .6rem;font-size:.78rem;" href="{{ url_for('gear.bike', bike_id=activity.bikeId) }}">Open bike</a>{% endif %}
+  {% else %}
+  <a href="{{ url_for('gear.bike_form', rider=activity.riderId) }}">Add a bike</a><span style="color:var(--text-muted);font-size:.85rem;">to track which bike rode this and how worn its parts are.</span>
+  {% endif %}
+  {% if gear_error %}<span style="color:#fecaca;">{{ gear_error }}</span>{% endif %}
+</div>
+{% endif %}
+
 {% if dups %}
 <div class="card" style="margin-bottom:1.25rem;border-color:var(--accent,#fc4c02);">
   <div style="font-weight:600;margin-bottom:.35rem;">This ride was also recorded by another device</div>

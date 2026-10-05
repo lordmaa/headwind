@@ -89,6 +89,8 @@ def create(db, rider_id, sport, local_iso, duration_s, distance_m, elev_m=None, 
     dup = None
     try:
         dup = duplicates.resolve(db, aid)
+        from services import gear
+        gear.on_ride_added(db, (dup or {}).get('kept', aid))
     except Exception:
         db.rollback()
         raise

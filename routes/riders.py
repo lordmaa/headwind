@@ -435,7 +435,9 @@ def detail(rid):
 
     badges = _compute_badges(rid, totals)
 
-    return render_template('rider.html', rider=rider, totals=totals,
+    from services import gear as gear_svc
+    rider_bikes = gear_svc.list_bikes(get_db(), rid)
+    return render_template('rider.html', rider=rider, totals=totals, rider_bikes=rider_bikes,
                            recent=recent, seg_prs=seg_prs,
                            best_by_dist=best_by_dist, brackets=BRACKETS_MI,
                            badges=badges)

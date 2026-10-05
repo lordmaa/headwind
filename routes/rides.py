@@ -210,7 +210,8 @@ def detail(rid):
                     if b.get('ride_id') and str(b['ride_id']) == str(rid):
                         ride_badges.append(b)
 
-    from services import duplicates
+    from services import duplicates, gear as gear_svc
+    gear_bikes = gear_svc.list_bikes(get_db(), activity['riderId']) if activity['riderId'] and is_ride else []
     dups = []
     for d in duplicates.parked_for(get_db(), rid):
         try:
@@ -220,7 +221,7 @@ def detail(rid):
         dups.append({'id': d['id'], 'source': d['source'], 'reason': d['reason'], 'start': r.get('startDateLocal'), 'distance': r.get('distance'),
                      'moving': r.get('movingTime'), 'hr': r.get('averageHeartrate'), 'watts': r.get('averageWatts')})
 
-    return render_template('ride.html', activity=activity, coords=coords, dups=dups,
+    return render_template('ride.html', activity=activity, coords=coords, dups=dups, gear_bikes=gear_bikes, gear_error=request.args.get('error'),
                            charts=charts, has_memory=memory_count > 0,
                            seg_efforts=seg_efforts, alt_raw=alt_raw,
                            co_riders=co_riders, seg_rivals=seg_rivals,

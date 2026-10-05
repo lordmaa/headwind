@@ -888,6 +888,24 @@ def push_workout(w, rider_name, url):
     _broker_send([{'topic': f'{_prefix()}/new_ride', 'payload': json.dumps(payload), 'qos': 1}], s['mqttHost'].strip(), int(s['mqttPort'] or 1883), auth)
 
 
+def push_gear_alert(alerts):
+    """"Something on a bike needs attention" push: same topic and shape as the ride-added message so the one HA automation delivers it to the right phone."""
+    from database import query_db
+    s = query_db('SELECT mqttHost, mqttPort, mqttUser, mqttPassword FROM Settings WHERE id=1', one=True)
+    if not s or not (s['mqttHost'] or '').strip() or not alerts:
+        return
+    auth = {'username': s['mqttUser'], 'password': s['mqttPassword'] or ''} if s['mqttUser'] else None
+    msgs = []
+    for a in alerts:
+        r = query_db('SELECT name, haDevice FROM Rider WHERE id=?', [a.get('riderId')], one=True)
+        payload = {'title': 'Gear: ' + ('needs attention' if len(alerts) == 1 else f'{len(alerts)} things need attention'), 'message': a['text'], 'url': '/gear', 'rider': r['name'] if r else None,
+                   'kind': 'gear', 'ride_id': None}
+        if r and r['haDevice']:
+            payload['ha_device'] = r['haDevice']
+        msgs.append({'topic': f'{_prefix()}/new_ride', 'payload': json.dumps(payload), 'qos': 1})
+    _broker_send(msgs, s['mqttHost'].strip(), int(s['mqttPort'] or 1883), auth)
+
+
 def push_update_nutrition():
     """Publish nutrition sensors that have changed — called after every food/water log action."""
     global _last_state

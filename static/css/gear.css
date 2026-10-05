@@ -1,0 +1,69 @@
+/* Gear module. Uses the app's theme variables only (no hard-coded colours except the per-bike palette in gear_assign.js). */
+.gear-note { background: rgba(252,76,2,.10); border: 1px solid rgba(252,76,2,.35); border-radius: 12px; padding: .7rem 1rem; margin-bottom: 1rem; display:flex; gap:.8rem; align-items:center; flex-wrap:wrap; }
+.gear-err { background: rgba(239,68,68,.12); border: 1px solid rgba(239,68,68,.4); color:#fecaca; border-radius:10px; padding:.6rem .9rem; margin-bottom:1rem; }
+.bike-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(290px,1fr)); gap:1rem; }
+.bike-card { background:var(--card-bg); border:1px solid var(--border); border-radius:16px; overflow:hidden; display:flex; flex-direction:column; text-decoration:none; color:inherit; }
+.bike-card:hover { border-color:#34607c; }
+.bike-card .ph { aspect-ratio:16/9; background:#07131f; display:flex; align-items:center; justify-content:center; color:var(--text-muted); overflow:hidden; }
+.bike-card .ph img { width:100%; height:100%; object-fit:cover; }
+.bike-card .body { padding:.9rem 1rem 1rem; display:grid; gap:.35rem; }
+.bike-card h3 { margin:0; font-size:1.1rem; }
+.bike-card .sub { color:var(--text-muted); font-size:.82rem; }
+.bike-card .odo { font-size:1.5rem; font-weight:700; font-variant-numeric:tabular-nums; }
+.chip { display:inline-block; font-size:.7rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; padding:.12rem .55rem; border-radius:99px; border:1px solid var(--border); color:var(--text-muted); }
+.chip.default { background:var(--accent); border-color:var(--accent); color:#fff; }
+.chip.ok { color:#10b981; border-color:rgba(16,185,129,.5); }
+.chip.soon { color:#f59e0b; border-color:rgba(245,158,11,.6); }
+.chip.due { color:#fb923c; border-color:rgba(251,146,60,.7); }
+.chip.overdue { color:#ef4444; border-color:rgba(239,68,68,.7); }
+.due-list { display:grid; gap:.5rem; }
+.due-row { display:flex; gap:.7rem; align-items:center; padding:.5rem 0; border-top:1px solid var(--border); flex-wrap:wrap; }
+.due-row:first-child { border-top:0; }
+.due-row .t { flex:1; min-width:180px; }
+.bar { height:8px; border-radius:6px; background:#0a1a29; overflow:hidden; min-width:90px; }
+.bar > i { display:block; height:100%; border-radius:6px; background:#10b981; }
+.bar.soon > i { background:#f59e0b; } .bar.due > i { background:#fb923c; } .bar.overdue > i { background:#ef4444; }
+.gear-head { display:flex; gap:1.2rem; align-items:flex-start; flex-wrap:wrap; margin-bottom:1rem; }
+.gear-head .big-ph { width:min(340px,100%); aspect-ratio:16/10; border-radius:16px; overflow:hidden; background:#07131f; border:1px solid var(--border); display:flex; align-items:center; justify-content:center; color:var(--text-muted); }
+.gear-head .big-ph img { width:100%; height:100%; object-fit:cover; }
+.gear-head .meta { flex:1; min-width:240px; }
+.gear-head h2 { margin:.1rem 0 .3rem; }
+.gear-actions { display:flex; gap:.5rem; flex-wrap:wrap; margin-top:.7rem; }
+table.gtable { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+.gtable th { text-align:left; font-size:.7rem; letter-spacing:.07em; text-transform:uppercase; color:var(--text-muted); padding:.4rem .4rem; border-bottom:1px solid var(--border); }
+.gtable td { padding:.55rem .4rem; border-bottom:1px solid var(--border); vertical-align:top; font-size:.9rem; }
+.gtable .grp td { background:#08182a; color:var(--text-muted); font-size:.72rem; letter-spacing:.08em; text-transform:uppercase; font-weight:700; }
+.gform { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:.6rem; margin:.6rem 0; }
+.gform label { display:flex; flex-direction:column; gap:.2rem; font-size:.78rem; color:var(--text-muted); }
+.gform .wide { grid-column:1/-1; }
+.gform input, .gform select, .gform textarea { background:var(--bg,#071525); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:.5rem; font:inherit; }
+details.gcard { background:var(--card-bg); border:1px solid var(--border); border-radius:14px; padding:.7rem 1rem; margin-bottom:1rem; }
+details.gcard > summary { cursor:pointer; font-weight:600; }
+.hint { color:var(--text-muted); font-size:.8rem; }
+.mini-actions { display:flex; gap:.35rem; flex-wrap:wrap; }
+.btn-sm { padding:.25rem .6rem; font-size:.78rem; }
+.btn-danger { background:var(--danger,#ef4444); color:#fff; border:none; }
+
+/* assignment calendar */
+.cal-wrap { display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:1rem; align-items:start; }
+@media (max-width: 960px) { .cal-wrap { grid-template-columns:1fr; } }
+.cal-bar { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin-bottom:.6rem; }
+.cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+.cal-dow { text-align:center; font-size:.7rem; color:var(--text-muted); letter-spacing:.06em; text-transform:uppercase; padding:.2rem 0; }
+.cal-day { position:relative; min-height:62px; background:#08182a; border:1px solid var(--border); border-radius:8px; padding:.25rem .35rem; cursor:pointer; user-select:none; overflow:hidden; }
+.cal-day.empty { background:transparent; border-color:transparent; cursor:default; }
+.cal-day .n { font-size:.74rem; color:var(--text-muted); }
+.cal-day .c { position:absolute; right:.35rem; bottom:.25rem; font-size:.78rem; font-weight:700; }
+.cal-day .stripes { position:absolute; left:0; right:0; bottom:0; height:6px; display:flex; }
+.cal-day .stripes i { flex:1; }
+.cal-day.has { background:#0c2136; }
+.cal-day.need { box-shadow: inset 0 0 0 2px rgba(252,76,2,.7); }
+.cal-day.sel { background:rgba(252,76,2,.28); border-color:var(--accent); }
+.cal-day.inrange { background:rgba(252,76,2,.14); border-color:rgba(252,76,2,.5); }
+.cal-day.today .n { color:var(--accent); font-weight:700; }
+.legend { display:flex; gap:.9rem; flex-wrap:wrap; font-size:.78rem; color:var(--text-muted); margin:.5rem 0; }
+.legend i { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:.3rem; vertical-align:-1px; }
+.panel { background:var(--card-bg); border:1px solid var(--border); border-radius:14px; padding:1rem; position:sticky; top:76px; }
+.panel h3 { margin:.1rem 0 .6rem; font-size:.78rem; letter-spacing:.08em; text-transform:uppercase; color:var(--text-muted); }
+.quick { display:flex; gap:.4rem; flex-wrap:wrap; margin:.4rem 0 .8rem; }
+.preview { background:#08182a; border:1px solid var(--border); border-radius:10px; padding:.6rem .8rem; margin:.7rem 0; font-size:.88rem; min-height:3.2rem; }

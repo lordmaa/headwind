@@ -42,7 +42,18 @@ def _friends_autosync(app):
 
 def _mqtt_heartbeat(app):
     time.sleep(10)  # let the app finish starting up
+    tick = 0
     while True:
+        tick += 1
+        try:
+            if tick % 12 == 1:                      # about hourly (and once at start-up): time-based parts (sealant, bar tape) can become due with no new ride
+                with app.app_context():
+                    from database import get_db
+                    from services import gear
+                    gear.evaluate_alerts(get_db())
+                    get_db().commit()
+        except Exception as e:
+            log.warning('Gear alert sweep failed: %s', e)
         try:
             with app.app_context():
                 from services.mqtt import push_update
@@ -343,6 +354,8 @@ def create_app():
         def avatar_files(filename):
             return send_from_directory(os.environ['AVATAR_DIR'], filename)
 
+    from routes.gear import bp as gear_bp
+    app.register_blueprint(gear_bp, url_prefix='/gear')
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(rides_bp,    url_prefix='/rides')
     app.register_blueprint(settings_bp, url_prefix='/settings')

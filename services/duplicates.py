@@ -167,10 +167,10 @@ def park(db, loser_id, primary_id, reason):
     if not row:
         return False
     ensure_schema(db)
-    winner = db.execute('SELECT notes, description FROM Activity WHERE id=?', [primary_id]).fetchone()
-    if winner:                                          # never lose something the user typed on the ride that is being parked
-        for col in ('notes', 'description'):
-            if row[col] and not winner[col]:
+    winner = db.execute('SELECT * FROM Activity WHERE id=?', [primary_id]).fetchone()
+    if winner:                                          # never lose something the user typed / chose on the ride that is being parked
+        for col in ('notes', 'description', 'bikeId'):
+            if col in row.keys() and row[col] and not winner[col]:
                 db.execute(f'UPDATE Activity SET {col}=? WHERE id=?', [row[col], primary_id])
     db.execute('INSERT OR REPLACE INTO ActivityDuplicate (id, primaryId, riderId, source, reason, status, rowJson) VALUES (?,?,?,?,?,?,?)',
                [loser_id, primary_id, row['riderId'], source_label(row), reason, 'parked', json.dumps(dict(row))])
