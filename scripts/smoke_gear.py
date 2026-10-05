@@ -2,12 +2,12 @@
 (preview + apply), parts / service log / alerts, backup export. Never touches your data. Run:
   d=$(mktemp -d); printf "DATABASE_URL=$d/t.db\\nSECRET_KEY=x\\nAPP_USERNAME=t\\nAPP_PASSWORD=t\\n" > $d/env; HEADWIND_ENV=$d/env PYTHONPATH=. python3 scripts/smoke_gear.py
 """
-import io, os, sqlite3, zipfile
+import io, os, sqlite3, tempfile, zipfile
 from datetime import datetime, timedelta, timezone
 from app import create_app
 a = create_app(); c = a.test_client()
 db = a.config['DATABASE']
-assert db.startswith(('/tmp', os.environ.get('TMPDIR', '/tmp'))), 'refusing to run against a non-temp database: ' + db
+assert os.path.realpath(db).startswith(os.path.realpath(tempfile.gettempdir())), 'refusing to run against a non-temp database: ' + db
 con = sqlite3.connect(db); con.row_factory = sqlite3.Row
 con.execute("INSERT OR IGNORE INTO Settings (id) VALUES (1)"); con.execute("INSERT INTO Rider (name,isDefault) VALUES ('Tester',1)"); con.commit()
 def ok(label, cond, extra=''): print(('PASS ' if cond else 'FAIL ') + label, extra); assert cond, label
