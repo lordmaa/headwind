@@ -26,7 +26,7 @@ jobs:
       - name: Smoke test the packaged app
         shell: pwsh
         run: |
-          $env:HEADWIND_DATA = "$PWD\smoke-data"; $env:PORT = "5099"; $env:TELEMETRY = "off"
+          $env:HEADWIND_DATA = "$PWD\smoke-data"; $env:PORT = "5099"; $env:TELEMETRY = "off"; $env:APP_USERNAME = "smoke"; $env:APP_PASSWORD = "smoke-pass-123"
           $env:HEADWIND_NO_TRAY = "1"; $env:HEADWIND_NO_BROWSER = "1"
           $p = Start-Process -FilePath "dist\Headwind\Headwind.exe" -PassThru
           Start-Sleep -Seconds 20
@@ -35,18 +35,14 @@ jobs:
             $css = Invoke-WebRequest "http://127.0.0.1:5099/static/css/style.css" -UseBasicParsing
             Write-Host "login=$($r.StatusCode) css=$($css.StatusCode)"
             if ($r.StatusCode -ne 200 -or $css.StatusCode -ne 200) { exit 1 }
-            # sign in with the first-run password and load pages that exercise date formatting and the Gear module
-            $log = Get-Content "$env:HEADWIND_DATA\headwind.log" -Raw
-            $pw = [regex]::Match($log, 'password[^\r\n]*?:\s*(\S+)', 'IgnoreCase').Groups[1].Value
-            if ($pw) {
-              $body = @{ username = 'admin'; password = $pw }
-              Invoke-WebRequest "http://127.0.0.1:5099/login" -Method Post -Body $body -SessionVariable ws -UseBasicParsing -MaximumRedirection 0 -ErrorAction SilentlyContinue | Out-Null
-              foreach ($u in '/gear/', '/gear/assign', '/workouts', '/static/js/gear_assign.js') {
-                $x = Invoke-WebRequest "http://127.0.0.1:5099$u" -WebSession $ws -UseBasicParsing -ErrorAction SilentlyContinue
-                Write-Host "$u=$($x.StatusCode)"
-                if ($x.StatusCode -ne 200) { exit 1 }
-              }
-            } else { Write-Host "(first-run password not found in log; skipped the signed-in checks)" }
+            # sign in (credentials supplied through the environment above) and load pages that exercise date formatting, the Gear module and static assets
+            $ws = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+            Invoke-WebRequest "http://127.0.0.1:5099/login" -Method Post -Body @{ username = 'smoke'; password = 'smoke-pass-123' } -WebSession $ws -UseBasicParsing -MaximumRedirection 0 -ErrorAction SilentlyContinue | Out-Null
+            foreach ($u in '/dashboard', '/gear/', '/gear/assign', '/gear/bike/new', '/workouts', '/static/js/gear_assign.js', '/static/css/gear.css') {
+              $x = Invoke-WebRequest "http://127.0.0.1:5099$u" -WebSession $ws -UseBasicParsing
+              Write-Host "$u=$($x.StatusCode)"
+              if ($x.StatusCode -ne 200) { exit 1 }
+            }
           } finally {
             # the windowed exe writes its console output to a log file
             Get-Content "$env:HEADWIND_DATA\headwind.log" -ErrorAction SilentlyContinue | Select-String -NotMatch "password" | Write-Host
