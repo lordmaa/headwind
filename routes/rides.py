@@ -210,7 +210,17 @@ def detail(rid):
                     if b.get('ride_id') and str(b['ride_id']) == str(rid):
                         ride_badges.append(b)
 
-    return render_template('ride.html', activity=activity, coords=coords,
+    from services import duplicates
+    dups = []
+    for d in duplicates.parked_for(get_db(), rid):
+        try:
+            r = json.loads(d['rowJson'])
+        except ValueError:
+            continue
+        dups.append({'id': d['id'], 'source': d['source'], 'reason': d['reason'], 'start': r.get('startDateLocal'), 'distance': r.get('distance'),
+                     'moving': r.get('movingTime'), 'hr': r.get('averageHeartrate'), 'watts': r.get('averageWatts')})
+
+    return render_template('ride.html', activity=activity, coords=coords, dups=dups,
                            charts=charts, has_memory=memory_count > 0,
                            seg_efforts=seg_efforts, alt_raw=alt_raw,
                            co_riders=co_riders, seg_rivals=seg_rivals,
@@ -313,14 +323,30 @@ def export_gpx(rid):
 
 @bp.route('/<rid>/delete', methods=['POST'])
 def delete(rid):
-    from services.segments import _refresh_prs
+    from services import duplicates
     db = get_db()
-    seg_ids = [r[0] for r in db.execute('SELECT DISTINCT segmentId FROM SegmentEffort WHERE activityId=?', [rid])]
-    db.execute('DELETE FROM SegmentEffort WHERE activityId=?', [rid])
-    db.execute('DELETE FROM BestEffort WHERE activityId=?', [rid])
-    db.execute('DELETE FROM Activity WHERE id=?', [rid])
+    duplicates.delete_activity(db, rid)
     db.execute('DELETE FROM RideMemory WHERE rideId=?', [rid])
-    for sid in seg_ids:
-        _refresh_prs(db, sid)
     db.commit()
     return redirect(url_for('dashboard.dashboard'))
+
+
+@bp.route('/<rid>/duplicate/<dup_id>/<action>', methods=['POST'])
+def resolve_duplicate(rid, dup_id, action):
+    """The same ride recorded twice: use the other recording, keep both as separate rides, or discard the other one."""
+    from services import duplicates
+    db = get_db()
+    d = db.execute("SELECT primaryId FROM ActivityDuplicate WHERE id=? AND status='parked'", [dup_id]).fetchone()
+    if not d or str(d['primaryId']) != str(rid):
+        abort(404)
+    new_main = rid
+    if action == 'swap':
+        new_main = duplicates.swap(db, dup_id) or rid
+    elif action == 'keep':
+        duplicates.keep_both(db, dup_id)
+    elif action == 'discard':
+        duplicates.discard(db, dup_id)
+    else:
+        abort(400)
+    db.commit()
+    return redirect(url_for('rides.detail', rid=new_main))

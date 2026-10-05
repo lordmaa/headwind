@@ -15,7 +15,7 @@ import tempfile
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from flask import Blueprint, current_app, jsonify, render_template, request
+from flask import redirect, Blueprint, current_app, jsonify, render_template, request
 
 from database import get_db, query_db
 
@@ -214,11 +214,13 @@ def upload_ride():
     try:
         result = {'imported': 0, 'skipped': 0, 'errors': 0}
         ride = None
+        duplicate = None
         for ev in _process_single_file(tmp.name, f.filename, rider['id']):
             payload = _json.loads(ev[len('data: '):]) if ev.startswith('data: ') else {}
             if payload.get('complete'):
                 result = {k: payload.get(k, 0) for k in ('imported', 'skipped', 'errors')}
                 ride = payload.get('activity')
+                duplicate = payload.get('duplicate')
             elif payload.get('error'):
                 return jsonify({'error': payload['error']}), 422
     finally:
@@ -232,7 +234,7 @@ def upload_ride():
 
     # imported=0/skipped=1 means it was already uploaded (retry after a dropped connection) — not an error,
     # ride/activity still identifies which one so the app can show "Uploaded X mi" either way.
-    return jsonify({'status': 'imported' if result['imported'] else 'skipped', **result, 'ride': ride})
+    return jsonify({'status': 'duplicate' if duplicate else ('imported' if result['imported'] else 'skipped'), **result, 'ride': ride, 'duplicate': duplicate})
 
 
 @bp.route('/rides')
@@ -332,7 +334,19 @@ def ride_detail(kind, rid):
         v = r.get(k)
         return None if v is None else (round(v, nd) if nd is not None else v)
 
+    dups = []
+    if kind == 'ride':
+        from services import duplicates
+        for d in duplicates.parked_for(get_db(), str(r['id'])):
+            try:
+                o = _json.loads(d['rowJson'])
+            except ValueError:
+                continue
+            dups.append({'id': d['id'], 'source': d['source'], 'reason': d['reason'], 'date': str(o.get('startDateLocal'))[:19], 'distance_m': round(o.get('distance') or 0),
+                         'moving_s': o.get('movingTime'), 'avg_hr': o.get('averageHeartrate'), 'avg_watts': o.get('averageWatts')})
+
     return jsonify({
+        'duplicates': dups,
         'kind': kind, 'id': str(r['id']), 'name': r.get('name'), 'sport': r.get('sportType') or r.get('sport'),
         'date': str(r.get('startDateLocal'))[:19], 'city': r.get('city'), 'source': r.get('source'),
         'distance_m': num('distance', 0), 'moving_s': r.get('movingTime'), 'elapsed_s': r.get('elapsedTime'), 'elev_m': num('totalElevationGain', 0),
@@ -445,9 +459,115 @@ def delete_workout(wid):
     return jsonify({'deleted': bool(n)}), (200 if n else 404)
 
 
+@bp.route('/activities', methods=['POST'])
+def post_activity():
+    """Add an activity by hand (JSON): {sport, date 'YYYY-MM-DD', time 'HH:MM', duration_s, distance_m, elev_m?, calories?, name?, notes?, client_id?}.
+    Walk/Run/Hike -> Workout, Ride/VirtualRide -> Activity. Idempotent per client_id."""
+    from services import manual_activity
+    rider = _rider()
+    if not rider:
+        return jsonify({'error': 'no rider'}), 409
+    b = request.get_json(silent=True) or {}
+    try:
+        res = manual_activity.create(get_db(), rider['id'], b.get('sport'), f"{b.get('date')}T{(b.get('time') or '12:00')[:5]}:00", b.get('duration_s'),
+                                     b.get('distance_m'), b.get('elev_m'), b.get('calories'), b.get('name'), b.get('notes'), b.get('client_id'))
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    _refresh_after_change(res['kind'])
+    return jsonify({'status': 'created' if res['created'] else 'exists', **res}), (201 if res['created'] else 200)
+
+
+def _refresh_after_change(kind):
+    """Re-publish the Home Assistant sensors after an activity was added or removed (never fatal)."""
+    try:
+        if kind == 'workout':
+            from services.mqtt import push_update_nutrition
+            push_update_nutrition()
+        else:
+            from services.mqtt import push_update
+            push_update()
+    except Exception as e:
+        log.warning('sensor refresh failed (non-fatal): %s', e)
+
+
+@bp.route('/rides/ride/<rid>/duplicate/<dup_id>/<action>', methods=['POST'])
+def resolve_duplicate(rid, dup_id, action):
+    """The same ride recorded twice: action = swap (use the other recording) | keep (both are real rides) | discard (delete the other one)."""
+    from services import duplicates
+    rider = _rider()
+    db = get_db()
+    d = db.execute("SELECT primaryId, riderId FROM ActivityDuplicate WHERE id=? AND status='parked'", [dup_id]).fetchone()
+    if not rider or not d or str(d['primaryId']) != str(rid) or d['riderId'] != rider['id']:
+        return jsonify({'error': 'not found'}), 404
+    new_main = rid
+    if action == 'swap':
+        new_main = duplicates.swap(db, dup_id) or rid
+    elif action == 'keep':
+        duplicates.keep_both(db, dup_id)
+    elif action == 'discard':
+        duplicates.discard(db, dup_id)
+    else:
+        return jsonify({'error': 'action must be swap, keep or discard'}), 400
+    db.commit()
+    _refresh_after_change('ride')
+    return jsonify({'ok': True, 'ride_id': new_main})
+
+
+@bp.route('/rides/<kind>/<rid>', methods=['DELETE'])
+def delete_ride(kind, rid):
+    """Delete a ride (Activity) or a workout from the phone. A deleted ride is remembered so a Garmin re-sync does not bring it back."""
+    from services import duplicates
+    rider = _rider()
+    db = get_db()
+    if kind == 'workout':
+        n = db.execute('DELETE FROM Workout WHERE id=? AND riderId=?', [rid, rider['id'] if rider else -1]).rowcount
+    elif kind == 'ride':
+        row = db.execute('SELECT riderId FROM Activity WHERE id=?', [rid]).fetchone()
+        n = 1 if (row and rider and row['riderId'] == rider['id'] and duplicates.delete_activity(db, rid)) else 0
+        if n:
+            db.execute('DELETE FROM RideMemory WHERE rideId=?', [rid])
+    else:
+        return jsonify({'error': 'kind must be ride or workout'}), 400
+    db.commit()
+    if n:
+        _refresh_after_change(kind)
+    return jsonify({'deleted': bool(n)}), (200 if n else 404)
+
+
 @ui.route('/workouts')
 def workouts_page():
     from services import workouts
     rider = _rider()
     rows = workouts.recent(rider['id'], 90) if rider else []
-    return render_template('workouts.html', workouts=rows)
+    st = query_db('SELECT units FROM Settings WHERE id=1', one=True)
+    return render_template('workouts.html', workouts=rows, units=(st['units'] if st and st['units'] else 'imperial'), today=_today(),
+                           now=datetime.now(ZoneInfo('Europe/London')).strftime('%H:%M'), error=request.args.get('error'))
+
+
+@ui.route('/workouts/new', methods=['POST'])
+def workouts_new():
+    from services import manual_activity
+    rider = _rider()
+    f = request.form
+    km = f.get('unit') == 'km'
+    try:
+        dur = (float(f.get('hours') or 0) * 3600) + (float(f.get('minutes') or 0) * 60)
+        dist = float(f.get('distance') or 0) * (1000 if km else 1609.344)
+        elev = float(f['elevation']) * (1 if km else 0.3048) if f.get('elevation') else None
+        manual_activity.create(get_db(), rider['id'], f.get('sport'), f"{f.get('date')}T{(f.get('time') or '12:00')[:5]}:00", dur, dist, elev,
+                               f.get('calories') or None, f.get('name'), f.get('notes'))
+    except (ValueError, TypeError) as e:
+        from urllib.parse import quote
+        return redirect('/workouts?error=' + quote(str(e)))
+    _refresh_after_change('workout' if f.get('sport') in ('Walk', 'Run', 'Hike') else 'ride')
+    return redirect('/workouts')
+
+
+@ui.route('/workouts/<wid>/delete', methods=['POST'])
+def workouts_delete(wid):
+    rider = _rider()
+    db = get_db()
+    db.execute('DELETE FROM Workout WHERE id=? AND riderId=?', [wid, rider['id'] if rider else -1])
+    db.commit()
+    _refresh_after_change('workout')
+    return redirect('/workouts')

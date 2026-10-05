@@ -525,6 +525,9 @@ def migrate_db():
     ''')
     db.execute('CREATE INDEX IF NOT EXISTS idx_workout_rider_date ON Workout(riderId, startDateLocal)')
 
+    from services.duplicates import ensure_schema as _dup_schema
+    _dup_schema(db)
+
     # One row per paired phone/app. Only a SHA-256 of the token is stored; the token itself is shown once at pairing time.
     db.execute('''
         CREATE TABLE IF NOT EXISTS DeviceToken (

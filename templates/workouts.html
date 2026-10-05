@@ -10,13 +10,39 @@
   .wo-main small { color:var(--text-muted); }
   .wo-num { text-align:right; font-variant-numeric:tabular-nums; font-weight:700; }
   .wo-num small { display:block; font-weight:400; color:var(--text-muted); }
+  .wo-del { background:none; border:1px solid var(--border); color:var(--text-muted); border-radius:8px; padding:.3rem .6rem; cursor:pointer; font-size:.8rem; }
+  .wo-del:hover { color:#ef4444; border-color:#ef4444; }
+  .wo-form { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:.6rem; margin:.8rem 0 1rem; }
+  .wo-form label { display:flex; flex-direction:column; gap:.2rem; font-size:.78rem; color:var(--text-muted); }
+  .wo-form input, .wo-form select { background:var(--bg,#071525); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:.5rem; font:inherit; }
+  .wo-form .wide { grid-column:1/-1; }
 </style>
 {% endblock %}
 {% block content %}
+{% if error %}<div style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.4);color:#fecaca;border-radius:10px;padding:.6rem .9rem;margin-bottom:.8rem;">Could not add that: {{ error }}</div>{% endif %}
+<details style="background:var(--card-bg);border:1px solid var(--border);border-radius:14px;padding:.8rem 1rem;margin-bottom:1rem;" {% if error %}open{% endif %}>
+  <summary style="cursor:pointer;font-weight:600;">+ Add an activity by hand</summary>
+  <form method="POST" action="{{ url_for('workouts_ui.workouts_new') }}" class="wo-form">
+    <label>Type<select name="sport"><option>Ride</option><option value="VirtualRide">Indoor ride</option><option>Walk</option><option>Run</option><option>Hike</option></select></label>
+    <label>Date<input type="date" name="date" value="{{ today }}" max="{{ today }}" required></label>
+    <label>Start time<input type="time" name="time" value="{{ now }}" required></label>
+    <label>Hours<input type="number" name="hours" min="0" max="47" value="0"></label>
+    <label>Minutes<input type="number" name="minutes" min="0" max="59" value="30"></label>
+    <label>Distance<input type="number" name="distance" min="0" step="0.01" required></label>
+    <label>Unit<select name="unit"><option value="mi" {{ 'selected' if units != 'metric' }}>miles / feet</option><option value="km" {{ 'selected' if units == 'metric' }}>km / metres</option></select></label>
+    <label>Elevation gain (optional)<input type="number" name="elevation" min="0" step="1"></label>
+    <label>Calories (optional)<input type="number" name="calories" min="0" step="1"></label>
+    <label class="wide">Name (optional)<input type="text" name="name" maxlength="80"></label>
+    <label class="wide">Notes (optional)<input type="text" name="notes" maxlength="500"></label>
+    <div class="wide"><button class="btn" type="submit">Add activity</button>
+      <span style="color:var(--text-muted);font-size:.8rem;margin-left:.6rem;">Rides appear on the dashboard (no map, since there is no GPS). If a real recording of the same ride arrives later, Headwind keeps the recording and puts this one aside.</span></div>
+  </form>
+</details>
+
 <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:14px;padding:1rem;">
-  <p style="color:var(--text-muted);font-size:0.85rem;margin-top:0">Walks and runs recorded by the Headwind phone app (last 90 days). Rides live on the dashboard; workouts are kept separate so they never change your ride stats. Their calories count toward the day's burn.</p>
+  <p style="color:var(--text-muted);font-size:0.85rem;margin-top:0">Walks, runs and hikes (last 90 days), from the Headwind phone app or added by hand. Rides live on the dashboard; workouts are kept separate so they never change your ride stats. Their calories count toward the day's burn.</p>
   {% if not workouts %}
-    <p style="color:var(--text-muted)">Nothing recorded yet. Pair a phone under <a href="/phones/">Phones</a> and record a walk.</p>
+    <p style="color:var(--text-muted)">Nothing yet. Pair a phone under <a href="/phones/">Phones</a> and record a walk, or add one above.</p>
   {% endif %}
   {% for w in workouts %}
     {% set mi = (w.distance or 0) / 1609.344 %}
@@ -25,6 +51,7 @@
       <div class="wo-ico">{{ '🏃' if w.sport == 'Run' else ('🥾' if w.sport == 'Hike' else '🚶') }}</div>
       <div class="wo-main"><b>{{ w.name or w.sport }}</b><small>{{ w.startDateLocal[:10] | fmt_date }} · {{ w.startDateLocal[11:16] }}{% if w.weatherSummary %} · {{ w.weatherSummary }}{% endif %}</small></div>
       <div class="wo-num">{{ '%.2f' | format(mi) }} mi<small>{{ (secs // 3600) ~ 'h ' if secs >= 3600 else '' }}{{ '%02d' | format((secs % 3600) // 60) if secs >= 3600 else ((secs // 60) ~ 'm') }}{% if w.calories %} · {{ w.calories | round | int }} kcal{% endif %}{% if w.steps %} · {{ '{:,}'.format(w.steps) }} steps{% endif %}</small></div>
+          <form method="POST" action="{{ url_for('workouts_ui.workouts_delete', wid=w.id) }}" onsubmit="return confirm('Delete this activity? This cannot be undone.')"><button class="wo-del" type="submit" title="Delete">Delete</button></form>
     </div>
   {% endfor %}
 </div>

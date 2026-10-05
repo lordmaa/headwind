@@ -176,24 +176,12 @@ def _process_single_file(path, original_name, rider_id=None):
 
         act_summary = {'id': act.get('id'), 'name': act.get('name'), 'distance': act.get('distance')}
 
-        if db.execute('SELECT id FROM Activity WHERE id = ?', [act['id']]).fetchone():
+        from services import duplicates
+        if duplicates.exists_anywhere(db, act['id']):
             log.warning('Single file import: already exists id=%s', act['id'])
             yield _progress(1, 1, 0, 1, 0)
             yield _event({'complete': True, 'imported': 0, 'skipped': 1, 'errors': 0, 'activity': act_summary})
             return
-
-        # Second duplicate guard, independent of the id scheme: same rider, start within 90 s and distance within 3% of an
-        # existing ride (the same ride imported earlier by another route, or parsed with slightly different rounding).
-        if rider_id and act.get('startDateLocal') and (act.get('distance') or 0) > 0:
-            near = db.execute(
-                "SELECT id FROM Activity WHERE riderId=? AND abs(strftime('%s', startDateLocal) - strftime('%s', ?)) <= 90 "
-                "AND abs(distance - ?) <= 0.03 * ? LIMIT 1",
-                [rider_id, act['startDateLocal'], act['distance'], act['distance']]).fetchone()
-            if near:
-                log.warning('Single file import: near-duplicate of %s for rider %s, skipped', near['id'], rider_id)
-                yield _progress(1, 1, 0, 1, 0)
-                yield _event({'complete': True, 'imported': 0, 'skipped': 1, 'errors': 0, 'activity': dict(act_summary, id=near['id'])})
-                return
 
         _insert(db, act, rider_id)
         from services.best_efforts import save_best_efforts
@@ -214,15 +202,24 @@ def _process_single_file(path, original_name, rider_id=None):
         except Exception:
             pass
 
+        dup = None
+        try:                                            # same ride already recorded by another device? keep the better one
+            dup = duplicates.resolve(db, act['id'])
+            db.commit()
+        except Exception as e:
+            log.error('Duplicate resolution failed for %s: %s', act['id'], e)
+            db.rollback()
+        kept = (dup or {}).get('kept', act['id'])
         try:
             from services.mqtt import push_update
-            act_row = db.execute('SELECT * FROM Activity WHERE id=?', [act['id']]).fetchone()
+            act_row = db.execute('SELECT * FROM Activity WHERE id=?', [kept]).fetchone()
             if act_row:
                 push_update(act_row)
         except Exception:
             pass
         yield _progress(1, 1, 1, 0, 0)
-        yield _event({'complete': True, 'imported': 1, 'skipped': 0, 'errors': 0, 'activity': act_summary})
+        yield _event({'complete': True, 'imported': 0 if (dup and dup['parked'] == act['id']) else 1, 'skipped': 0, 'errors': 0,
+                      'activity': dict(act_summary, id=kept), 'duplicate': dup})
     except Exception as e:
         log.error('Single file import failed: %s\n%s', e, traceback.format_exc())
         yield _progress(1, 1, 0, 0, 1)
@@ -305,6 +302,8 @@ def _process_strava_export(zf, names, rider_id=None):
             _insert(db, act, rider_id)
             from services.best_efforts import save_best_efforts
             save_best_efforts(db, act.get('id'), act.get('startDateLocal'), act.get('streams'))
+            from services import duplicates
+            duplicates.resolve(db, act.get('id'))
             db.commit()
             imported += 1
         except Exception as e:
@@ -336,13 +335,16 @@ def _process_generic_zip(zf, names, rider_id=None):
                 data = safe_gunzip(data)
             act = parse_gpx(data) if 'gpx' in name.lower() else parse_fit(data)
             if act and act.get('startDateLocal'):
-                if db.execute('SELECT id FROM Activity WHERE id = ?', [act['id']]).fetchone():
+                from services import duplicates as _d
+                if _d.exists_anywhere(db, act['id']):
                     log.info('Import skip (duplicate): %s', name)
                     skipped += 1
                 else:
                     _insert(db, act, rider_id)
                     from services.best_efforts import save_best_efforts
                     save_best_efforts(db, act.get('id'), act.get('startDateLocal'), act.get('streams'))
+                    from services import duplicates
+                    duplicates.resolve(db, act.get('id'))
                     db.commit()
                     imported += 1
             else:
@@ -359,8 +361,24 @@ def _process_generic_zip(zf, names, rider_id=None):
     yield _event({'complete': True, 'imported': imported, 'skipped': skipped, 'errors': errors})
 
 
+def _split_start(act):
+    """(startDate, startDateLocal) for the Activity row. A GPX/FIT time with a timezone (a phone recording is UTC 'Z') is stored as
+    the UTC instant plus the home-timezone local time, like Garmin rides; a naive time is local already and stays as is."""
+    from services.duplicates import instant, LOCAL
+    raw = act.get('startDateLocal')
+    try:
+        aware = datetime.fromisoformat(str(raw).replace('Z', '+00:00')).tzinfo is not None
+    except ValueError:
+        aware = False
+    if not aware:
+        return raw, raw
+    utc = instant(raw)
+    return utc.strftime('%Y-%m-%dT%H:%M:%S'), utc.astimezone(LOCAL).strftime('%Y-%m-%dT%H:%M:%S')
+
+
 def _insert(db, act, rider_id=None):
     sport = act.get('sportType') or 'Ride'
+    start_utc, start_local = _split_start(act)
     avg_speed = act.get('averageSpeed') or 0
     calories = act.get('calories')
     # A GPX has no calorie field at all (unlike FIT), so any GPX-sourced ride — a phone recording is the common
@@ -386,7 +404,7 @@ def _insert(db, act, rider_id=None):
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
     ''', [
         act.get('id'),            act.get('name'),          sport,
-        sport,                    act.get('startDateLocal'), act.get('startDateLocal'),
+        sport,                    start_utc, start_local,
         act.get('distance') or 0, act.get('movingTime') or 0, act.get('elapsedTime') or 0,
         act.get('totalElevationGain') or 0, avg_speed, act.get('maxSpeed') or 0,   # true max (was the average)
         act.get('averageHeartrate'), act.get('averageWatts'),
@@ -399,7 +417,7 @@ def _insert(db, act, rider_id=None):
         try:
             from services.weather import fetch_weather, save_weather
             w = fetch_weather(act['startLat'], act['startLng'],
-                              act.get('startDateLocal'), act.get('streams'))
+                              start_local, act.get('streams'))
             if w:
                 save_weather(db, act['id'], w)
         except Exception:

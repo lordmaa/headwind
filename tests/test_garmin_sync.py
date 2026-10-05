@@ -77,11 +77,16 @@ def test_failed_download_is_retried_not_skipped_forever(env):
     assert _ids(db) == ['garmin_1', 'garmin_2']
 
 
-def test_same_ride_from_another_source_still_deduped(env):
+def test_same_ride_from_another_source_keeps_the_garmin_recording(env):
+    """A phone/file copy of the ride already exists: the Garmin one (device + sensors) replaces it, the old copy is parked, not lost."""
     db, run = env
     db.execute("INSERT INTO Activity (id,name,type,sportType,startDate,startDateLocal,distance,movingTime,elapsedTime,"
                "totalElevationGain,averageSpeed,maxSpeed,riderId,createdAt,updatedAt) VALUES "
-               "('fit_x','a','Ride','Ride','2026-10-01T08:01:00','2026-10-01T08:01:00',10050,1,1,0,0,0,1,'n','n')")
+               "('fit_x','a','Ride','Ride','2026-10-01T08:01:00','2026-10-01T08:01:00',10050,1700,1750,0,0,0,1,'n','n')")
     db.commit()
     run([_act(1, '2026-10-01 08:00:00')])
-    assert _ids(db) == ['fit_x']
+    assert _ids(db) == ['garmin_1']
+    parked = db.execute("SELECT id, primaryId, status FROM ActivityDuplicate").fetchall()
+    assert [tuple(r) for r in parked] == [('fit_x', 'garmin_1', 'parked')]
+    run([_act(1, '2026-10-01 08:00:00')])               # a later sync must not bring the parked copy back or duplicate anything
+    assert _ids(db) == ['garmin_1']

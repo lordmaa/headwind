@@ -394,25 +394,19 @@ def sync_garmin_activities(email, password, rider_id):
 
             db_id = f'garmin_{activity_id}'
             # Check if Garmin ID already exists
-            if db.execute('SELECT id FROM Activity WHERE id=?', [db_id]).fetchone():
+            from services import duplicates
+            if duplicates.exists_anywhere(db, db_id) or duplicates.is_deleted(db, db_id):   # live, parked, discarded or deleted by the user: never bring it back
                 skipped += 1
                 if start_date and (newest is None or start_date > newest):
                     newest = start_date
                 continue
 
-            # Check if this ride already exists by timestamp & distance (avoid Strava/Garmin dupes)
-            # Allow 0.5km tolerance for distance variations between sources
+            # Same ride already here from another source? A phone/file copy is fine: we still fetch the Garmin one (it has the sensors) and
+            # resolve() keeps the better recording afterwards. Only skip when Garmin itself already gave us this ride under another id.
             garmin_distance = a.get('distance') or 0
-            # Same start time (±10 min) + similar distance — NOT just same day, or a second identical commute
-            # (there-and-back) would be dropped as a "duplicate".
-            existing = db.execute('''
-                SELECT id FROM Activity
-                WHERE riderId = ?
-                  AND ABS(strftime('%s', startDateLocal) - strftime('%s', ?)) < 600
-                  AND ABS(distance - ?) < 500
-                LIMIT 1
-            ''', [rider_id, start_local, garmin_distance]).fetchone()
-            if existing:
+            probe = {'id': db_id, 'startDateLocal': start_local, 'startDate': start_local, 'riderId': rider_id, 'distance': garmin_distance,
+                     'elapsedTime': int(a.get('elapsedDuration') or a.get('duration') or 0), 'movingTime': int(a.get('movingDuration') or a.get('duration') or 0)}
+            if any(str(t['id']).startswith('garmin_') for t in duplicates.find_duplicates(db, probe)):
                 skipped += 1
                 if start_date and (newest is None or start_date > newest):
                     newest = start_date
@@ -513,6 +507,11 @@ def sync_garmin_activities(email, password, rider_id):
                 except Exception:
                     pass
 
+            try:
+                if duplicates.resolve(db, db_id):
+                    log.warning('Garmin activity %s matched an existing recording; kept the better one', activity_id)
+            except Exception as e:
+                log.error('Duplicate resolution failed for %s: %s', db_id, e)
             imported += 1
             if start_date and (newest is None or start_date > newest):
                 newest = start_date

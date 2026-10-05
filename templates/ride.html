@@ -49,6 +49,23 @@
 
 {% block content %}
 
+{% if dups %}
+<div class="card" style="margin-bottom:1.25rem;border-color:var(--accent,#fc4c02);">
+  <div style="font-weight:600;margin-bottom:.35rem;">This ride was also recorded by another device</div>
+  {% for d in dups %}
+  <div style="margin:.5rem 0 .75rem;color:var(--text-muted);font-size:.9rem;">
+    <strong style="color:var(--text);">{{ d.source }}</strong> &middot; {{ d.start | fmt_date }} &middot; {{ d.distance | fmt_dist }} &middot; {{ d.moving | fmt_duration }}{% if d.hr %} &middot; avg HR {{ d.hr | round | int }}{% endif %}{% if d.watts %} &middot; {{ d.watts | round | int }} W{% endif %}
+    <div>{{ d.reason }} The other recording is saved, not deleted.</div>
+  </div>
+  <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem;">
+    <form method="POST" action="{{ url_for('rides.resolve_duplicate', rid=activity.id, dup_id=d.id, action='swap') }}"><button class="btn btn-secondary" type="submit">Use that recording instead</button></form>
+    <form method="POST" action="{{ url_for('rides.resolve_duplicate', rid=activity.id, dup_id=d.id, action='keep') }}"><button class="btn btn-secondary" type="submit">They are different rides - keep both</button></form>
+    <form method="POST" action="{{ url_for('rides.resolve_duplicate', rid=activity.id, dup_id=d.id, action='discard') }}" onsubmit="return confirm('Delete the other recording for good?')"><button class="btn btn-secondary" type="submit">Delete the other recording</button></form>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
 <!-- Stats grid -->
 <div class="stats-grid" style="margin-bottom:1.5rem;">
 
