@@ -88,3 +88,61 @@ def test_demo_is_off_unless_asked_for(monkeypatch):
     assert demo.enabled() is False
     monkeypatch.setenv('HEADWIND_DEMO', '1')
     assert demo.enabled() is True
+
+
+# ---------------------------------------------------------------- rebasing the dates
+def _demo_db(tmp_path):
+    import json
+    from datetime import date
+    from flask import Flask
+    import database
+    from services import gear
+    app = Flask(__name__)
+    path = str(tmp_path / 'demo.db')
+    app.config['DATABASE'] = path
+    with app.app_context():
+        database.migrate_db()
+        db = database.get_db()
+        db.execute("INSERT INTO Rider(name,isDefault) VALUES ('A',1)")
+        db.execute("INSERT INTO Activity (id,name,type,sportType,startDate,startDateLocal,distance,movingTime,elapsedTime,totalElevationGain,averageSpeed,maxSpeed,riderId,createdAt,updatedAt)"
+                   " VALUES ('a1','Ride','Ride','Ride','2026-03-01T08:00:00','2026-03-01T09:00:00',30000,5400,5500,100,5,9,1,'n','n')")
+        db.execute("INSERT INTO BestEffort (activityId, activityDate, distanceMi, elapsedSecs, avgSpeedMps) VALUES ('a1','2026-03-01',5,900,5)")
+        for i in range(5):                                          # consecutive days in a UNIQUE column: the case that breaks a naive UPDATE
+            d = date(2026, 3, 1).toordinal() + i
+            db.execute("INSERT INTO WeightLog (riderId, logDate, weightKg, source) VALUES (1, ?, 80, 'x')", [date.fromordinal(d).isoformat()])
+            db.execute("INSERT INTO GarminDaily (date, restingHR, hrStream, bodyBatteryStream) VALUES (?, 55, ?, ?)", [date.fromordinal(d).isoformat(), json.dumps([[1000, 60], [2000, 61]]), json.dumps([[1000, 80]])])
+        b = gear.create_bike(db, 1, 'B', bought_on='2025-01-06')
+        gear.add_part(db, b, 'chain', installed_on='2026-02-02', replace_m=1000)
+        db.execute('CREATE TABLE IF NOT EXISTS DemoMeta (key TEXT PRIMARY KEY, value TEXT)')
+        db.execute("INSERT INTO DemoMeta VALUES ('built_on', '2026-03-10')")
+        db.commit()
+    return path
+
+
+def test_rebase_moves_everything_by_whole_weeks_without_collisions(tmp_path):
+    path = _demo_db(tmp_path)
+    demo.rebase_dates(path, 14)
+    c = sqlite3.connect(path)
+    assert c.execute("SELECT startDate, startDateLocal FROM Activity").fetchone() == ('2026-03-15T08:00:00', '2026-03-15T09:00:00')
+    assert c.execute("SELECT activityDate FROM BestEffort").fetchone()[0] == '2026-03-15'
+    assert [r[0] for r in c.execute('SELECT logDate FROM WeightLog ORDER BY logDate')] == ['2026-03-15', '2026-03-16', '2026-03-17', '2026-03-18', '2026-03-19']
+    assert c.execute('SELECT MIN(date), MAX(date), COUNT(*) FROM GarminDaily').fetchone() == ('2026-03-15', '2026-03-19', 5)
+    assert c.execute('SELECT installedOn, retiredOn FROM Part').fetchone() == ('2026-02-16', None)             # NULL stays NULL
+    assert c.execute('SELECT boughtOn FROM Bike').fetchone()[0] == '2025-01-20'
+    import json
+    assert json.loads(c.execute('SELECT hrStream FROM GarminDaily LIMIT 1').fetchone()[0]) == [[1000 + 14 * 86400000, 60], [2000 + 14 * 86400000, 61]]
+    from datetime import date
+    assert date.fromisoformat('2026-03-15').weekday() == date.fromisoformat('2026-03-01').weekday()           # weekdays are preserved
+    with pytest.raises(ValueError):
+        demo.rebase_dates(path, 10)
+
+
+def test_rebase_if_needed_only_moves_when_a_week_has_passed_and_remembers_it(tmp_path):
+    from datetime import date
+    path = _demo_db(tmp_path)
+    assert demo.rebase_if_needed(path, today=date(2026, 3, 16)) == 0                                            # 6 days: nothing
+    assert demo.rebase_if_needed(path, today=date(2026, 3, 27)) == 14                                           # 17 days: two whole weeks
+    c = sqlite3.connect(path)
+    assert c.execute("SELECT value FROM DemoMeta WHERE key='built_on'").fetchone()[0] == '2026-03-24'
+    assert demo.rebase_if_needed(path, today=date(2026, 3, 27)) == 0                                            # and not again
+    assert c.execute("SELECT startDateLocal FROM Activity").fetchone()[0] == '2026-03-15T09:00:00'

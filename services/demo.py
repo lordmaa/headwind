@@ -18,7 +18,7 @@ import sqlite3
 import threading
 import time
 from collections import defaultdict, deque
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 log = logging.getLogger(__name__)
@@ -194,6 +194,84 @@ def counter_gif(n, scale=2):
     return buf.getvalue()
 
 
+# ---------------------------------------------------------------- keeping the data fresh
+# (table, columns, kind): 'd' = YYYY-MM-DD, 'dt' = YYYY-MM-DDTHH:MM:SS. Moving everything by WHOLE WEEKS keeps weekdays, so "Sunday rides" stay Sundays.
+DATE_COLUMNS = [
+    ('Activity', ('startDate', 'startDateLocal'), 'dt'), ('Workout', ('startDate', 'startDateLocal'), 'dt'),
+    ('BestEffort', ('activityDate',), 'd'), ('SegmentEffort', ('activityDate',), 'd'),
+    ('FoodLog', ('logDate',), 'd'), ('HydrationLog', ('logDate',), 'd'), ('WeightLog', ('logDate',), 'd'), ('BodyMetric', ('logDate',), 'd'),
+    ('GarminDaily', ('date',), 'd'), ('Part', ('installedOn', 'retiredOn'), 'd'), ('ServiceLog', ('date',), 'd'), ('Bike', ('boughtOn',), 'd'),
+]
+
+
+def rebase_dates(db_path, days):
+    """Move every dated row forward by `days` (a multiple of 7). Two phases per column (far ahead, then back) so UNIQUE date columns never collide mid-update."""
+    import json as _json
+    if days % 7:
+        raise ValueError('rebase by whole weeks only')
+    c = sqlite3.connect(db_path, timeout=60)
+    try:
+        have = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        for table, cols, kind in DATE_COLUMNS:
+            if table not in have:
+                continue
+            for col in cols:
+                if kind == 'd':
+                    expr = lambda m, col=col: f"CASE WHEN {col} IS NULL OR {col}='' THEN {col} ELSE date({col}, '{m}') END"
+                else:
+                    expr = lambda m, col=col: f"CASE WHEN {col} IS NULL OR {col}='' THEN {col} ELSE strftime('%Y-%m-%dT%H:%M:%S', {col}, '{m}') END"
+                c.execute(f"UPDATE {table} SET {col} = {expr(f'+{days + 100000} days')}")
+                c.execute(f"UPDATE {table} SET {col} = {expr('-100000 days')}")
+        if 'GarminDaily' in have:                                   # the intraday charts carry epoch milliseconds
+            ms = days * 86400000
+            for date_, hr, bb in c.execute('SELECT date, hrStream, bodyBatteryStream FROM GarminDaily').fetchall():
+                shift = lambda raw: _json.dumps([[t + ms, v] for t, v in _json.loads(raw)]) if raw else raw
+                c.execute('UPDATE GarminDaily SET hrStream=?, bodyBatteryStream=? WHERE date=?', [shift(hr), shift(bb), date_])
+        if 'PartAlert' in have:
+            c.execute('DELETE FROM PartAlert')                      # alert memory is keyed by dates: start clean, then re-announce silently
+        c.commit()
+    finally:
+        c.close()
+
+
+def rebase_if_needed(db_path, today=None):
+    """Brings the demo up to date: if it was built `built_on` and a week or more has passed, shift it so it still ends yesterday. Returns the days shifted."""
+    c = sqlite3.connect(db_path, timeout=60)
+    try:
+        c.execute('CREATE TABLE IF NOT EXISTS DemoMeta (key TEXT PRIMARY KEY, value TEXT)')
+        row = c.execute("SELECT value FROM DemoMeta WHERE key='built_on'").fetchone()
+        if not row:
+            return 0
+        today = today or datetime.now(LOCAL).date()
+        k = ((today - datetime.fromisoformat(row[0]).date()).days // 7) * 7
+        if k < 7:
+            return 0
+    finally:
+        c.close()
+    rebase_dates(db_path, k)
+    c = sqlite3.connect(db_path, timeout=60)
+    try:
+        new = (datetime.fromisoformat(row[0]).date() + timedelta(days=k)).isoformat()
+        c.execute("INSERT OR REPLACE INTO DemoMeta (key, value) VALUES ('built_on', ?)", [new])
+        c.commit()
+    finally:
+        c.close()
+    try:                                                            # silently re-learn which parts are due, so there is no flood of alerts later
+        from flask import Flask
+        import database
+        from services import gear
+        app = Flask(__name__)
+        app.config['DATABASE'] = db_path
+        with app.app_context():
+            db = database.get_db()
+            gear.evaluate_alerts(db, send=False)
+            db.commit()
+    except Exception as e:                                          # pragma: no cover
+        log.warning('post-rebase gear refresh failed: %s', e)
+    log.warning('Demo data moved forward %d days', k)
+    return k
+
+
 # ---------------------------------------------------------------- nightly reset
 def reset_now(live_db, pristine, bike_src=None, bike_dst=None):
     """Replace the live database with the pristine copy (SQLite backup API: atomic, WAL-aware, other connections just see the new data) and restore bike pictures."""
@@ -229,6 +307,10 @@ def reset_loop(app, hour=4):
     bike_src = os.environ.get('DEMO_PRISTINE_BIKEIMG', '/demo/bikeimg')
     done_for = datetime.now(LOCAL).date() if datetime.now(LOCAL).hour >= hour else None      # a restart after 04:00 must not reset again straight away
     flag = os.path.join(data_dir, 'reset.flag')
+    try:
+        rebase_if_needed(live)                                       # first start (or a restart after a long gap): bring the data up to date
+    except Exception as e:                                          # pragma: no cover
+        log.warning('Demo rebase failed: %s', e)
     while True:
         time.sleep(30)
         try:
@@ -237,7 +319,8 @@ def reset_loop(app, hour=4):
             if due:
                 if os.path.exists(flag):
                     os.remove(flag)
-                reset_now(live, pristine, bike_src, os.path.join(data_dir, 'bikeimg'))
+                if reset_now(live, pristine, bike_src, os.path.join(data_dir, 'bikeimg')):
+                    rebase_if_needed(live)
                 done_for = now.date()
         except Exception as e:                                              # pragma: no cover
             log.warning('Demo reset failed: %s', e)
