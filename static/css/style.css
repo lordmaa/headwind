@@ -669,3 +669,7 @@ details[open] > .tree-month-summary::before { transform: rotate(90deg); }
   .stats-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
   .metric-row, .metric-row-sub { grid-template-columns: 1fr; }
 }
+
+/* public demo banner */
+.demo-banner { background: linear-gradient(90deg,#fc4c02,#c13a00); color:#fff; font-size:.8rem; font-weight:600; letter-spacing:.02em; padding:.4rem 1rem; text-align:center; }
+.demo-banner a { color:#fff; text-decoration:underline; }

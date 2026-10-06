@@ -103,7 +103,7 @@ def bike_save():
         else:
             bike_id = gear.create_bike(db, f.get('rider', type=int) or _rider_id(), f.get('name'), f.get('kind') or 'road', f.get('brand'), f.get('model'), f.get('year'), f.get('boughtOn') or None, start, f.get('notes'))
         upload = request.files.get('photo')
-        if upload and upload.filename:
+        if upload and upload.filename and os.environ.get('HEADWIND_DEMO') != '1':        # the public demo never writes uploaded files
             gear.save_photo(db, bike_id, upload.read(gear.MAX_PHOTO_BYTES + 1), current_app.config['DATABASE'])
         db.commit()
     except (ValueError, TypeError) as e:
@@ -179,6 +179,8 @@ def bike_delete(bike_id):
 def bike_photo(bike_id):
     db = get_db()
     _bike_or_404(bike_id)
+    if os.environ.get('HEADWIND_DEMO') == '1':
+        return _flash_redirect(url_for('gear.bike', bike_id=bike_id), 'Picture uploads are switched off in the demo.')
     try:
         if request.form.get('remove'):
             gear.remove_photo(db, bike_id, current_app.config['DATABASE'])

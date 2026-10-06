@@ -95,6 +95,7 @@
   </nav>
 
   <main class="main">
+    {% if demo_mode %}<div class="demo-banner">LIVE DEMO &middot; a fictional rider and made-up food diary &middot; play with anything &middot; it resets every night &middot; <a href="https://github.com/lordmaa/headwind" target="_blank" rel="noopener">get Headwind</a> &middot; <img src="{{ url_for('demo.counter') }}" alt="visitor counter" width="130" style="vertical-align:middle;image-rendering:pixelated;"></div>{% endif %}
     <div class="topbar">
       <button class="menu-toggle" id="menuToggle" aria-label="Menu">
         <span class="hamburger-line"></span>

@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block title %}Switched off in the demo{% endblock %}
+{% block page_title %}Switched off in the demo{% endblock %}
+{% block content %}
+<div class="card" style="max-width:640px;margin:2rem auto;text-align:center;padding:2rem 1.5rem;">
+  <div style="font-size:2.2rem;">&#128274;</div>
+  <h3 style="margin:.4rem 0;">Not in the public demo</h3>
+  <p style="color:var(--text-muted);">{{ why }}</p>
+  <p style="color:var(--text-muted);font-size:.9rem;">Everything you can safely play with (food diary, bikes and parts, workouts, notes) works, and the whole demo resets to fresh data every night.</p>
+  <a class="btn btn-primary" href="javascript:history.back()">Go back</a>
+</div>
+{% endblock %}

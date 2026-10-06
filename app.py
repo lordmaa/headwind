@@ -4,7 +4,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
-from flask import Flask, g, jsonify, redirect, request, session, url_for
+from flask import Flask, g, jsonify, redirect, request, session, url_for, render_template
 from werkzeug.middleware.proxy_fix import ProxyFix
 from config import Config
 from database import close_db, migrate_db
@@ -292,7 +292,7 @@ def create_app():
     from routes.route_builder  import bp as route_builder_bp
 
     # ── Auth guard ───────────────────────────────────────────────
-    _PUBLIC = {'login.login_page', 'login.logout', 'static',
+    _PUBLIC = {'login.login_page', 'login.logout', 'static', 'demo.counter', 'demo.health',
                'friends.feed', 'friends.riders_list', 'import_rides.api_upload_ride',
                'friends.foods_feed', 'friends.food_image', 'telemetry_forward.ping', 'avatar_files'}
 
@@ -302,6 +302,37 @@ def create_app():
     _MUTATING_GETS = {'ai_page.bulk_analyse', 'garmin.sync_activities'}
 
     _BEARER_PATHS = ('/api/v1/', '/nutrition/api/')
+
+    from services import demo as _demo
+    DEMO = _demo.enabled()
+    if DEMO:
+        _limiter = _demo.RateLimiter(limit=int(os.environ.get('DEMO_RATE_PER_MIN', '300')), window=60)
+
+        @app.before_request
+        def demo_guard():
+            """Public demo: rate limit per client, refuse anything outside the allow-list (see services/demo.py)."""
+            ep = request.endpoint
+            if ep in ('static', 'avatar_files'):
+                return None
+            wait = _limiter.check(_demo.client_ip(request), cost=(4 if request.method in _demo.WRITE_METHODS else 1))
+            if wait:
+                resp = jsonify(error='Too many requests: slow down a little.')
+                resp.status_code = 429
+                resp.headers['Retry-After'] = str(wait)
+                return resp
+            why = _demo.decide(request.method, ep)
+            if why:
+                if request.path.startswith(('/api/', '/nutrition/api/', '/gear/api/')) or 'application/json' in (request.headers.get('Accept') or '') or request.is_json:
+                    return jsonify(error=why, demo=True), 403
+                return render_template('demo_blocked.html', why=why), 403
+            return None
+
+        @app.after_request
+        def demo_headers(resp):
+            resp.headers.setdefault('X-Frame-Options', 'DENY')
+            resp.headers.setdefault('X-Content-Type-Options', 'nosniff')
+            resp.headers.setdefault('Referrer-Policy', 'same-origin')
+            return resp
 
     @app.before_request
     def check_login():
@@ -338,6 +369,10 @@ def create_app():
     @app.context_processor
     def inject_units():
         return {'units': _get_units()}
+
+    @app.context_processor
+    def inject_demo():
+        return {'demo_mode': DEMO}
 
     @app.context_processor
     def inject_rider_mode():
@@ -385,10 +420,15 @@ def create_app():
     app.register_blueprint(workouts_ui_bp)
     app.register_blueprint(phones_bp)
 
-    threading.Thread(target=_mqtt_heartbeat,   args=(app,), daemon=True).start()
-    threading.Thread(target=_garmin_heartbeat, args=(app,), daemon=True).start()
-    threading.Thread(target=__import__('services.mqtt_commands', fromlist=['run']).run, args=(app,), daemon=True).start()
-    threading.Thread(target=_friends_autosync, args=(app,), daemon=True).start()
+    if DEMO:                                   # no background threads that talk to the network; just the nightly reset
+        from routes.demo import bp as demo_bp
+        app.register_blueprint(demo_bp)
+        threading.Thread(target=_demo.reset_loop, args=(app,), daemon=True).start()
+    else:
+        threading.Thread(target=_mqtt_heartbeat,   args=(app,), daemon=True).start()
+        threading.Thread(target=_garmin_heartbeat, args=(app,), daemon=True).start()
+        threading.Thread(target=__import__('services.mqtt_commands', fromlist=['run']).run, args=(app,), daemon=True).start()
+        threading.Thread(target=_friends_autosync, args=(app,), daemon=True).start()
 
     return app
 

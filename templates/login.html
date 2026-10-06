@@ -21,7 +21,12 @@
       <img src="{{ url_for('static', filename='logo.png') }}" alt="" style="width:40px; height:40px; border-radius:10px;">
       <div class="login-logo" style="margin-bottom:0;">Headwind</div>
     </div>
-    <div class="login-sub">Sign in to continue</div>
+    <div class="login-sub">{% if demo_mode %}Live demo: just press Sign in{% else %}Sign in to continue{% endif %}</div>
+    {% if demo_mode %}
+    <div style="background:rgba(252,76,2,.10);border:1px solid rgba(252,76,2,.35);border-radius:10px;padding:.6rem .8rem;font-size:.82rem;margin-bottom:1rem;color:var(--text-muted);">
+      A fictional rider, thousands of rides and a made-up food diary. The login (<b style="color:var(--text)">test</b> / <b style="color:var(--text)">test</b>) is filled in for you. Look around, log a meal, assign a bike: it all resets every night.
+    </div>
+    {% endif %}
 
     {% if error %}
       <div class="login-error">{{ error }}</div>
@@ -30,14 +35,21 @@
     <form method="POST">
       <div class="form-group">
         <label>Username</label>
-        <input type="text" name="username" autofocus autocomplete="username" required>
+        <input type="text" name="username" autofocus autocomplete="username" required{% if demo_mode %} value="test"{% endif %}>
       </div>
       <div class="form-group">
         <label>Password</label>
-        <input type="password" name="password" autocomplete="current-password" required>
+        <input type="password" name="password" autocomplete="current-password" required{% if demo_mode %} value="test"{% endif %}>
       </div>
       <button type="submit" class="btn btn-primary" style="width:100%;margin-top:0.5rem;">Sign in</button>
     </form>
+    {% if demo_mode %}
+    <div style="text-align:center;margin-top:1.4rem;color:var(--text-muted);font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;">
+      you are visitor number<br>
+      <img src="{{ url_for('demo.counter') }}" alt="visitor counter" width="170" style="margin-top:.4rem;image-rendering:pixelated;"><br>
+      <span style="font-size:.7rem;letter-spacing:.04em;text-transform:none;">best viewed on a bike</span>
+    </div>
+    {% endif %}
   </div>
 </body>
 </html>
