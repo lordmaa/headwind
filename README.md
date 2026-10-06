@@ -6,6 +6,10 @@
 
 Self-hosted cycling analytics, nutrition and body tracking — no cloud, no subscription, no one else touching your data.
 
+## 👉 [**TRY THE LIVE DEMO: headwindtest.smerchants.co.uk**](https://headwindtest.smerchants.co.uk)
+
+**Login: `test` / `test`**. A fictional rider, thousands of real routes (home area removed), made-up food diary. Play with anything; it resets every night.
+
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Status: beta](https://img.shields.io/badge/status-0.1.0--beta-orange.svg)](CHANGELOG.md)
 [![Docker](https://img.shields.io/badge/docker-amd64%20%7C%20arm64-2496ED.svg?logo=docker&logoColor=white)](https://hub.docker.com/r/lordmerchant99/headwind)
