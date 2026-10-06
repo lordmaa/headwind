@@ -44,3 +44,7 @@ scripts/headwind-both.sh
 demo_gpx*/
 docs/screenshots/
 docs/promo/
+
+# developer-only tool that works on personal GPS data: never ship it in an image
+export_demo_rides.py
+demo/out/

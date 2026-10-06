@@ -53,3 +53,6 @@ docs/ha/build_leanne.py
 docs/ha/deploy_leanne.py
 docs/ha/deploy_leanne_notifications.py
 docs/pi/*.orig
+
+# demo build output (anonymised copy of real data): never commit
+demo/out/
