@@ -5,7 +5,9 @@ Selects a representative cross-section of rides, strips GPS points within
 PRIVACY_M metres of home at both ends, and writes clean GPX files.
 
 Usage:
-    python3 export_demo_rides.py [--radius 500] [--count 1000] [--seed 42] [--out ./demo_gpx]
+    python3 export_demo_rides.py --home LAT,LNG [--radius 500] [--count 1000] [--seed 42] [--out ./demo_gpx]
+
+Your home location is NEVER stored in this file: pass it on the command line (it is only used in memory to strip points near it).
 """
 
 import argparse
@@ -17,8 +19,7 @@ import sys
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
-HOME_LAT  =  54.73262
-HOME_LNG  = -1.73997
+HOME_LAT = HOME_LNG = None     # set from --home at start-up; deliberately not written into the source (this file is public)
 
 BANDS = [
     (0,   20,  "short"),
@@ -123,11 +124,17 @@ def select_rides(rides, target, seed):
 # ── main ──────────────────────────────────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--home', required=True, help='home as LAT,LNG (never saved anywhere)')
     parser.add_argument('--radius', type=int, default=500)
     parser.add_argument('--count',  type=int, default=1000)
     parser.add_argument('--seed',   type=int, default=42)
     parser.add_argument('--out',    default='./demo_gpx')
     args = parser.parse_args()
+    global HOME_LAT, HOME_LNG
+    try:
+        HOME_LAT, HOME_LNG = (float(x) for x in args.home.split(','))
+    except ValueError:
+        sys.exit('--home must look like 51.5007,-0.1246')
 
     os.makedirs(args.out, exist_ok=True)
 
