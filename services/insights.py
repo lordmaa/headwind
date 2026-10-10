@@ -46,20 +46,31 @@ def last_weigh_in(rider_id):
     return date.fromisoformat(r['logDate']) if r else None
 
 
+def _rate_over(rider_id, anchor, span):
+    start = (anchor - timedelta(days=span)).isoformat()
+    rows = query_db('SELECT logDate, weightKg FROM WeightLog WHERE riderId=? AND logDate>=? ORDER BY logDate', [rider_id, start])
+    s = _theil_sen([(date.fromisoformat(r['logDate']).toordinal(), r['weightKg']) for r in rows])
+    return s * 7 if s is not None else None
+
+
 def weight_rate_kg_per_week(rider_id, days=WINDOW):
     """Weight change per week (kg, negative = losing): a robust slope through the raw weigh-ins in the 21 days up to
     your LAST weigh-in (widening to 28 if there are too few). Anchoring to the last weigh-in, not to today, means
-    days you didn't weigh or track leave the estimate standing instead of wiping it out."""
+    days you didn't weigh or track leave the estimate standing instead of wiping it out.
+    A holiday spike inside that window makes the net change read flat even while you are clearly coming down, so when
+    the short window says flat/gaining but the 12-week trend is a real loss, the 12-week pace is used instead."""
     anchor = last_weigh_in(rider_id)
     if not anchor:
         return None
+    short = None
     for span in (days, 28):
-        start = (anchor - timedelta(days=span)).isoformat()
-        rows = query_db('SELECT logDate, weightKg FROM WeightLog WHERE riderId=? AND logDate>=? ORDER BY logDate', [rider_id, start])
-        s = _theil_sen([(date.fromisoformat(r['logDate']).toordinal(), r['weightKg']) for r in rows])
-        if s is not None:
-            return s * 7
-    return None
+        short = _rate_over(rider_id, anchor, span)
+        if short is not None:
+            break
+    long_ = _rate_over(rider_id, anchor, 84)
+    if long_ is not None and long_ * LB < -0.5 and (short is None or short * LB > -0.2):
+        return long_
+    return short
 
 
 def reality_check(rider_id):
