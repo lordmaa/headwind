@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- Start-up no longer rewrites the `SegActivity` view every time (it only does when it is missing or changed), so a start-up, a helper script or a backup running alongside a live instance can no longer hit "database is locked" there.
+
 ## [0.2.0-beta] - 2026-10-10
 
 Upgrading is automatic: new columns and tables are added on start-up and nothing is dropped. Existing data is not changed unless you press

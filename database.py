@@ -531,11 +531,14 @@ def migrate_db():
     # through this view and see both; it carries no streams (heavy), only what leaderboards need.
     if 'sport' not in {r[1] for r in db.execute('PRAGMA table_info(Segment)').fetchall()}:
         db.execute("ALTER TABLE Segment ADD COLUMN sport TEXT DEFAULT 'ride'")
-    db.execute('DROP VIEW IF EXISTS SegActivity')
-    db.execute('''CREATE VIEW SegActivity AS
+    seg_view = '''CREATE VIEW SegActivity AS
         SELECT id, name, riderId, startDateLocal, sportType, 'activity' AS kind FROM Activity
         UNION ALL
-        SELECT id, name, riderId, startDateLocal, sport AS sportType, 'workout' AS kind FROM Workout''')
+        SELECT id, name, riderId, startDateLocal, sport AS sportType, 'workout' AS kind FROM Workout'''
+    cur = db.execute("SELECT sql FROM sqlite_master WHERE type='view' AND name='SegActivity'").fetchone()
+    if not cur or ' '.join((cur[0] or '').split()) != ' '.join(seg_view.split()):      # only write when it is missing or has changed, so start-up never takes a write lock needlessly
+        db.execute('DROP VIEW IF EXISTS SegActivity')
+        db.execute(seg_view)
     db.execute('''
         CREATE TABLE IF NOT EXISTS RunEffort (
             runId      TEXT NOT NULL,
