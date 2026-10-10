@@ -306,9 +306,12 @@ def sync_garmin(email, password, days=7):
         except Exception:
             stress_score = None
 
+        from services.calorie_adjust import apply as _kcal_apply
+        total_adj = int(round(_kcal_apply(total_cal))) if total_cal is not None else None     # global burn adjustment (raw kept alongside)
+        active_adj = int(round(_kcal_apply(active_cal))) if active_cal is not None else None
         db.execute('''
-            INSERT INTO GarminDaily (date, restingHR, hrv, hrvBalanced, sleepHours, sleepScore, bodyBattery, steps, stressScore, hrStream, bodyBatteryStream, totalCalories, activeCalories)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+            INSERT INTO GarminDaily (date, restingHR, hrv, hrvBalanced, sleepHours, sleepScore, bodyBattery, steps, stressScore, hrStream, bodyBatteryStream, totalCalories, activeCalories, totalCaloriesRaw, activeCaloriesRaw)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(date) DO UPDATE SET
                 restingHR           = COALESCE(excluded.restingHR,          restingHR),
                 hrv                 = COALESCE(excluded.hrv,                hrv),
@@ -321,8 +324,10 @@ def sync_garmin(email, password, days=7):
                 hrStream            = COALESCE(excluded.hrStream,           hrStream),
                 bodyBatteryStream   = COALESCE(excluded.bodyBatteryStream,  bodyBatteryStream),
                 totalCalories       = COALESCE(excluded.totalCalories,      totalCalories),
-                activeCalories      = COALESCE(excluded.activeCalories,     activeCalories)
-        ''', [d, rhr, hrv, balanced, sleep_hrs, sleep_score, body_battery, steps, stress_score, hr_stream_json, bb_stream_json, total_cal, active_cal])
+                activeCalories      = COALESCE(excluded.activeCalories,     activeCalories),
+                totalCaloriesRaw    = COALESCE(excluded.totalCaloriesRaw,   totalCaloriesRaw),
+                activeCaloriesRaw   = COALESCE(excluded.activeCaloriesRaw,  activeCaloriesRaw)
+        ''', [d, rhr, hrv, balanced, sleep_hrs, sleep_score, body_battery, steps, stress_score, hr_stream_json, bb_stream_json, total_adj, active_adj, total_cal, active_cal])
         synced += 1
 
     db.commit()
@@ -462,6 +467,8 @@ def sync_garmin_activities(email, password, rider_id):
                 pass
 
             try:
+                from services.calorie_adjust import pair as _kcal_pair
+                cal_raw, cal_adj = _kcal_pair(parsed.get('calories'))     # global burn adjustment, applied as the figure is pulled in
                 db.execute('''
                     INSERT INTO Activity (
                         id, name, type, sportType,
@@ -469,9 +476,9 @@ def sync_garmin_activities(email, password, rider_id):
                         distance, movingTime, elapsedTime, totalElevationGain,
                         averageSpeed, maxSpeed, averageHeartrate, averageWatts,
                         averageCadence, calories,
-                        startLat, startLng, streams, rawData, riderId,
+                        startLat, startLng, streams, rawData, riderId, caloriesRaw,
                         createdAt, updatedAt
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
                     ON CONFLICT(id) DO NOTHING
                 ''', [
                     db_id, name, sport_type, sport_type,
@@ -485,12 +492,13 @@ def sync_garmin_activities(email, password, rider_id):
                     parsed.get('averageHeartrate'),
                     parsed.get('averageWatts'),
                     parsed.get('averageCadence'),
-                    parsed.get('calories'),
+                    cal_adj,
                     parsed.get('startLat'),
                     parsed.get('startLng'),
                     parsed.get('streams'),
                     '{}',
                     rider_id,
+                    cal_raw,
                 ])
             except Exception as e:
                 log.warning('Garmin activity %s insert failed: %s', activity_id, e)

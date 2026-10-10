@@ -399,6 +399,8 @@ def _insert(db, act, rider_id=None):
             calories = estimate_ride_calories(act.get('distance'), act.get('movingTime'), current_weight_kg(rider_id))
         except Exception:
             pass
+    from services.calorie_adjust import pair as _kcal_pair
+    calories_raw, calories = _kcal_pair(calories)     # global burn adjustment, applied as the figure is pulled in
     result = db.execute('''
         INSERT OR IGNORE INTO Activity
           (id, name, type, sportType, startDate, startDateLocal,
@@ -406,8 +408,8 @@ def _insert(db, act, rider_id=None):
            totalElevationGain, averageSpeed, maxSpeed,
            averageHeartrate, averageWatts,
            averageCadence, calories, startLat, startLng, streams,
-           rawData, riderId, maxHeartrate, maxWatts, createdAt, updatedAt)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
+           rawData, riderId, maxHeartrate, maxWatts, caloriesRaw, createdAt, updatedAt)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
     ''', [
         act.get('id'),            act.get('name'),          sport,
         sport,                    start_utc, start_local,
@@ -417,7 +419,7 @@ def _insert(db, act, rider_id=None):
         act.get('averageCadence'), calories,
         act.get('startLat'),      act.get('startLng'),
         act.get('streams'),       '{}',
-        rider_id, act.get('maxHeartrate'), act.get('maxWatts'),
+        rider_id, act.get('maxHeartrate'), act.get('maxWatts'), calories_raw,
     ])
     if result.rowcount and act.get('startLat') and act.get('startLng'):
         try:

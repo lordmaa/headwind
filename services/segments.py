@@ -7,6 +7,41 @@ log = logging.getLogger(__name__)
 TOLERANCE_M = 30  # metres — how close to a segment endpoint counts as a hit
 CHECKPOINT_M = 60  # metres — tolerance for interior waypoints (wider to absorb GPS drift)
 CHECKPOINT_N = 4   # number of evenly-spaced interior checkpoints to sample
+MIN_SPEED_MPS = {'ride': 2.0, 'run': 1.2}   # slower than this is a false match (4.5 mph on a bike; a 13:50/mi shuffle on foot)
+RUN_SPORTS = {'run', 'trailrun', 'virtualrun'}
+
+
+def seg_sport(seg):
+    try:
+        return (seg['sport'] if 'sport' in seg.keys() else None) or 'ride'
+    except AttributeError:
+        return seg.get('sport') or 'ride'
+
+
+def sport_family(sport_type):
+    """'run' for runs, 'ride' for everything else (other activity types have always been scanned against ride segments)."""
+    return 'run' if (sport_type or '').lower() in RUN_SPORTS else 'ride'
+
+
+def _activity_family(db, activity):
+    """'ride' / 'run' for an activity or workout row, or None for a workout that is not a run (walks and hikes have no segments)."""
+    try:
+        keys = activity.keys()
+    except AttributeError:
+        keys = []
+    st = activity['sportType'] if 'sportType' in keys else (activity['sport'] if 'sport' in keys else None)
+    if st is None:
+        r = db.execute('SELECT sportType FROM Activity WHERE id=?', [activity['id']]).fetchone()
+        if r:
+            st = r[0]
+        else:
+            w = db.execute('SELECT sport FROM Workout WHERE id=?', [activity['id']]).fetchone()
+            if not w:
+                return 'ride'
+            if (w[0] or '').lower() not in RUN_SPORTS:
+                return None
+            st = w[0]
+    return sport_family(st)
 
 
 def _haversine(lat1, lon1, lat2, lon2):
@@ -101,7 +136,7 @@ def recover_polyline(db, seg):
         if not aid or aid in tried:
             continue
         tried.add(aid)
-        row = db.execute('SELECT streams FROM Activity WHERE id=?', [aid]).fetchone()
+        row = db.execute('SELECT streams FROM Activity WHERE id=?', [aid]).fetchone() or db.execute('SELECT streams FROM Workout WHERE id=?', [aid]).fetchone()
         if row and row[0]:
             shape = _slice_between(row[0], seg)
             if shape:
@@ -174,8 +209,8 @@ def match_segment(activity_streams_json, seg):
         elapsed = times[end_idx] - times[start_idx]
         if elapsed <= 0:
             return
-        if dist_m and (dist_m / elapsed) < 2.0:
-            return  # slower than 4.5 mph — false match
+        if dist_m and (dist_m / elapsed) < MIN_SPEED_MPS[seg_sport(seg)]:
+            return  # too slow to be a real effort — false match
         if dist_m:
             # Reject shortcut routes: actual GPS distance must be ≥70% of
             # stored segment distance so riders who take a shorter road between
@@ -238,13 +273,13 @@ def _refresh_prs(db, segment_id):
     riders = db.execute('''
         SELECT DISTINCT a.riderId
         FROM SegmentEffort e
-        JOIN Activity a ON a.id = e.activityId
+        JOIN SegActivity a ON a.id = e.activityId
         WHERE e.segmentId=? AND a.riderId IS NOT NULL
     ''', [segment_id]).fetchall()
     for row in riders:
         best = db.execute('''
             SELECT e.id FROM SegmentEffort e
-            JOIN Activity a ON a.id = e.activityId
+            JOIN SegActivity a ON a.id = e.activityId
             WHERE e.segmentId=? AND a.riderId=?
             ORDER BY e.elapsedSecs ASC LIMIT 1
         ''', [segment_id, row[0]]).fetchone()
@@ -255,7 +290,10 @@ def _refresh_prs(db, segment_id):
 def scan_activity_against_segments(db, activity, segments):
     """Scan one activity against a list of segments. Commits nothing."""
     matched = 0
+    fam = _activity_family(db, activity)
     for seg in segments:
+        if fam is None or seg_sport(seg) != fam:        # runs only match run segments, rides only ride segments
+            continue
         elapsed = match_segment(activity['streams'], seg)
         if elapsed is None:
             continue
@@ -302,9 +340,13 @@ def scan_all_activities(db, segment_ids=None):
     db.execute(f'DELETE FROM SegmentEffort WHERE segmentId IN ({placeholders})', seg_ids)
 
     activities = db.execute(
-        "SELECT id, startDateLocal, streams FROM Activity "
+        "SELECT id, startDateLocal, streams, sportType FROM Activity "
         "WHERE streams IS NOT NULL AND streams NOT IN ('null', '{}')"
     ).fetchall()
+    if any(seg_sport(s) == 'run' for s in segments):     # phone-recorded runs live in Workout
+        activities = list(activities) + db.execute(
+            "SELECT id, startDateLocal, streams, sport AS sportType FROM Workout "
+            "WHERE sport='Run' AND streams IS NOT NULL AND streams NOT IN ('null', '{}')").fetchall()
 
     for act in activities:
         scan_activity_against_segments(db, act, segments)

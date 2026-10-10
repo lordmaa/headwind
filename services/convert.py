@@ -28,14 +28,20 @@ def _ride_to_workout(db, row, sport):
         raise ValueError('this ride has another recording set aside under it: settle that first (open the ride and choose which recording to keep)')
     wid = 'wk_' + hashlib.sha1(f"{row['riderId']}|conv|{row['id']}".encode()).hexdigest()[:16]
     dist, secs, gain = row['distance'] or 0, int(row['movingTime'] or 0), row['totalElevationGain'] or 0
-    kcal = estimate_calories(sport, dist, secs, gain, _kg(row['riderId']))
+    from services.calorie_adjust import pair as _kcal_pair
+    kcal_raw, kcal = _kcal_pair(estimate_calories(sport, dist, secs, gain, _kg(row['riderId'])))
+    if kcal is None:                                     # no estimate possible: carry the ride's figure across (raw if it has one)
+        kcal_raw = row['caloriesRaw']
+        kcal = row['calories']
     name = row['name'] if (row['name'] or '').strip().lower() not in _GENERIC_NAMES else None
     db.execute('''INSERT OR REPLACE INTO Workout (id, riderId, sport, name, startDate, startDateLocal, distance, movingTime, elapsedTime, totalElevationGain,
-                  averageSpeed, maxSpeed, averageHeartrate, calories, startLat, startLng, streams, weatherSummary, source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                  averageSpeed, maxSpeed, averageHeartrate, calories, startLat, startLng, streams, weatherSummary, source, caloriesRaw) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
                [wid, row['riderId'], sport, name, row['startDate'], row['startDateLocal'], dist, secs, row['elapsedTime'], gain, row['averageSpeed'], row['maxSpeed'],
-                row['averageHeartrate'], kcal if kcal is not None else row['calories'], row['startLat'], row['startLng'], row['streams'], row['weatherSummary'], 'converted'])
+                row['averageHeartrate'], kcal, row['startLat'], row['startLng'], row['streams'], row['weatherSummary'], 'converted', kcal_raw])
     duplicates.delete_activity(db, row['id'])           # derived data, bike link and a tombstone so a re-sync cannot bring it back as a ride
     db.execute('DELETE FROM RideMemory WHERE rideId=?', [row['id']])
+    from services import workouts as _wk
+    _wk.refresh_derived(db, wid)                         # a run gets its best times and run-segment efforts
     return {'kind': 'workout', 'id': wid, 'sport': sport}
 
 
@@ -45,13 +51,19 @@ def _workout_to_ride(db, row, sport):
     from services.workouts import label
     aid = 'conv_' + str(row['id']).replace('wk_', '', 1)
     dist, secs = row['distance'] or 0, int(row['movingTime'] or 0)
-    kcal = estimate_ride_calories(dist, secs, _kg(row['riderId'])) or row['calories']
+    from services.calorie_adjust import pair as _kcal_pair
+    kcal_raw, kcal = _kcal_pair(estimate_ride_calories(dist, secs, _kg(row['riderId'])))
+    if kcal is None:                                     # no estimate possible: carry the workout's figure across (raw if it has one)
+        kcal_raw = row['caloriesRaw']
+        kcal = row['calories']
     db.execute('''INSERT OR REPLACE INTO Activity (id, name, type, sportType, startDate, startDateLocal, distance, movingTime, elapsedTime, totalElevationGain, averageSpeed, maxSpeed,
-                  averageHeartrate, calories, startLat, startLng, streams, rawData, riderId, weatherSummary, createdAt, updatedAt)
-                  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))''',
+                  averageHeartrate, calories, startLat, startLng, streams, rawData, riderId, weatherSummary, caloriesRaw, createdAt, updatedAt)
+                  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))''',
                [aid, label(dict(row)) if not (row['name'] or '').strip() else row['name'], sport, sport, row['startDate'], row['startDateLocal'], dist, secs, row['elapsedTime'] or secs,
                 row['totalElevationGain'] or 0, row['averageSpeed'] or 0, row['maxSpeed'] or 0, row['averageHeartrate'], kcal, row['startLat'], row['startLng'], row['streams'], '{}',
-                row['riderId'], row['weatherSummary']])
+                row['riderId'], row['weatherSummary'], kcal_raw])
+    from services import workouts as _wk
+    _wk.forget(db, row['id'])
     db.execute('DELETE FROM Workout WHERE id=?', [row['id']])
     duplicates.rebuild_derived(db, aid)                 # best efforts + segment efforts, now that it is a ride
     gear.on_ride_added(db, aid)                         # the rider's default bike
@@ -80,10 +92,13 @@ def change_sport(db, kind, act_id, sport):
             return {'kind': 'workout', 'id': act_id, 'sport': sport, 'changed': False}
         if sport in WORKOUTS:
             db.execute('UPDATE Workout SET sport=? WHERE id=?', [sport, act_id])
+            from services import workouts as _wk
+            _wk.refresh_derived(db, act_id)            # a walk has no run segments or best times; a run needs them
             from services.workouts import estimate_calories
-            kcal = estimate_calories(sport, row['distance'] or 0, int(row['movingTime'] or 0), row['totalElevationGain'] or 0, _kg(row['riderId']))
+            from services.calorie_adjust import pair as _kcal_pair
+            kcal_raw, kcal = _kcal_pair(estimate_calories(sport, row['distance'] or 0, int(row['movingTime'] or 0), row['totalElevationGain'] or 0, _kg(row['riderId'])))
             if kcal is not None and (row['source'] != 'manual' or not row['calories']):
-                db.execute('UPDATE Workout SET calories=? WHERE id=?', [kcal, act_id])
+                db.execute('UPDATE Workout SET calories=?, caloriesRaw=? WHERE id=?', [kcal, kcal_raw, act_id])
             return {'kind': 'workout', 'id': act_id, 'sport': sport, 'changed': True}
         return dict(_workout_to_ride(db, row, sport), changed=True)
     raise ValueError('kind must be ride or workout')

@@ -68,6 +68,20 @@ def _stream_series(streams, key, dist_key='distance', transform=None):
     return {'values': values, 'labels': labels}
 
 
+def _workout_as_activity(wid):
+    """A Workout row shaped like an Activity row, so ride.html (map, elevation, segments) can show it. None if there is no such workout."""
+    w = query_db('''SELECT w.*, r.name AS riderName, r.avatarPath AS riderAvatar, r.isDefault AS riderIsDefault
+                    FROM Workout w LEFT JOIN Rider r ON r.id = w.riderId WHERE w.id=?''', [wid], one=True)
+    if not w:
+        return None
+    cols = [c[1] for c in get_db().execute('PRAGMA table_info(Activity)').fetchall()]
+    a = {c: None for c in cols}
+    a.update(dict(w))
+    a.update({'sportType': w['sport'], 'type': w['sport'], 'maxSpeed': w['maxSpeed'] if 'maxSpeed' in w.keys() else None,
+              'riderName': w['riderName'], 'riderAvatar': w['riderAvatar'], 'riderIsDefault': w['riderIsDefault'], 'name': w['name'] or w['sport']})
+    return a
+
+
 @bp.route('/<rid>')
 def detail(rid):
     activity = query_db('''
@@ -76,8 +90,12 @@ def detail(rid):
         LEFT JOIN Rider r ON r.id = a.riderId
         WHERE a.id=?
     ''', [rid], one=True)
+    is_workout = False
     if not activity:
-        abort(404)
+        activity = _workout_as_activity(rid)          # phone-recorded runs/walks live in Workout; show them on the same page
+        if not activity:
+            abort(404)
+        is_workout = True
 
     streams = {}
     if activity['streams']:
@@ -197,6 +215,7 @@ def detail(rid):
 
     sport = (activity['sportType'] or '').lower()
     is_ride = 'ride' in sport or 'cycling' in sport
+    is_run = sport in ('run', 'trailrun', 'virtualrun')
 
     # Badges earned on this specific ride
     ride_badges = []
@@ -228,7 +247,7 @@ def detail(rid):
                            seg_trends=seg_trends, rival_trends=rival_trends,
                            elev_loss_ft=int(elev_loss_ft),
                            prev_ride=prev_ride, next_ride=next_ride,
-                           is_ride=is_ride,
+                           is_ride=is_ride, is_run=is_run, is_workout=is_workout,
                            ride_badges=ride_badges,
                            personalities=PERSONALITIES,
                            current_personality=query_db('SELECT coachPersonality FROM Settings WHERE id=1', one=True) or {},
@@ -239,7 +258,8 @@ def detail(rid):
 def scan_segments(rid):
     from services.segments import scan_activity_against_segments, _refresh_prs
     db = get_db()
-    activity = db.execute('SELECT id, startDateLocal, streams FROM Activity WHERE id=?', [rid]).fetchone()
+    activity = (db.execute('SELECT id, startDateLocal, streams, sportType FROM Activity WHERE id=?', [rid]).fetchone()
+                or db.execute('SELECT id, startDateLocal, streams, sport AS sportType FROM Workout WHERE id=?', [rid]).fetchone())
     if not activity:
         return ('Not found', 404)
     segments = db.execute('SELECT * FROM Segment').fetchall()

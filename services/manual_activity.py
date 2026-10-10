@@ -69,23 +69,27 @@ def create(db, rider_id, sport, local_iso, duration_s, distance_m, elev_m=None, 
         if db.execute('SELECT 1 FROM Workout WHERE id=?', [aid]).fetchone():
             return {'kind': 'workout', 'id': aid, 'created': False, 'duplicate': None}
         from services.workouts import estimate_calories
+        from services.calorie_adjust import pair as _kcal_pair
+        kcal_raw = None                                  # a number the user typed is theirs: never adjusted
         if kcal is None:
-            kcal = estimate_calories(sport, dist, secs, gain, kg)
+            kcal_raw, kcal = _kcal_pair(estimate_calories(sport, dist, secs, gain, kg))
         db.execute('''INSERT INTO Workout (id, riderId, sport, name, startDate, startDateLocal, distance, movingTime, elapsedTime, totalElevationGain,
-                                           averageSpeed, calories, source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)''',
-                   [aid, rider_id, sport, name, utc, local, dist, secs, secs, gain, avg, kcal, 'manual'])
+                                           averageSpeed, calories, source, caloriesRaw) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                   [aid, rider_id, sport, name, utc, local, dist, secs, secs, gain, avg, kcal, 'manual', kcal_raw])
         db.commit()
         return {'kind': 'workout', 'id': aid, 'created': True, 'duplicate': None}
 
     if duplicates.exists_anywhere(db, aid):
         return {'kind': 'ride', 'id': aid, 'created': False, 'duplicate': None}
+    kcal_raw = None                                      # a number the user typed is theirs: never adjusted
     if kcal is None:
         from services.parser import estimate_ride_calories
-        kcal = estimate_ride_calories(dist, secs, kg)
+        from services.calorie_adjust import pair as _kcal_pair
+        kcal_raw, kcal = _kcal_pair(estimate_ride_calories(dist, secs, kg))
     db.execute('''INSERT INTO Activity (id, name, type, sportType, startDate, startDateLocal, distance, movingTime, elapsedTime, totalElevationGain,
-                                        averageSpeed, maxSpeed, calories, notes, rawData, riderId, createdAt, updatedAt)
-                  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))''',
-               [aid, name or ('Indoor ride' if sport == 'VirtualRide' else 'Ride'), sport, sport, utc, local, dist, secs, secs, gain, avg, 0, kcal, notes, '{}', rider_id])
+                                        averageSpeed, maxSpeed, calories, notes, rawData, riderId, caloriesRaw, createdAt, updatedAt)
+                  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))''',
+               [aid, name or ('Indoor ride' if sport == 'VirtualRide' else 'Ride'), sport, sport, utc, local, dist, secs, secs, gain, avg, 0, kcal, notes, '{}', rider_id, kcal_raw])
     dup = None
     try:
         dup = duplicates.resolve(db, aid)

@@ -197,6 +197,14 @@ def create_app():
             g.units = (row['units'] if row and row['units'] else 'imperial')
         return g.units
 
+    @app.template_filter('pace_mi')
+    def pace_mi(mps):
+        """Metres per second -> running pace per mile, e.g. 3.1 -> '8:39 /mi'."""
+        if not mps or mps <= 0:
+            return '—'
+        secs = round(1609.344 / mps)
+        return f'{secs // 60}:{secs % 60:02d} /mi'
+
     @app.template_filter('fmt_dist')
     def fmt_dist(m):
         v = float(m or 0)

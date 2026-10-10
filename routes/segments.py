@@ -98,6 +98,7 @@ def _difficulty(seg, all_segs):
 
 @bp.route('/segments')
 def index():
+    sport = 'run' if request.args.get('sport') == 'run' else 'ride'
     segs = query_db('''
         SELECT s.*,
                COUNT(e.id)        AS effort_count,
@@ -106,13 +107,13 @@ def index():
                f.name             AS friend_name
         FROM Segment s
         LEFT JOIN SegmentEffort e ON e.segmentId = s.id
-        LEFT JOIN Activity a ON a.id = e.activityId
+        LEFT JOIN SegActivity a ON a.id = e.activityId
         LEFT JOIN Rider r ON r.id = a.riderId
         LEFT JOIN Friend f ON f.id = s.friendId
-        WHERE e.id IS NULL OR r.isDefault = 1
+        WHERE (e.id IS NULL OR r.isDefault = 1) AND COALESCE(s.sport, 'ride') = ?
         GROUP BY s.id
         ORDER BY s.createdAt DESC
-    ''')
+    ''', [sport])
     # Fetch all KOM holders per segment (handles ties)
     db = get_db()
     kom_map = {}
@@ -125,13 +126,13 @@ def index():
                 SELECT DISTINCT r.id AS rider_id, r.name AS rider_name, r.avatarPath AS rider_avatar,
                                 r.isDefault AS rider_is_default
                 FROM SegmentEffort e
-                JOIN Activity a ON a.id = e.activityId
+                JOIN SegActivity a ON a.id = e.activityId
                 LEFT JOIN Rider r ON r.id = a.riderId
                 WHERE e.segmentId=? AND e.elapsedSecs=?
             ''', [seg['id'], best['t']])
             if koms:
                 kom_map[seg['id']] = koms
-    return render_template('segments.html', segments=segs, kom_map=kom_map)
+    return render_template('segments.html', segments=segs, kom_map=kom_map, sport=sport)
 
 
 @bp.route('/segments/create', methods=['POST'])
@@ -145,6 +146,7 @@ def create():
         end_lng     = float(request.form['endLng'])
         distance_m  = float(request.form.get('distanceM') or 0)
         activity_id = request.form.get('activityId') or None
+        sport       = 'run' if request.form.get('sport') == 'run' else 'ride'
         polyline    = request.form.get('polyline') or None
         if not valid_coord(start_lat, start_lng) or not valid_coord(end_lat, end_lng):
             abort(400)
@@ -157,10 +159,10 @@ def create():
 
     db.execute('''
         INSERT INTO Segment (name, startLat, startLng, endLat, endLng, distanceM,
-                             sourceActivityId, polyline, elevationGainM)
-        VALUES (?,?,?,?,?,?,?,?,?)
+                             sourceActivityId, polyline, elevationGainM, sport)
+        VALUES (?,?,?,?,?,?,?,?,?,?)
     ''', [name, start_lat, start_lng, end_lat, end_lng, distance_m,
-          activity_id, polyline, elev_gain])
+          activity_id, polyline, elev_gain, sport])
     db.commit()
 
     seg_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
@@ -186,8 +188,8 @@ def detail(sid):
     # Auto-compute elevation gain for segments created before this field existed
     if seg['elevationGainM'] is None and seg['sourceActivityId']:
         try:
-            src = db.execute('SELECT streams FROM Activity WHERE id=?',
-                             [seg['sourceActivityId']]).fetchone()
+            src = (db.execute('SELECT streams FROM Activity WHERE id=?', [seg['sourceActivityId']]).fetchone()
+                   or db.execute('SELECT streams FROM Workout WHERE id=?', [seg['sourceActivityId']]).fetchone())
             if src and src['streams']:
                 s = json.loads(src['streams'])
                 latlng = (s.get('latlng') or {}).get('data') or []
@@ -233,7 +235,7 @@ def detail(sid):
         SELECT e.*, a.name AS ride_name, a.sportType, a.id AS ride_id,
                r.id AS rider_id, r.name AS rider_name, r.avatarPath AS rider_avatar, r.isDefault AS rider_is_default
         FROM SegmentEffort e
-        JOIN Activity a ON a.id = e.activityId
+        JOIN SegActivity a ON a.id = e.activityId
         LEFT JOIN Rider r ON r.id = a.riderId
         WHERE e.segmentId = ?
         ORDER BY e.elapsedSecs ASC
@@ -258,12 +260,12 @@ def detail(sid):
         window = secs_list[max(0, i - 2):i + 1]
         trend_rolling.append(round(sum(window) / len(window)))
 
-    all_segs = query_db('SELECT * FROM Segment')
+    all_segs = query_db("SELECT * FROM Segment WHERE COALESCE(sport, 'ride') = ?", [seg['sport'] or 'ride'])
     diff_label, diff_colour, sub_segs = _difficulty(seg, all_segs)
 
     return render_template('segment.html', seg=seg, efforts=efforts, map_data=map_data,
                            trend=trend, trend_rolling=trend_rolling,
-                           stats=stats, diff_label=diff_label,
+                           stats=stats, diff_label=diff_label, is_run=(seg['sport'] == 'run'),
                            diff_colour=diff_colour, sub_segs=sub_segs)
 
 

@@ -9,13 +9,19 @@
 
 {% block content %}
 
+<div style="display:flex;gap:.5rem;margin-bottom:1rem;">
+  <a href="{{ url_for('segments.index') }}" class="btn {{ 'btn-primary' if sport != 'run' else 'btn-secondary' }}">🚴 Ride segments</a>
+  <a href="{{ url_for('segments.index', sport='run') }}" class="btn {{ 'btn-primary' if sport == 'run' else 'btn-secondary' }}">🏃 Run segments</a>
+</div>
+
 {% if not segments %}
 <div class="card" style="max-width:600px; text-align:center; padding:3rem 2rem;">
   <div style="font-size:2.5rem; margin-bottom:1rem;">🏁</div>
   <div class="card-title">No segments yet</div>
   <p style="color:var(--text-muted); font-size:0.9375rem; line-height:1.7; margin-bottom:0;">
-    Open any ride that has a map, then click <strong style="color:var(--text);">Create Segment</strong>
-    to mark a start and end point on your route.
+    {% if sport == 'run' %}Open a run that has a map (under Workouts), then click <strong style="color:var(--text);">Create Segment</strong>
+    to mark a start and end point on your route. Only runs are matched against run segments.{% else %}Open any ride that has a map, then click <strong style="color:var(--text);">Create Segment</strong>
+    to mark a start and end point on your route. Only rides are matched against ride segments.{% endif %}
   </p>
 </div>
 {% else %}

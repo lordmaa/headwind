@@ -96,7 +96,7 @@ def feed():
         yield json.dumps({'type': 'meta', 'name': rider['name'] if rider else 'Unknown'}) + '\n'
 
         for s in db.execute('SELECT id, name, startLat, startLng, endLat, endLng, '
-                            'distanceM, elevationGainM, polyline FROM Segment WHERE friendId IS NULL'):
+                            "distanceM, elevationGainM, polyline, COALESCE(sport, 'ride') AS sport FROM Segment WHERE friendId IS NULL"):
             yield json.dumps({'type': 'segment', **dict(s)}) + '\n'
 
         owner_id = rider['id'] if rider else None
@@ -351,19 +351,19 @@ def _do_ride_sync(friend_id):
                 ).fetchone()
                 if existing:
                     db.execute('''UPDATE Segment SET name=?, startLat=?, startLng=?, endLat=?, endLng=?,
-                                      distanceM=?, elevationGainM=?, polyline=? WHERE id=?''', [
+                                      distanceM=?, elevationGainM=?, polyline=?, sport=? WHERE id=?''', [
                         obj.get('name'), _sc[0], _sc[1], _ec[0], _ec[1],
-                        obj.get('distanceM'), obj.get('elevationGainM'), _poly,
+                        obj.get('distanceM'), obj.get('elevationGainM'), _poly, 'run' if obj.get('sport') == 'run' else 'ride',
                         existing[0],
                     ])
                     imported_seg_ids.append(existing[0])
                 else:
                     db.execute('''INSERT INTO Segment (name, startLat, startLng, endLat, endLng,
-                                      distanceM, elevationGainM, polyline, friendId, sourceSegId)
-                                  VALUES (?,?,?,?,?,?,?,?,?,?)''', [
+                                      distanceM, elevationGainM, polyline, friendId, sourceSegId, sport)
+                                  VALUES (?,?,?,?,?,?,?,?,?,?,?)''', [
                         obj.get('name'), _sc[0], _sc[1], _ec[0], _ec[1],
                         obj.get('distanceM'), obj.get('elevationGainM'), _poly,
-                        friend_id, obj['id'],
+                        friend_id, obj['id'], 'run' if obj.get('sport') == 'run' else 'ride',
                     ])
                     imported_seg_ids.append(db.execute('SELECT last_insert_rowid()').fetchone()[0])
                 remote_seg_count += 1

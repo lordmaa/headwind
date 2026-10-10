@@ -272,6 +272,29 @@
 
   </div>
 
+  <!-- Calorie burn adjustment -->
+  <div class="card" style="margin-bottom:1.5rem;">
+    <div class="card-title">Calorie burn adjustment</div>
+    <p style="color:var(--text-muted); font-size:0.875rem; margin-bottom:1rem; line-height:1.6;">
+      Burn figures are estimates and tend to read high. This takes a percentage off every burn estimate as it is pulled in
+      (Garmin and FIT rides, phone recordings, walks and runs, Garmin daily totals). Everything downstream — dashboards, Home
+      Assistant, the API and the Android app — then carries the corrected number. Food calories and figures you type in yourself
+      are never changed, and the original number is always kept so this can be undone.
+    </p>
+    <div style="display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap;">
+      <label for="calAdjPct" style="font-size:0.875rem;">Shave off</label>
+      <input type="number" id="calAdjPct" min="0" max="50" step="1" value="{{ (s.calorieAdjustPct if s and s.calorieAdjustPct else 0)|round|int }}" style="width:5.5rem;">
+      <span style="font-size:0.875rem;">%</span>
+      <button class="btn btn-secondary" type="button" onclick="calAdjSave(false)">Save (new data)</button>
+      <button class="btn btn-secondary" type="button" onclick="calAdjSave(true)">Save and apply to history</button>
+      <span id="calAdjStatus" style="font-size:0.8125rem; color:var(--text-muted);"></span>
+    </div>
+    <p style="color:var(--text-muted); font-size:0.75rem; margin-top:0.75rem; line-height:1.5;">
+      0 turns it off. "Apply to history" re-works your own stored rides, walks/runs and Garmin totals from their original numbers
+      (rides received from friends are left alone). Run it again with a different percentage at any time.
+    </p>
+  </div>
+
   <!-- Weather Backfill + Backup side by side -->
   <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; align-items:start;">
 
@@ -492,6 +515,26 @@ function mqttPublish() {
       status.style.color = 'var(--danger)';
       btn.disabled = false;
     });
+}
+
+function calAdjSave(history) {
+  var st = document.getElementById('calAdjStatus');
+  var pct = document.getElementById('calAdjPct').value;
+  st.style.color = 'var(--text-muted)';
+  st.textContent = 'Saving…';
+  fetch('/settings/calorie-adjust', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({pct: pct}) })
+    .then(function(r) { return r.json().then(function(d) { return {ok: r.ok, d: d}; }); })
+    .then(function(x) {
+      if (!x.ok) { st.textContent = x.d.error || 'Could not save'; st.style.color = 'var(--danger)'; return; }
+      if (!history) { st.textContent = '✓ Saved — ' + x.d.pct + '% off new data'; st.style.color = 'var(--success)'; return; }
+      st.textContent = 'Applying to history…';
+      return fetch('/settings/calorie-adjust/apply-history', { method: 'POST' }).then(function(r) { return r.json(); }).then(function(d) {
+        var t = d.touched || {};
+        st.textContent = '✓ Saved and applied — ' + (t.Activity || 0) + ' rides, ' + (t.Workout || 0) + ' walks/runs, ' + (t.GarminDaily || 0) + ' daily totals';
+        st.style.color = 'var(--success)';
+      });
+    })
+    .catch(function() { st.textContent = 'Could not reach the server'; st.style.color = 'var(--danger)'; });
 }
 
 function weatherBackfill() {

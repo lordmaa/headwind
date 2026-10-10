@@ -230,6 +230,7 @@ def migrate_db():
         ('weatherWindRel',  'TEXT'),
         ('aiKudos',         'TEXT'),
         ('aiKudosAt',       'TEXT'),
+        ('caloriesRaw',     'REAL'),
     ]:
         if col not in act_cols:
             db.execute(f'ALTER TABLE Activity ADD COLUMN {col} {defn}')
@@ -297,6 +298,7 @@ def migrate_db():
         ('nutritionWeightUnit',     "TEXT DEFAULT 'stlb'"),
         ('nutritionWeightEmaAlpha', 'REAL DEFAULT 0.1'),
         ('dietStartDate',           'TEXT'),
+        ('calorieAdjustPct',       'REAL DEFAULT 0'),
     ]:
         if col not in settings_cols:
             db.execute(f'ALTER TABLE Settings ADD COLUMN {col} {defn}')
@@ -321,6 +323,8 @@ def migrate_db():
         ('bodyBatteryStream',  'TEXT'),
         ('totalCalories',  'INTEGER'),
         ('activeCalories', 'INTEGER'),
+        ('totalCaloriesRaw',  'REAL'),
+        ('activeCaloriesRaw', 'REAL'),
     ]:
         if col not in garmin_cols:
             db.execute(f'ALTER TABLE GarminDaily ADD COLUMN {col} {defn}')
@@ -523,6 +527,26 @@ def migrate_db():
             createdAt          TEXT DEFAULT (datetime('now'))
         )
     ''')
+    # Segments are for rides or for runs. A run lives in Workout (phone) or Activity (Garmin), so segment queries read activities
+    # through this view and see both; it carries no streams (heavy), only what leaderboards need.
+    if 'sport' not in {r[1] for r in db.execute('PRAGMA table_info(Segment)').fetchall()}:
+        db.execute("ALTER TABLE Segment ADD COLUMN sport TEXT DEFAULT 'ride'")
+    db.execute('DROP VIEW IF EXISTS SegActivity')
+    db.execute('''CREATE VIEW SegActivity AS
+        SELECT id, name, riderId, startDateLocal, sportType, 'activity' AS kind FROM Activity
+        UNION ALL
+        SELECT id, name, riderId, startDateLocal, sport AS sportType, 'workout' AS kind FROM Workout''')
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS RunEffort (
+            runId      TEXT NOT NULL,
+            runDate    TEXT,
+            distanceM  REAL NOT NULL,
+            elapsedSecs INTEGER NOT NULL,
+            PRIMARY KEY (runId, distanceM)
+        )
+    ''')
+    if 'caloriesRaw' not in {r[1] for r in db.execute('PRAGMA table_info(Workout)').fetchall()}:
+        db.execute('ALTER TABLE Workout ADD COLUMN caloriesRaw REAL')
     db.execute('CREATE INDEX IF NOT EXISTS idx_workout_rider_date ON Workout(riderId, startDateLocal)')
 
     from services.duplicates import ensure_schema as _dup_schema

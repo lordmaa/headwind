@@ -21,7 +21,7 @@ _BACKOFF_STEPS = (60, 300, 900)  # seconds
 # so the first instance's HA entities are untouched. HEADWIND_MQTT_NUTRITION=0 publishes only the ride sensors.
 # Read lazily (functions, not module constants) so the env file loaded by config.py is always in effect.
 _DEFAULT_PREFIX = 'bike_tracker'
-_RIDE_ONLY_NUTRITION_UIDS = {'nutrition_ride_months', 'nutrition_ride_years',        # the Riding charts live in this list
+_RIDE_ONLY_NUTRITION_UIDS = {'nutrition_ride_months', 'nutrition_ride_years', 'nutrition_ride_route', 'nutrition_ride_segments', 'nutrition_run_stats', 'nutrition_run_route', 'nutrition_run_segments',        # the Riding charts live in this list
                              'nutrition_steps_today', 'nutrition_steps_goal', 'nutrition_steps_avg_7d',   # steps (phone / watch / manual)
                              'nutrition_steps_source', 'nutrition_recovery_history'}
 
@@ -140,6 +140,11 @@ NUTRITION_SENSORS = [
     ("nutrition_activity_status",   "Nutrition Activity Status",    "mdi:chart-line-variant", None),
     ("nutrition_ride_months",       "Nutrition Ride Months",        "mdi:calendar-month",    None),
     ("nutrition_ride_years",        "Nutrition Ride Years",         "mdi:calendar-range",    None),
+    ("nutrition_ride_route",        "Nutrition Ride Route",         "mdi:map-marker-path",   None),      # last ride's track + the segments it crossed
+    ("nutrition_ride_segments",     "Nutrition Ride Segments",      "mdi:flag-checkered",    None),      # that ride's segment efforts + every segment's best
+    ("nutrition_run_stats",         "Nutrition Run Stats",          "mdi:run-fast",          None),      # best times, totals, weekly volume, recent runs
+    ("nutrition_run_route",         "Nutrition Run Route",          "mdi:map-marker-path",   None),      # latest run's track (+ the run segments it crossed)
+    ("nutrition_run_segments",      "Nutrition Run Segments",       "mdi:flag-checkered",    None),      # that run's run-segment efforts
     # ── Weight (trend is Headwind's smoothed figure; the raw scale reading is already in HA) ──
     ("nutrition_weight_trend_kg",    "Nutrition Weight Trend",       "mdi:scale-bathroom",    "kg"),
     ("nutrition_weight_rate_kg_wk",  "Nutrition Weight Change per Week", "mdi:trending-down", "kg"),
@@ -150,7 +155,7 @@ NUTRITION_SENSORS = [
 ]
 
 # uids that can legitimately be 'unknown' — everything else is always numeric, so HA can keep long-term statistics
-HISTORY_UIDS = {"nutrition_weight_history", "nutrition_diary_history", "nutrition_recovery_history", "nutrition_reality_check", "nutrition_goal_projection", "nutrition_plan", "nutrition_activity_weekly", "nutrition_ride_months", "nutrition_ride_years"}
+HISTORY_UIDS = {"nutrition_weight_history", "nutrition_diary_history", "nutrition_recovery_history", "nutrition_reality_check", "nutrition_goal_projection", "nutrition_plan", "nutrition_activity_weekly", "nutrition_ride_months", "nutrition_ride_years", "nutrition_ride_route", "nutrition_ride_segments", "nutrition_run_stats", "nutrition_run_route", "nutrition_run_segments"}
 _NON_NUMERIC_OK = HISTORY_UIDS | {"nutrition_activity_status", "nutrition_garmin_watch_sync", "nutrition_steps_source", "nutrition_garmin_last_sync", "nutrition_garmin_status", "nutrition_calories_burned", "nutrition_weight_trend_kg", "nutrition_weight_rate_kg_wk"}
 
 
@@ -426,6 +431,57 @@ def _best_steps_for(rid, day_iso, garmin_steps):
     return int(max(vals))
 
 
+
+def _thin(points, n):
+    """At most n [lat, lng] points (5 dp, ~1 m), keeping the first and last, so a ride's track fits a Home Assistant attribute."""
+    pts = [p for p in points if isinstance(p, (list, tuple)) and len(p) >= 2 and p[0] is not None and p[1] is not None]
+    if len(pts) > n:
+        step = (len(pts) - 1) / (n - 1)
+        pts = [pts[round(i * step)] for i in range(n)]
+    return [[round(float(p[0]), 5), round(float(p[1]), 5)] for p in pts]
+
+
+def _ride_route_payloads(rid):
+    """{'nutrition_ride_route': ..., 'nutrition_ride_segments': ...} for the rider's latest ride, plus every segment's personal best."""
+    from database import query_db
+    out = {}
+    act = query_db("SELECT id, name, startDateLocal, distance, movingTime, streams FROM Activity WHERE riderId=? ORDER BY startDate DESC LIMIT 1", [rid], one=True)
+    if not act:
+        return {'nutrition_ride_route': {'pts': []}, 'nutrition_ride_segments': {'efforts': [], 'all': []}}
+    try:
+        ll = (json.loads(act['streams'] or '{}').get('latlng') or {}).get('data') or []
+    except Exception:
+        ll = []
+    efforts = query_db("""SELECT e.segmentId, e.elapsedSecs, e.isPR, s.name, s.distanceM, s.polyline
+                          FROM SegmentEffort e JOIN Segment s ON s.id=e.segmentId WHERE e.activityId=? ORDER BY s.name""", [act['id']])
+    segs = []
+    detail = []
+    for e in efforts:
+        own = query_db("""SELECT e2.elapsedSecs secs, a2.startDateLocal d FROM SegmentEffort e2 JOIN Activity a2 ON a2.id=e2.activityId
+                          WHERE e2.segmentId=? AND a2.riderId=? ORDER BY a2.startDateLocal""", [e['segmentId'], rid])
+        times = [o['secs'] for o in own]
+        before = [o['secs'] for o in own if o['d'] < act['startDateLocal']]
+        best = min(times) if times else e['elapsedSecs']
+        detail.append({'n': e['name'], 'secs': e['elapsedSecs'], 'm': round(e['distanceM'] or 0), 'pr': bool(e['isPR']),
+                       'best': best, 'prev_best': min(before) if before else None, 'last': before[-1] if before else None,
+                       'rank': sorted(times).index(e['elapsedSecs']) + 1, 'tries': len(times)})
+        try:
+            sp = json.loads(e['polyline'] or '[]')
+        except Exception:
+            sp = []
+        if sp:
+            segs.append({'n': e['name'], 'pr': bool(e['isPR']), 'pts': _thin(sp, 22)})
+    allsegs = query_db("""SELECT s.id, s.name, s.distanceM, MIN(x.secs) best, COUNT(x.secs) tries, MAX(x.d) last
+                          FROM Segment s LEFT JOIN (SELECT e.segmentId sid, e.elapsedSecs secs, a.startDateLocal d FROM SegmentEffort e
+                                                    JOIN Activity a ON a.id=e.activityId WHERE a.riderId=?) x ON x.sid=s.id
+                          WHERE s.friendId IS NULL AND COALESCE(s.sport, 'ride') = 'ride' GROUP BY s.id ORDER BY s.name""", [rid])
+    out['nutrition_ride_route'] = {'id': act['id'], 'name': act['name'], 'date': (act['startDateLocal'] or '')[:10],
+                                   'mi': round((act['distance'] or 0) / 1609.344, 1), 'pts': _thin(ll, 140), 'segs': segs}
+    out['nutrition_ride_segments'] = {'id': act['id'], 'name': act['name'], 'date': (act['startDateLocal'] or '')[:10], 'efforts': detail,
+                                      'all': [{'n': s['name'], 'm': round(s['distanceM'] or 0), 'best': s['best'], 'tries': s['tries'], 'last': (s['last'] or '')[:10]} for s in allsegs]}
+    return out
+
+
 def _history_payloads():
     """{uid: compact JSON} — the series behind the dashboard charts (weight, diary, recovery)."""
     from database import query_db
@@ -572,6 +628,20 @@ def _history_payloads():
     except Exception as e:
         log.warning('plan status failed: %s', e)
         out['nutrition_plan'] = {'status': 'error'}
+    try:
+        from services import run_stats
+        out.update(run_stats.payloads(rid))
+    except Exception as e:
+        log.warning('run stats failed: %s', e)
+        out['nutrition_run_stats'] = {'runs': 0}
+        out['nutrition_run_route'] = {'pts': []}
+        out['nutrition_run_segments'] = {'efforts': []}
+    try:
+        out.update(_ride_route_payloads(rid))
+    except Exception as e:
+        log.warning('ride route failed: %s', e)
+        out['nutrition_ride_route'] = {'pts': []}
+        out['nutrition_ride_segments'] = {'efforts': [], 'all': []}
     return {uid: json.dumps(v, separators=(',', ':')) for uid, v in out.items()}
 
 

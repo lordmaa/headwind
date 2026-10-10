@@ -48,7 +48,7 @@
   </div>
   <div class="stat-card">
     <div class="stat-value">
-      {% if pr and pr.avgSpeedMps %}{{ (pr.avgSpeedMps * 2.23694) | round(1) }} mph{% else %}—{% endif %}
+      {% if pr and pr.avgSpeedMps %}{% if is_run %}{{ pr.avgSpeedMps | pace_mi }}{% else %}{{ (pr.avgSpeedMps * 2.23694) | round(1) }} mph{% endif %}{% else %}—{% endif %}
     </div>
     <div class="stat-label">PR Speed</div>
   </div>
@@ -60,7 +60,7 @@
   </div>
   <div class="stat-card">
     <div class="stat-value">
-      {% if stats.avgSpeedMps %}{{ (stats.avgSpeedMps * 2.23694) | round(1) }} mph{% else %}—{% endif %}
+      {% if stats.avgSpeedMps %}{% if is_run %}{{ stats.avgSpeedMps | pace_mi }}{% else %}{{ (stats.avgSpeedMps * 2.23694) | round(1) }} mph{% endif %}{% else %}—{% endif %}
     </div>
     <div class="stat-label">Avg Speed</div>
   </div>
@@ -187,7 +187,7 @@
           {{ e.elapsedSecs | fmt_duration }}
         </td>
         <td style="padding:0.875rem 1.25rem; text-align:right; color:var(--text-muted); font-size:0.875rem;">
-          {% if e.avgSpeedMps %}{{ (e.avgSpeedMps * 2.23694) | round(1) }} mph{% else %}—{% endif %}
+          {% if e.avgSpeedMps %}{% if is_run %}{{ e.avgSpeedMps | pace_mi }}{% else %}{{ (e.avgSpeedMps * 2.23694) | round(1) }} mph{% endif %}{% else %}—{% endif %}
         </td>
         <td style="padding:0.875rem 1rem; text-align:right;">
           <form method="POST" action="{{ url_for('segments.delete_effort', sid=seg.id, eid=e.id) }}"

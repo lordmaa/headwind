@@ -218,6 +218,39 @@ def version_check():
         return jsonify({'error': str(e)}), 502
 
 
+@bp.route('/calorie-adjust', methods=['POST'])
+def calorie_adjust():
+    """Save the global calorie-burn adjustment (percent shaved off every burn estimate as it is pulled in).
+    Applies to new data only; 'apply to history' (below) brings stored figures under it."""
+    from database import get_db
+    from services import calorie_adjust
+    data = request.get_json(silent=True) or request.form
+    try:
+        raw = float(str(data.get('pct', '')).strip())
+    except ValueError:
+        return jsonify({'error': 'enter a number from 0 to %d' % calorie_adjust.MAX_PCT}), 400
+    if not (0 <= raw <= calorie_adjust.MAX_PCT):
+        return jsonify({'error': 'enter a number from 0 to %d' % calorie_adjust.MAX_PCT}), 400
+    db = get_db()
+    db.execute('UPDATE Settings SET calorieAdjustPct=? WHERE id=1', [round(raw, 1)])
+    db.commit()
+    return jsonify({'ok': True, 'pct': round(raw, 1)})
+
+
+@bp.route('/calorie-adjust/apply-history', methods=['POST'])
+def calorie_adjust_history():
+    """Re-apply the current percentage to stored history (own rides, walks/runs and Garmin daily totals).
+    Reversible: the unadjusted figure is kept alongside, and running this again with a different percentage recomputes from it."""
+    from services import calorie_adjust
+    touched = calorie_adjust.reapply_all(include_unrecorded=True)
+    try:
+        from services import mqtt
+        mqtt.push_update()
+    except Exception:
+        pass
+    return jsonify({'ok': True, 'pct': calorie_adjust.get_pct(), 'touched': touched})
+
+
 @bp.route('/weather-backfill', methods=['POST'])
 def weather_backfill():
     from flask import current_app

@@ -1,10 +1,11 @@
 import json, re, sys
 import hawss, build_dashboard
+(states,) = hawss.call({'type': 'get_states'})
+have = {s['entity_id'] for s in states['result']}
+build_dashboard.HAVE = have          # optional cards (e.g. the cycling outlook) are left out when their sensors do not exist
 cfg = build_dashboard.build()
 blob = json.dumps(cfg)
 used = sorted(set(re.findall(r"\b(?:sensor|binary_sensor)\.[a-z0-9_]+", blob)))
-(states,) = hawss.call({'type': 'get_states'})
-have = {s['entity_id'] for s in states['result']}
 missing = [e for e in used if e not in have]
 print(f'{len(used)} entities referenced, missing: {missing or "none"}')
 if missing: sys.exit(1)

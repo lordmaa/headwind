@@ -42,8 +42,9 @@ def _public(w):
 @bp.route('/ping')
 def ping():
     r = _rider()
-    s = query_db('SELECT units FROM Settings WHERE id=1', one=True)
+    s = query_db('SELECT units, calorieAdjustPct FROM Settings WHERE id=1', one=True)
     return jsonify({'ok': True, 'api': 1, 'rider': r['name'] if r else None, 'units': (s['units'] if s else None) or 'imperial',
+                    'calorie_adjust_pct': (s['calorieAdjustPct'] if s and s['calorieAdjustPct'] is not None else 0),
                     'server_time': datetime.now(ZoneInfo('Europe/London')).isoformat(timespec='seconds')})
 
 
@@ -84,6 +85,7 @@ def today():
         'steps': {'today': _best_steps_for(rider['id'], d, g['steps'] if g else None), 'goal': goal},
         'weight': day.get('weight'),
         'weight_kg': _weight_kg(rider['id']),
+        'calorie_adjust_pct': __import__('services.calorie_adjust', fromlist=['get_pct']).get_pct(),   # the phone applies the same % to its own live estimate
         'entries': day.get('entries', []),
         'recent': (recent.get('items') if isinstance(recent, dict) else recent) or [],
         'favourites': favs or [],
@@ -448,6 +450,8 @@ def list_workouts():
 def delete_workout(wid):
     rider = _rider()
     db = get_db()
+    from services import workouts as _wk
+    _wk.forget(db, wid)
     n = db.execute('DELETE FROM Workout WHERE id=? AND riderId=?', [wid, rider['id'] if rider else -1]).rowcount
     db.commit()
     if n:
@@ -542,6 +546,8 @@ def delete_ride(kind, rid):
     rider = _rider()
     db = get_db()
     if kind == 'workout':
+        from services import workouts as _wk
+        _wk.forget(db, rid)
         n = db.execute('DELETE FROM Workout WHERE id=? AND riderId=?', [rid, rider['id'] if rider else -1]).rowcount
     elif kind == 'ride':
         row = db.execute('SELECT riderId FROM Activity WHERE id=?', [rid]).fetchone()
@@ -608,6 +614,8 @@ def workouts_sport(wid):
 def workouts_delete(wid):
     rider = _rider()
     db = get_db()
+    from services import workouts as _wk
+    _wk.forget(db, wid)
     db.execute('DELETE FROM Workout WHERE id=? AND riderId=?', [wid, rider['id'] if rider else -1])
     db.commit()
     _refresh_after_change('workout')

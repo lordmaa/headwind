@@ -58,7 +58,8 @@ def save_from_gpx(rider_id, data, sport=None, name=None, client_id=None, steps=N
     from services import goal_model
     kg = goal_model.current_weight_kg(rider_id) or 70.0
     dist, secs, gain = act.get('distance') or 0, int(act.get('movingTime') or 0), act.get('totalElevationGain') or 0
-    kcal = estimate_calories(sport, dist, secs, gain, kg)
+    from services.calorie_adjust import pair as _kcal_pair
+    kcal_raw, kcal = _kcal_pair(estimate_calories(sport, dist, secs, gain, kg))     # global burn adjustment, applied as the figure is made
     weather = None
     if act.get('startLat') is not None:
         try:
@@ -70,11 +71,12 @@ def save_from_gpx(rider_id, data, sport=None, name=None, client_id=None, steps=N
     db = get_db()
     db.execute('''INSERT INTO Workout (id, riderId, sport, name, startDate, startDateLocal, distance, movingTime, elapsedTime,
                                        totalElevationGain, averageSpeed, averageHeartrate, calories, steps, startLat, startLng,
-                                       streams, weatherSummary, source)
-                  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                                       streams, weatherSummary, source, caloriesRaw)
+                  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
                [wid, rider_id, sport, (name or '').strip() or None, utc, local, dist, secs, int(act.get('elapsedTime') or secs), gain,
                 act.get('averageSpeed'), act.get('averageHeartrate'), kcal, steps, act.get('startLat'), act.get('startLng'),
-                act.get('streams') if isinstance(act.get('streams'), str) else json.dumps(act.get('streams') or {}), weather, source])
+                act.get('streams') if isinstance(act.get('streams'), str) else json.dumps(act.get('streams') or {}), weather, source, kcal_raw])
+    refresh_derived(db, wid)
     db.commit()
     return dict(query_db('SELECT * FROM Workout WHERE id=?', [wid], one=True)), True
 
@@ -131,3 +133,31 @@ def recent(rider_id, days=30):
     rows = query_db('''SELECT id, sport, name, startDateLocal, distance, movingTime, totalElevationGain, calories, steps, weatherSummary, source
                        FROM Workout WHERE riderId=? AND date(startDateLocal)>=? ORDER BY startDateLocal DESC''', [rider_id, since])
     return [dict(r) for r in rows]
+
+
+def forget(db, wid):
+    """A workout is going away: drop its best-time cache and any segment efforts, and re-pick each affected segment's PRs. Does not commit."""
+    from services.segments import _refresh_prs
+    seg_ids = [r[0] for r in db.execute('SELECT DISTINCT segmentId FROM SegmentEffort WHERE activityId=?', [wid]).fetchall()]
+    db.execute('DELETE FROM SegmentEffort WHERE activityId=?', [wid])
+    db.execute('DELETE FROM RunEffort WHERE runId=?', [wid])
+    for sid in seg_ids:
+        _refresh_prs(db, sid)
+
+
+def refresh_derived(db, wid):
+    """(Re)build everything derived from one workout: best times and run-segment efforts (runs only). Safe to call after any change. Does not commit."""
+    from services import run_stats
+    from services.segments import scan_activity_against_segments, _refresh_prs
+    forget(db, wid)
+    w = db.execute('SELECT id, sport, startDateLocal, streams FROM Workout WHERE id=?', [wid]).fetchone()
+    if not w or w['sport'] != 'Run' or not w['streams']:
+        return
+    run_stats.index_run(db, wid, w['startDateLocal'], w['streams'])
+    try:
+        segs = db.execute("SELECT * FROM Segment WHERE sport='run'").fetchall()
+        if segs and scan_activity_against_segments(db, {'id': wid, 'startDateLocal': w['startDateLocal'], 'streams': w['streams'], 'sportType': 'Run'}, segs):
+            for s in segs:
+                _refresh_prs(db, s['id'])
+    except Exception:
+        pass

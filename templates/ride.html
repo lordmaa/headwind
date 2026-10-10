@@ -32,9 +32,9 @@
   {% else %}
     <span class="btn btn-secondary" style="opacity:0.3;cursor:default;">Next ›</span>
   {% endif %}
-  <a href="{{ url_for('rides.export_gpx', rid=activity.id) }}" class="btn btn-secondary" title="Download GPX">GPX</a>
-  <a href="{{ url_for('dashboard.dashboard') }}" class="btn btn-secondary">← Back</a>
-  <form method="POST" action="{{ url_for('rides.delete', rid=activity.id) }}" style="display:inline;" onsubmit="return confirm('Delete this activity? This cannot be undone.')">
+  {% if not is_workout %}<a href="{{ url_for('rides.export_gpx', rid=activity.id) }}" class="btn btn-secondary" title="Download GPX">GPX</a>{% endif %}
+  <a href="{{ url_for('workouts_ui.workouts_page') if is_workout else url_for('dashboard.dashboard') }}" class="btn btn-secondary">← Back</a>
+  <form method="POST" action="{{ url_for('workouts_ui.workouts_delete', wid=activity.id) if is_workout else url_for('rides.delete', rid=activity.id) }}" style="display:inline;" onsubmit="return confirm('Delete this activity? This cannot be undone.')">
     <button type="submit" class="btn" style="background:var(--danger,#ef4444);color:#fff;border:none;">Delete</button>
   </form>
 {% endblock %}
@@ -66,7 +66,7 @@
   {% if gear_error %}<span style="color:#fecaca;">{{ gear_error }}</span>{% endif %}
   <span style="margin-left:auto;display:flex;gap:.5rem;align-items:center;">
     <span style="color:var(--text-muted);font-size:.78rem;letter-spacing:.07em;text-transform:uppercase;font-weight:700;">Type</span>
-    <form method="POST" action="{{ url_for('rides.change_sport', rid=activity.id) }}" style="margin:0;display:flex;gap:.4rem;align-items:center;"
+    <form method="POST" action="{{ url_for('workouts_ui.workouts_sport', wid=activity.id) if is_workout else url_for('rides.change_sport', rid=activity.id) }}" style="margin:0;display:flex;gap:.4rem;align-items:center;"
           onsubmit="return this.sport.value === '{{ activity.sportType }}' ? false : confirm('Change this to a ' + this.sport.value.replace('VirtualRide', 'indoor ride').toLowerCase() + '? ' + (this.sport.value.match(/Walk|Run|Hike/) ? 'It will move out of your rides and into Workouts.' : ''))">
       <select name="sport" aria-label="What kind of activity was this?">{% for sp in sports %}<option value="{{ sp }}" {{ 'selected' if activity.sportType == sp }}>{{ 'Indoor ride' if sp == 'VirtualRide' else sp }}</option>{% endfor %}</select>
       <button class="btn btn-secondary btn-sm" style="padding:.25rem .6rem;font-size:.78rem;" type="submit">Change</button>
@@ -421,6 +421,7 @@
   <div id="segForm" style="display:none; background:var(--card-bg); border:1px solid #1e4060; border-radius:10px; padding:1.25rem;">
     <form method="POST" action="{{ url_for('segments.create') }}">
       <input type="hidden" name="activityId" value="{{ activity.id }}">
+      <input type="hidden" name="sport"      value="{{ 'run' if is_run else 'ride' }}">
       <input type="hidden" name="startLat"   id="segStartLat">
       <input type="hidden" name="startLng"   id="segStartLng">
       <input type="hidden" name="endLat"     id="segEndLat">
@@ -557,6 +558,7 @@
 </div>
 {% endif %}
 
+{% if not is_workout %}
 <!-- Ride Notes -->
 <div class="card" style="margin-top:1rem;">
   <div class="card-title">Ride Notes</div>
@@ -567,6 +569,8 @@
     <span id="notesSaved" style="font-size:0.8125rem; color:var(--text-muted); display:none;">Saved</span>
   </div>
 </div>
+
+{% endif %}
 
 <!-- AI Coaching Analysis -->
 {% if is_ride %}

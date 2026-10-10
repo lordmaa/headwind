@@ -457,6 +457,10 @@ All 68 screens below use the same synthetic demo data (a fictional rider on real
 - Per-effort history, PRs, trend chart, difficulty rating, rolling average.
 - If a segment's stored route shape is missing, Headwind rebuilds it from the ride it was drawn on (or a matching effort) — and says "route shape unavailable" instead of drawing a misleading straight line.
 - Segments are shared both ways with linked friends.
+- **Ride segments and run segments.** Each segment is for rides or for runs: runs only match run segments, rides only ride segments. Create a run segment from a run's page (phone-recorded runs and walks open the same page as a ride, from **Workouts**); the Segments page has a tab for each and run segments show pace per mile.
+
+### Running
+- Best times for 1 km, 1 mile, 3 km, 5 km, 10 km, 15 km, half and full marathon, worked out from the GPS of your recorded runs (the fastest stretch of that distance inside any one run), plus pace, weekly/monthly/yearly totals, 12 weeks of distance, recent runs and the latest route. Runs come from the phone app or a Garmin. Shown in Home Assistant on a **Running** tab (see `docs/ha`).
 
 ### Nutrition and body
 - Barcode scanner (phone camera) and text search, backed by **Open Food Facts** — no API key.
@@ -605,7 +609,7 @@ Windows-build only: `HEADWIND_HOST`, `HEADWIND_DATA`, `HEADWIND_NO_TRAY`.
 
 ### Settings inside the app
 
-Garmin credentials, the MQTT broker, Home Assistant URL/token and mappings, AI provider/key/model, coaching personality and goals, display units, your login details and backups are all configured under **Settings** — not in `.env`. Calorie and macro goals live under **Nutrition → Goals**, and friend-sync is under **Friends → Auto-Sync**.
+Garmin credentials, the MQTT broker, Home Assistant URL/token and mappings, AI provider/key/model, coaching personality and goals, display units, your login details, backups and the **calorie burn adjustment** (a percentage taken off every burn estimate as it is pulled in, kept reversible; see the changelog) are all configured under **Settings** — not in `.env`. Calorie and macro goals live under **Nutrition → Goals**, and friend-sync is under **Friends → Auto-Sync**.
 
 ### Data and volumes
 
@@ -633,6 +637,7 @@ Garmin credentials, the MQTT broker, Home Assistant URL/token and mappings, AI p
 - Sensors cover lifetime ride totals, last-ride details, recovery metrics, calories eaten / remaining, macros, hydration and weight. State is published on events plus a periodic heartbeat.
 - **One publisher per broker:** two Headwinds on one broker must use different `HEADWIND_MQTT_PREFIX` values, or they'll overwrite each other's sensors.
 - A separate connection (**Settings → Home Assistant — import health data**) lets Headwind read HA entities (e.g. weight from a smart scale, a weather entity) via a long-lived token.
+- The latest ride's route and the segments it crossed, and your run stats (best times, totals, weekly distance, latest run and its route), are published as attribute sensors too, so a dashboard can draw a map and a segment table. The example dashboard in [`docs/ha`](docs/ha) has Today, Body, Running and Riding tabs.
 - Example Home Assistant dashboard and automation builders live in [`docs/ha`](docs/ha).
 
 ### AI coaching

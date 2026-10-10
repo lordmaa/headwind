@@ -185,6 +185,175 @@ def graph(entities, name, hours, **kw):
     return cols(c, 12)
 
 
+HAVE = set()    # entity ids that exist in this Home Assistant, filled in by the deploy script, so optional cards can be left out when their sensors do not exist
+
+
+def outlook_cards():
+    """The cycling-outlook card needs sensor.cycling_conditions / sensor.cycling_verdict, which are the author's own HA template sensors, not
+    part of Headwind. It is only included when they exist, so a standard install is not asked for entities it does not have."""
+    return [ride_outlook()] if {'sensor.cycling_conditions', 'sensor.cycling_verdict'} <= HAVE else []
+
+
+def ride_outlook():
+    """Cycling outlook from HA's own sensors: next few hours + tomorrow."""
+    return cols(bc(['sensor.cycling_conditions', 'sensor.cycling_verdict'], """
+const x = e => states[e] || {state: 'unavailable', attributes: {}};
+const col = v => v === 'Good' ? '#4ade80' : v === 'Poor' ? '#f87171' : '#fbbf24';
+const ok = o => !['unavailable', 'unknown', ''].includes(o.state);
+const now = x('sensor.cycling_conditions'), tom = x('sensor.cycling_verdict');
+const block = (label, o) => ok(o)
+  ? `<div style="margin-top:10px"><div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:12px;color:${MUTED}">${label}</span><b style="font-size:17px;color:${col(o.state)}">${o.state}</b></div>
+     <div style="font-size:13px;line-height:1.4;color:#d6e6ef;margin-top:3px;white-space:normal">${(o.attributes.reason || '').replace(/ Best 2 hours.*$/, '')}</div>${o.attributes.best_window ? `<div style="font-size:12px;color:${MUTED};margin-top:4px">Best window: ${o.attributes.best_window}</div>` : ''}</div>`
+  : `<div style="margin-top:10px;font-size:13px;color:${MUTED}">${label}: no forecast available right now</div>`;
+return `<div style="font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:${MUTED}">Ride outlook</div>${block('Next few hours', now)}${block('Tomorrow', tom)}`;"""), 12)
+
+
+def map_card(entity, heading_txt, empty_txt, unit_fn):
+    """A route over map tiles (Esri dark gray, keyless, same source as Headwind's heatmap) with the segments it crossed on top."""
+    return cols(bc([entity], """
+const A = ((states['@@E@@'] || {}).attributes) || {};
+const pts = A.pts || [];
+if (pts.length < 2) return `<div style="font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:${MUTED}">@@H@@</div><div style="margin-top:8px;font-size:13px;color:${MUTED}">@@EMPTY@@</div>`;
+const W = 340, H = 300, PAD = 28;
+const lat = p => p[0], lon = p => p[1];
+const mx = (lo, hi, z) => (hi - lo);
+const lats = pts.map(lat), lons = pts.map(lon);
+const la0 = Math.min(...lats), la1 = Math.max(...lats), lo0 = Math.min(...lons), lo1 = Math.max(...lons);
+const wx = (lo, z) => (lo + 180) / 360 * 256 * Math.pow(2, z);
+const wy = (la, z) => { const r = la * Math.PI / 180; return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * 256 * Math.pow(2, z); };
+let z = 16;
+while (z > 3 && (wx(lo1, z) - wx(lo0, z) > W - 2 * PAD || wy(la0, z) - wy(la1, z) > H - 2 * PAD)) z--;
+const cx = (wx(lo0, z) + wx(lo1, z)) / 2, cy = (wy(la0, z) + wy(la1, z)) / 2;
+const left = cx - W / 2, top = cy - H / 2;
+const X = lo => (wx(lo, z) - left).toFixed(1), Y = la => (wy(la, z) - top).toFixed(1);
+const nt = Math.pow(2, z);
+let tiles = '';
+for (let tx = Math.floor(left / 256); tx <= Math.floor((left + W) / 256); tx++) for (let ty = Math.floor(top / 256); ty <= Math.floor((top + H) / 256); ty++) {
+  if (ty < 0 || ty >= nt) continue;
+  const txw = ((tx % nt) + nt) % nt;
+  tiles += `<img src="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/${z}/${ty}/${txw}" style="position:absolute;left:${tx * 256 - left}px;top:${ty * 256 - top}px;width:256px;height:256px" loading="lazy" referrerpolicy="no-referrer">`;
+}
+const path = a => a.map((p, i) => (i ? 'L' : 'M') + X(lon(p)) + ' ' + Y(lat(p))).join(' ');
+const segs = (A.segs || []).map(g => `<path d="${path(g.pts)}" fill="none" stroke="${g.pr ? '#fbbf24' : '#f472b6'}" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" opacity=".95"/>`).join('');
+const a = pts[0], b = pts[pts.length - 1];
+const svg = `<svg width="${W}" height="${H}" style="position:absolute;left:0;top:0"><path d="${path(pts)}" fill="none" stroke="rgba(0,0,0,.55)" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="${path(pts)}" fill="none" stroke="#38bdf8" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>${segs}
+  <circle cx="${X(lon(a))}" cy="${Y(lat(a))}" r="6" fill="#4ade80" stroke="#fff" stroke-width="2"/><circle cx="${X(lon(b))}" cy="${Y(lat(b))}" r="6" fill="#f87171" stroke="#fff" stroke-width="2"/></svg>`;
+const nPR = (A.segs || []).filter(g => g.pr).length;
+return `<div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:${MUTED}">@@H@@</div><div style="font-size:12px;color:${MUTED}">${A.date ? fdate(A.date) : ''}${@@DIST@@}</div></div>
+<div style="font-size:17px;font-weight:800;margin:3px 0 10px">${A.name || ''}</div>
+<div style="display:flex;justify-content:center"><div style="position:relative;width:${W}px;height:${H}px;max-width:100%;overflow:hidden;border-radius:14px;background:#1b2229">${tiles}${svg}</div></div>
+<div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:center;margin-top:9px;font-size:11px;color:${MUTED}"><span><span style="color:#4ade80">●</span> start</span><span><span style="color:#f87171">●</span> finish</span>
+${(A.segs || []).length ? `<span><span style="color:#f472b6">━</span> segment</span>${nPR ? '<span><span style="color:#fbbf24">━</span> PR</span>' : ''}` : ''}<span>Map © Esri</span></div>`;""".replace('@@E@@', entity).replace('@@H@@', heading_txt).replace('@@EMPTY@@', empty_txt).replace('@@DIST@@', unit_fn)), 12)
+
+
+def ride_map():
+    return map_card(N + 'ride_route', 'Last ride route', 'No route recorded for the latest ride yet.', "(A.mi ? ' · ' + A.mi + ' mi' : '')")
+
+
+def run_map():
+    return map_card(N + 'run_route', 'Last run route', 'No run recorded yet.', "(A.m ? ' · ' + (A.m / 1609.344).toFixed(1) + ' mi' : '')")
+
+
+
+def segments_card(entity=None, run=False):
+    """The latest ride's segment efforts (time, gap to your best, rank) + a table of every segment's personal best."""
+    return cols(bc([entity or (N + 'ride_segments')], """
+const A = ((states['@@E@@'] || {}).attributes) || {};
+const E = A.efforts || [], ALL = A.all || [], RUN = @@RUN@@;
+const t = v => v == null ? '–' : Math.floor(v / 60) + ':' + String(Math.round(v) % 60).padStart(2, '0');
+const sig = v => (v > 0 ? '+' : v < 0 ? '−' : '±') + t(Math.abs(v));
+if (!E.length && RUN && !A.id) return '';
+if (!E.length) return `<div style="font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:${MUTED}">Segments</div><div style="margin-top:8px;font-size:13px;color:${MUTED}">${RUN ? 'No run segments crossed on the latest run. Create one from a run under Workouts in Headwind.' : 'No segments crossed on the latest ride.'}</div>`;
+const rows = E.slice().sort((a, b) => ((a.secs - a.best) / a.best) - ((b.secs - b.best) / b.best)).map(e => {
+  const gap = e.secs - e.best, pct = e.best ? gap / e.best : 0;
+  const tag = e.pr ? '<b style="color:#fbbf24">🏆 PR</b>' : `<span style="color:${pct <= .05 ? '#4ade80' : pct <= .2 ? '#fbbf24' : '#f87171'}">${sig(gap)} vs best</span>`;
+  const vs = e.last != null ? (e.secs - e.last < 0 ? `<span style="color:#4ade80">▲ ${t(Math.abs(e.secs - e.last))} faster than last time</span>` : e.secs - e.last > 0 ? `<span style="color:#f87171">▼ ${t(e.secs - e.last)} slower than last time</span>` : 'same as last time') : 'first time';
+  return `<div style="padding:8px 0;border-top:1px solid rgba(255,255,255,.08)"><div style="display:flex;justify-content:space-between;gap:8px"><b style="font-size:14px">${e.n}</b><b style="font-size:15px">${t(e.secs)}</b></div>
+   <div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;color:${MUTED};margin-top:2px"><span>${(e.m / 1609.344).toFixed(2)} mi${RUN ? ' · ' + t(e.secs / (e.m / 1609.344)) + '/mi' : ''} · #${e.rank} of ${e.tries} · best ${t(e.best)}</span><span>${tag}</span></div>
+   <div style="font-size:11.5px;color:${MUTED};margin-top:1px">${vs}</div></div>`; }).join('');
+const nPR = E.filter(e => e.pr).length;
+return `<div style="font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:${MUTED}">${RUN ? 'Run segments on the last run' : 'Segments on the last ride'}</div>
+<div style="font-size:13px;color:${MUTED};margin:3px 0 4px">${E.length} crossed${nPR ? ' · <b style="color:#fbbf24">' + nPR + ' PR' + (nPR > 1 ? 's' : '') + '</b>' : ' · no PRs this time'}</div>${rows || ''}
+`;""".replace('@@E@@', entity or (N + 'ride_segments')).replace('@@RUN@@', 'true' if run else 'false')), 12)
+
+
+RUN_JS = """
+const R = ((states['@@E@@'] || {}).attributes) || {};
+const IMP = (R.units || 'imperial') !== 'metric', U = IMP ? 1609.344 : 1000, DU = IMP ? 'mi' : 'km', PU = IMP ? '/mi' : '/km';
+const dist = m => (m / U).toFixed(m / U >= 10 ? 1 : 2);
+const dur = sec => { sec = Math.round(sec); const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), x = sec % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); };
+const pace = (sec, m) => m > 0 ? dur(sec / (m / U)) : '–';
+const tile = (v, l, c) => `<div style="background:rgba(255,255,255,.07);border-radius:14px;padding:10px 6px;text-align:center"><div style="font-size:19px;font-weight:800;color:${c || '#f1f7fb'}">${v}</div><div style="font-size:11px;color:${MUTED};margin-top:2px">${l}</div></div>`;
+const head = (t, r) => `<div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:${MUTED}">${t}</div><div style="font-size:12px;color:${MUTED}">${r || ''}</div></div>`;
+const none = `<div style="font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:${MUTED}">Running</div><div style="margin-top:8px;font-size:14px;line-height:1.4;white-space:normal">No runs recorded yet. Record one in the Headwind app (Record, then Run) and your best times, pace and totals appear here.</div>`;
+if (!R.runs) return none;
+"""
+
+
+def _run_card(entity, body, pad=16):
+    return cols(bc([entity], RUN_JS.replace('@@E@@', entity) + body, pad=pad), 12)
+
+
+def run_hero():
+    return _run_card(N + 'run_stats', """
+const r = (R.recent || [])[0];
+if (!r) return none;
+return head('Latest run', fdate(r.date)) + `<div style="font-size:17px;font-weight:800;margin:3px 0 10px">${r.name}</div>
+<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:12px"><span style="font-size:46px;font-weight:800;line-height:1;color:#38bdf8">${dist(r.m)}</span><span style="font-size:15px;color:${MUTED}">${DU}</span></div>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${tile(dur(r.s), 'Time')}${tile(pace(r.s, r.m), 'Pace ' + PU, '#34d399')}${tile(r.gain ? Math.round(r.gain * 3.28084).toLocaleString('en-GB') : '–', 'Climb ft', '#fbbf24')}</div>
+${r.hr ? `<div style="text-align:center;margin-top:10px;font-size:13px;color:${MUTED}">Average heart rate <b style="color:#f87171">${r.hr} bpm</b></div>` : ''}`;""")
+
+
+def run_bests():
+    return _run_card(N + 'run_stats', """
+const B = R.bests || [];
+if (!B.length) return head('Best times', '') + `<div style="margin-top:8px;font-size:13px;color:${MUTED}">Best times appear once a run covers 1 km.</div>`;
+const today = Date.now();
+const rows = B.map(b => { const fresh = (today - new Date(b.date + 'T12:00:00').getTime()) / 864e5 <= 14;
+  const gap = b.next ? ` · ${dur(b.next - b.secs)} quicker than next best` : ' · only one run this far so far';
+  return `<div style="padding:9px 0;border-top:1px solid rgba(255,255,255,.08)"><div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:14px">${b.label}</b><b style="font-size:19px;color:#38bdf8">${dur(b.secs)}</b></div>
+   <div style="display:flex;justify-content:space-between;font-size:12px;color:${MUTED};margin-top:2px"><span>${pace(b.secs, b.m)} ${PU}${gap}</span><span>${fresh ? '🏆 ' : ''}${fdate(b.date)}</span></div></div>`; }).join('');
+return head('Best times', 'from your GPS runs') + `<div style="margin-top:6px">${rows}</div><div style="font-size:11px;color:${MUTED};margin-top:8px;white-space:normal">Fastest stretch of that distance inside any one run, so a 10 km run also gives you a 5 km, 3 km and 1 km time.</div>`;""")
+
+
+def run_totals():
+    return _run_card(N + 'run_stats', """
+const cell = (t, d) => `<div style="background:rgba(255,255,255,.07);border-radius:14px;padding:10px 12px"><div style="font-size:11px;color:${MUTED}">${t}</div>
+  <div style="font-size:20px;font-weight:800;color:#38bdf8">${d && d.n ? dist(d.m) : '0'}<span style="font-size:12px;color:${MUTED};font-weight:600"> ${DU}</span></div>
+  <div style="font-size:12px;color:${MUTED}">${d && d.n ? d.n + (d.n === 1 ? ' run' : ' runs') + ' · ' + pace(d.s, d.m) + PU : 'no runs'}</div></div>`;
+const L = R.longest;
+return head('Totals', '') + `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">${cell('This week', R.week)}${cell('This month', R.month)}${cell('This year', R.year)}${cell('All time', R.all)}</div>
+${L ? `<div style="display:flex;justify-content:space-between;margin-top:12px;font-size:13px"><span style="color:${MUTED}">Longest run</span><b>${dist(L.m)} ${DU} · ${fdate(L.date)}</b></div>` : ''}
+${R.fastest ? `<div style="display:flex;justify-content:space-between;margin-top:6px;font-size:13px"><span style="color:${MUTED}">Fastest average pace</span><b>${pace(R.fastest.s, R.fastest.m)} ${PU} · ${fdate(R.fastest.date)}</b></div>` : ''}`;""")
+
+
+def run_weekly():
+    return _run_card(N + 'run_stats', """
+const W = R.weeks || [];
+const mx = Math.max(U, ...W.map(w => w.m));
+const dt = w => new Date(w.d + 'T12:00:00');
+const bars = W.map((w, i) => { const mo = dt(w).toLocaleDateString('en-GB', {month: 'short'}); const first = i === 0 || mo !== dt(W[i - 1]).toLocaleDateString('en-GB', {month: 'short'});
+  return `<div style="flex:1 1 0;min-width:0;text-align:center"><div style="height:84px;display:flex;align-items:flex-end;justify-content:center"><div style="width:70%;height:${w.m ? Math.max(5, Math.round(w.m / mx * 84)) : 2}px;border-radius:5px 5px 2px 2px;background:${w.m ? (i === W.length - 1 ? '#38bdf8' : '#2b7da6') : 'rgba(255,255,255,.14)'}"></div></div>
+  <div style="font-size:10px;color:${MUTED};margin-top:3px">${dt(w).getDate()}</div><div style="font-size:9.5px;color:${MUTED};height:11px">${first ? mo : ''}</div><div style="font-size:10.5px;font-weight:700;height:13px">${w.m ? dist(w.m) : ''}</div></div>`; }).join('');
+const tot = W.reduce((a, w) => a + w.m, 0), act = W.filter(w => w.m).length;
+return head('Weekly distance (' + DU + ')', 'last 12 weeks') + `<div style="display:flex;gap:2px;margin-top:10px;width:100%">${bars}</div>
+<div style="font-size:12px;color:${MUTED};margin-top:8px">${act ? dist(tot / act) + ' ' + DU + ' per week on the weeks you ran · ' + act + ' of 12 weeks active' : 'No runs in the last 12 weeks'}</div>`;""")
+
+
+def run_recent():
+    return _run_card(N + 'run_stats', """
+const rows = (R.recent || []).map(r => `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:8px 0;border-top:1px solid rgba(255,255,255,.08)"><div><div style="font-size:14px;font-weight:700">${fdate(r.date)} · ${dist(r.m)} ${DU}</div>
+  <div style="font-size:12px;color:${MUTED}">${r.name}${r.hr ? ' · ' + r.hr + ' bpm' : ''}</div></div><div style="text-align:right"><div style="font-size:14px;font-weight:700">${dur(r.s)}</div><div style="font-size:12px;color:#34d399">${pace(r.s, r.m)} ${PU}</div></div></div>`).join('');
+return head('Recent runs', '') + `<div style="margin-top:4px">${rows}</div>`;""")
+
+
+def view_running():
+    s1 = {'type': 'grid', 'cards': [title('Running', 'Worked out from your recorded runs'), run_hero(), run_map(), run_bests(), segments_card(N + 'run_segments', run=True)]}
+    s2 = {'type': 'grid', 'cards': [heading('Volume', 'mdi:chart-bar'), run_totals(), run_weekly(), run_recent()]}
+    return {'title': 'Running', 'path': 'running', 'icon': 'mdi:run-fast', 'type': 'sections', 'max_columns': 3, 'sections': [s1, s2]}
+
+
 # ───────────────────────────── TODAY ─────────────────────────────
 def view_today():
     eaten, rem, pct = N + 'calories_eaten', N + 'calories_remaining', N + 'calorie_progress'
@@ -321,7 +490,7 @@ return panel('Next calorie change', k(A.saved_goal) + ' now', null, `
   <div style="margin-top:8px">${rows}</div>${up}
   <div style="font-size:11px;color:${MUTED};margin-top:10px;white-space:normal;line-height:1.35">Not a schedule — it is triggered by weight, not the calendar. These are estimates; the daily check makes the real call.</div>`);""")
 
-    s1 = {'type': 'grid', 'cards': [title('Nutrition', "{{ now().strftime('%A %-d %B') }}"), hero, todays_goals, my_plan, next_cut, *macros, water,
+    s1 = {'type': 'grid', 'cards': [title('Nutrition', "{{ now().strftime('%A %-d %B') }}"), *outlook_cards(), hero, todays_goals, my_plan, next_cut, *macros, water,
                                     water_btn(150), water_btn(250), water_btn(500), steps]}
 
     meal_cards = []
@@ -449,13 +618,18 @@ const wk = hw.filter((_, i) => (lastT - Date.parse(hd[i] + 'T12:00:00')) / 86400
 const trend = wk.length ? wk.reduce((a, b) => a + b, 0) / wk.length : 0;
 const st = x => x.toFixed(1) + ' lb';
 const flat = Math.abs(rate) < 0.05, down = rate < 0;
+// biggest recent high (last 21 days, at least 2 days before the latest weigh-in) and how far you have come down from it
+let pk = null;
+hd.forEach((dd, i) => {{ const age = (lastT - Date.parse(dd + 'T12:00:00')) / 86400000; if (age >= 2 && age <= 21 && (!pk || hw[i] > pk.w)) pk = {{d: dd, w: hw[i]}}; }});
+const fromPk = pk ? pk.w - hw[hw.length - 1] : 0;
+const peakPill = fromPk >= 1 ? `<span style="background:rgba(52,211,153,.16);color:#34d399;border-radius:999px;padding:6px 12px;font-size:13px;font-weight:700">▼ ${{fromPk.toFixed(1)}} lb since ${{fdate(pk.d)}}</span>` : '';
 return `
 <div style="font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:${{MUTED}}">Weight</div>
 <div style="font-size:44px;font-weight:800;line-height:1.05;margin:4px 0 10px">${{lb > 0 ? lb.toFixed(1) : '—'}}<span style="font-size:20px;color:${{MUTED}}"> lb</span></div>
 <div style="display:flex;gap:10px;flex-wrap:wrap">
   <span style="background:rgba(255,255,255,.08);border-radius:999px;padding:6px 12px;font-size:13px">Last weighed <b>${{hd.length ? fdate(hd[hd.length - 1]) : '—'}}</b></span>
   <span style="background:${{flat ? 'rgba(255,255,255,.08)' : down ? 'rgba(52,211,153,.16)' : 'rgba(248,113,113,.16)'}};color:${{flat ? MUTED : down ? '#34d399' : '#f87171'}};border-radius:999px;padding:6px 12px;font-size:13px;font-weight:700">
-    ${{flat ? '● steady' : (down ? '▼ ' : '▲ ') + Math.abs(rate).toFixed(1) + ' lb / week'}}</span></div>`;"""), 12)
+    ${{flat ? '● steady' : (down ? '▼ ' : '▲ ') + Math.abs(rate).toFixed(1) + ' lb / week'}}</span>${{peakPill}}</div>`;"""), 12)
 
     def tile(name, ent, unit, colour, dec=1, cols_=6):
         return cols(bc([ent], f"""
@@ -568,7 +742,7 @@ return `
   ${{box(fmt(n('{B}last_ride_avg_power')), 'W', 'Avg power', '#facc15')}}
 </div>
 <div style="text-align:center;margin-top:12px;font-size:13px;color:${{MUTED}}">Burned <b style="color:#fb923c;font-size:15px">${{fmt(n('{B}last_ride_calories'))}} kcal</b></div>`;"""), 12)
-    s1 = {'type': 'grid', 'cards': [title('Riding', 'Latest ride from Headwind'), last]}
+    s1 = {'type': 'grid', 'cards': [title('Riding', 'Latest ride from Headwind'), *outlook_cards(), last, ride_map(), segments_card()]}
 
     def gring(name, ent, mx, unit, good_high=True):
         return cols(bc([ent], f"""
@@ -676,7 +850,7 @@ return panel('Year by year', 'to ' + (A.as_of || ''), null,
 
 
 def build():
-    views = [view_today(), view_body(), view_riding()]
+    views = [view_today(), view_body(), view_running(), view_riding()]
     for v in views:
         v['theme'] = THEME
     return {'title': 'Rob', 'views': views}
