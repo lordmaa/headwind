@@ -240,7 +240,9 @@ def detail(rid):
         dups.append({'id': d['id'], 'source': d['source'], 'reason': d['reason'], 'start': r.get('startDateLocal'), 'distance': r.get('distance'),
                      'moving': r.get('movingTime'), 'hr': r.get('averageHeartrate'), 'watts': r.get('averageWatts')})
 
-    return render_template('ride.html', activity=activity, coords=coords, dups=dups, gear_bikes=gear_bikes, gear_error=request.args.get('error'), sports=['Ride', 'VirtualRide', 'Walk', 'Run', 'Hike'],
+    from services import sensors as _sensors
+    phone_sensors = _sensors.for_ride(get_db(), str(activity['id']))
+    return render_template('ride.html', phone_sensors=phone_sensors, activity=activity, coords=coords, dups=dups, gear_bikes=gear_bikes, gear_error=request.args.get('error'), sports=['Ride', 'VirtualRide', 'Walk', 'Run', 'Hike'],
                            charts=charts, has_memory=memory_count > 0,
                            seg_efforts=seg_efforts, alt_raw=alt_raw,
                            co_riders=co_riders, seg_rivals=seg_rivals,

@@ -365,6 +365,24 @@
 </div>
 {% endif %}
 
+{% if phone_sensors %}
+{% set ps = phone_sensors.summary %}
+<div class="card" style="margin-top:1rem;" id="phoneSensorsCard">
+  <div class="card-title">Phone sensors <span style="font-size:0.75rem; color:var(--text-muted); font-weight:400;">· {{ phone_sensors.device or 'phone' }}{% if phone_sensors.mount and phone_sensors.mount != 'other' %}, {{ {'bars': 'on the bars', 'pocket': 'in a pocket', 'frame': 'on the frame'}.get(phone_sensors.mount, phone_sensors.mount) }}{% endif %}{% if phone_sensors.sensors_only %} · recorded alongside another device{% endif %}</span></div>
+  <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:0.6rem; margin:0.4rem 0 0.9rem;">
+    {% if ps.rough_mean is defined %}<div class="stat-box"><div class="stat-value">{{ ps.rough_mean }}</div><div class="stat-label">Average roughness (m/s²)</div></div>{% endif %}
+    {% if ps.rough_p95 is defined %}<div class="stat-box"><div class="stat-value">{{ ps.rough_p95 }}</div><div class="stat-label">Rough 5% of the ride</div></div>{% endif %}
+    {% if ps.peak_max is defined %}<div class="stat-box"><div class="stat-value">{{ ps.peak_max }}</div><div class="stat-label">Biggest shock (m/s²)</div></div>{% endif %}
+    {% if ps.tilt_max is defined %}<div class="stat-box"><div class="stat-value">{{ ps.tilt_max }}°</div><div class="stat-label">Max tilt</div></div>{% endif %}
+    {% if ps.baro_climb_m is defined %}<div class="stat-box"><div class="stat-value">{{ (ps.baro_climb_m * 3.28084) | round | int }} ft</div><div class="stat-label">Climb by barometer</div></div>{% endif %}
+    {% if ps.hard_brakes is defined %}<div class="stat-box"><div class="stat-value">{{ ps.hard_brakes }}</div><div class="stat-label">Hard braking events</div></div>{% endif %}
+  </div>
+  <div style="height:150px;"><canvas id="roughChart"></canvas></div>
+  {% if phone_sensors.series.alt and phone_sensors.series.alt|select|list|length > 5 %}<div style="height:120px; margin-top:0.8rem;"><canvas id="baroChart"></canvas></div>{% endif %}
+  <p style="color:var(--text-muted); font-size:0.75rem; margin:0.7rem 0 0; line-height:1.5;">Roughness is how hard the phone is being shaken (higher is a rougher road); tilt is how far it has leaned from where it started. Both depend on where the phone was carried.</p>
+</div>
+{% endif %}
+
 <!-- Segment creation panel (directly below map/graphs) -->
 {% if coords %}
 <div id="segPanel" style="display:none; margin-bottom:1.5rem;">
@@ -856,6 +874,24 @@ function updateSegmentFromSliders() {
       document.getElementById('segForm').style.display = 'block';
     }
   });
+})();
+{% endif %}
+
+{% if phone_sensors %}
+(function() {
+  var s = {{ phone_sensors.series | tojson }};
+  function line(id, vals, color, label, unit) {
+    var el = document.getElementById(id); if (!el) return;
+    new Chart(el, { type: 'line',
+      data: { labels: s.min, datasets: [{ data: vals, borderColor: color, borderWidth: 1.3, pointRadius: 0, fill: false, tension: 0.25 }] },
+      options: { animation: false, maintainAspectRatio: false, spanGaps: true,
+        plugins: { legend: { display: false }, title: { display: true, text: label, color: '#8fb1c4', font: { size: 11 } },
+          tooltip: { mode: 'index', intersect: false, callbacks: { title: c => Math.round(c[0].label) + ' min', label: c => c.parsed.y + ' ' + unit } } },
+        scales: { x: { ticks: { color: '#4d7d95', font: { size: 10 }, maxTicksLimit: 8, callback: function(v) { return Math.round(this.getLabelForValue(v)) + 'm'; } }, grid: { display: false } },
+                  y: { ticks: { color: '#4d7d95', font: { size: 10 } }, grid: { color: '#163352' } } } } });
+  }
+  line('roughChart', s.rough, '#fbbf24', 'Roughness', 'm/s²');
+  line('baroChart', s.alt, '#38bdf8', 'Barometric altitude (m, relative)', 'm');
 })();
 {% endif %}
 

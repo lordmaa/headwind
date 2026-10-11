@@ -295,6 +295,34 @@ def _downsample(seq, n):
     return out
 
 
+@bp.route('/sensors', methods=['POST'])
+def post_sensors():
+    """A phone's motion-sensor recording (JSON: client_id, fields, rows, mount, device, sensors_only): kept as a sidecar and attached to the ride that overlaps it in time.
+    Idempotent per client_id. See services/sensors.py."""
+    from services import sensors
+    rider = _rider()
+    if not rider:
+        return jsonify({'error': 'no rider'}), 409
+    payload = request.get_json(silent=True)
+    db = get_db()
+    res, err = sensors.store(db, rider['id'], payload)
+    if err:
+        return jsonify({'error': err}), 400
+    db.commit()
+    return jsonify(res)
+
+
+@bp.route('/live', methods=['POST', 'GET'])
+def live():
+    """POST: the phone's live position/speed/sensors while it records ({state: riding|idle, lat, lng, speed_mps, distance_m, elapsed_s, alt_m, accuracy_m, sport, battery_pct, sensors: {rough, tilt, press}}).
+    Published to Home Assistant by services/live.py. GET: the last reading (for debugging)."""
+    from services import live as live_svc
+    if request.method == 'GET':
+        return jsonify(live_svc.snapshot() or {})
+    c = live_svc.update(request.get_json(silent=True))
+    return jsonify({'ok': True, 'state': c['state']})
+
+
 @bp.route('/rides/<kind>/<rid>')
 def ride_detail(kind, rid):
     """One ride (Activity) or phone workout: all the stats, a route for the map and small elevation/speed/heart-rate series."""
@@ -360,6 +388,7 @@ def ride_detail(kind, rid):
         'description': r.get('description'), 'notes': r.get('notes'), 'kudos': r.get('aiKudos'),
         'track': [[round(c[0], 6), round(c[1], 6)] for c in _downsample(coords, 700)],
         'series': {'elevation': series('altitude'), 'speed': series('velocity_smooth'), 'heartrate': series('heartrate'), 'watts': series('watts')},
+        'sensors': __import__('services.sensors', fromlist=['for_ride']).for_ride(get_db(), str(r['id'])),
     })
 
 

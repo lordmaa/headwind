@@ -354,6 +354,62 @@ def view_running():
     return {'title': 'Running', 'path': 'running', 'icon': 'mdi:run-fast', 'type': 'sections', 'max_columns': 3, 'sections': [s1, s2]}
 
 
+LIVE_IDS = {k: 'sensor.headwind_live_ride_' + k for k in ('status', 'sport', 'speed', 'distance', 'elapsed', 'elevation', 'roughness', 'lean', 'pressure', 'phone_battery')}
+LIVE_TRACKER = 'device_tracker.headwind_live_ride_position'
+LIVE_ETA, LIVE_HOME_DIST = 'sensor.live_ride_eta_home', 'sensor.live_ride_distance_home'    # optional HA template sensors (see docs/ha/README.md)
+
+
+def _live_js(body):
+    for k, e in LIVE_IDS.items():
+        body = body.replace('@@' + k.upper() + '@@', e)
+    eta = LIVE_ETA if LIVE_ETA in HAVE else LIVE_IDS['status']                  # no ETA sensors on this Home Assistant: those tiles just stay empty
+    hd = LIVE_HOME_DIST if LIVE_HOME_DIST in HAVE else LIVE_IDS['status']
+    return body.replace('@@ETA@@', eta).replace('@@HOMEDIST@@', hd).replace('@@LASTRIDE@@', B + 'last_ride').replace('@@LASTDIST@@', B + 'last_ride_distance').replace('@@LASTDATE@@', B + 'last_ride_date')
+
+
+def live_hero():
+    ents = list(LIVE_IDS.values()) + [e for e in (LIVE_ETA, LIVE_HOME_DIST) if e in HAVE] + [B + 'last_ride', B + 'last_ride_distance', B + 'last_ride_date']
+    return cols(bc(ents, _live_js("""
+const st = s('@@STATUS@@'), riding = st === 'riding';
+const v = e => s(e), num = e => parseFloat(s(e)), ok = x => !isNaN(x);
+if (!riding) {
+  const lr = s('@@LASTRIDE@@'), d = s('@@LASTDATE@@'), mi = num('@@LASTDIST@@');
+  return `<div style="font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:${MUTED}">Live ride</div>
+  <div style="font-size:26px;font-weight:800;margin:6px 0 4px">Not out on a ride</div>
+  <div style="font-size:13px;color:${MUTED};line-height:1.4;white-space:normal">Start recording in the Headwind app with <b>Share live</b> on and this page fills in: position, speed, distance, shake and tilt, and how far from home you are.</div>
+  ${lr && lr !== 'unavailable' && lr !== 'unknown' ? `<div style="margin-top:12px;font-size:13px">Last ride: <b>${lr}</b>${d && d !== 'unknown' ? ' · ' + fdate(d) : ''}${ok(mi) ? ' · ' + mi + ' mi' : ''}</div>` : ''}`;
+}
+const t = (l, val, u, c) => `<div style="background:rgba(255,255,255,.07);border-radius:14px;padding:10px 6px;text-align:center"><div style="font-size:11px;color:${MUTED}">${l}</div><div style="font-size:22px;font-weight:800;color:${c || '#f1f7fb'}">${val}</div><div style="font-size:11px;color:${MUTED}">${u}</div></div>`;
+const f = (e, d) => { const x = num(e); return ok(x) ? x.toFixed(d) : '–'; };
+const eta = num('@@ETA@@'), hd = num('@@HOMEDIST@@');
+const rough = num('@@ROUGHNESS@@'), lean = num('@@LEAN@@');
+const rc = !ok(rough) ? '#8fb1c4' : rough < 0.5 ? '#4ade80' : rough < 1.5 ? '#fbbf24' : '#f87171';
+return `<div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:#4ade80">● Live · ${v('@@SPORT@@')}</div><div style="font-size:12px;color:${MUTED}">phone ${f('@@PHONE_BATTERY@@', 0)}%</div></div>
+<div style="display:flex;align-items:baseline;gap:10px;margin:4px 0 12px"><span style="font-size:46px;font-weight:800;line-height:1">${v('@@ELAPSED@@')}</span><span style="color:${MUTED};font-size:13px">elapsed</span></div>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${t('Speed', f('@@SPEED@@', 1), 'mph', '#38bdf8')}${t('Distance', f('@@DISTANCE@@', 2), 'mi')}${t('Elevation', f('@@ELEVATION@@', 0), 'ft', '#fbbf24')}
+${t('Roughness', f('@@ROUGHNESS@@', 2), 'm/s²', rc)}${t('Lean', f('@@LEAN@@', 0), '° from start')}${t('Pressure', f('@@PRESSURE@@', 0), 'hPa')}</div>
+${ok(hd) ? `<div style="margin-top:12px;font-size:13px;color:#d6e6ef">${hd.toFixed(1)} mi from home as the crow flies${ok(eta) ? ' · about <b>' + Math.round(eta) + ' min</b> at this pace' : ''}</div>` : ''}`;"""), pad=16), 12)
+
+
+def live_map():
+    """Only exists while a ride is in progress: the HA map card, following the phone with a trail."""
+    return {'type': 'conditional', 'conditions': [{'condition': 'state', 'entity': LIVE_IDS['status'], 'state': 'riding'}],
+            'card': {'type': 'map', 'entities': [{'entity': LIVE_TRACKER}], 'hours_to_show': 4, 'default_zoom': 15, 'aspect_ratio': '1:1', 'theme_mode': 'dark'},
+            'grid_options': {'columns': 12}}
+
+
+def view_live():
+    hist = lambda name, ent, color: graph([{'entity': ent, 'name': name, 'color': color}], name + ' · last hour', 1, line_width=2, smoothing=True)
+    s1 = {'type': 'grid', 'cards': [title('Live ride', 'Streamed from the Headwind app while you record'), live_hero(), live_map()]}
+    s2 = {'type': 'grid', 'cards': [heading('Last hour', 'mdi:chart-line'), hist('Speed (mph)', LIVE_IDS['speed'], '#38bdf8'), hist('Roughness (m/s²)', LIVE_IDS['roughness'], '#fbbf24'), hist('Lean (°)', LIVE_IDS['lean'], '#a78bfa')]}
+    return {'title': 'Live', 'path': 'live', 'icon': 'mdi:radar', 'type': 'sections', 'max_columns': 3, 'sections': [s1, s2]}
+
+
+def live_views():
+    """The Live tab, only when this Home Assistant has the Live Ride sensors (Headwind publishes them once the phone app has streamed a ride)."""
+    return [view_live()] if LIVE_IDS['status'] in HAVE else []
+
+
 # ───────────────────────────── TODAY ─────────────────────────────
 def view_today():
     eaten, rem, pct = N + 'calories_eaten', N + 'calories_remaining', N + 'calorie_progress'
@@ -850,7 +906,7 @@ return panel('Year by year', 'to ' + (A.as_of || ''), null,
 
 
 def build():
-    views = [view_today(), view_body(), view_running(), view_riding()]
+    views = [view_today(), view_body(), view_running(), view_riding()] + live_views()
     for v in views:
         v['theme'] = THEME
     return {'title': 'Rob', 'views': views}

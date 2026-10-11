@@ -281,6 +281,11 @@ def on_ride_added(db, act_id):
     """One call for every place a ride can arrive (Garmin sync, file / zip import, phone upload, typed in): give it the default bike, then see whether
     that pushed any part over a threshold. Never raises: gear must not be able to break an import. Does not commit."""
     try:
+        from services import sensors            # a waiting phone-sensor sidecar that overlaps this ride attaches to it, whichever arrived first
+        sensors.attach_for_ride(db, act_id)
+    except Exception as e:
+        log.warning('sensor attach for ride %s failed (non-fatal): %s', act_id, e)
+    try:
         stamp_new_ride(db, act_id)
         a = db.execute('SELECT bikeId, riderId FROM Activity WHERE id=?', [act_id]).fetchone()
         if a and a['bikeId']:

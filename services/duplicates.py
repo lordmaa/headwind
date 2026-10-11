@@ -235,6 +235,7 @@ def delete_activity(db, act_id):
         return False
     seg_ids = _drop_derived(db, act_id)
     db.execute('DELETE FROM Activity WHERE id=?', [act_id])
+    db.execute('UPDATE RideSensor SET rideKind=NULL, rideId=NULL WHERE rideId=?', [act_id])      # the phone's sensor recording stays, waiting for another ride
     db.execute("UPDATE ActivityDuplicate SET primaryId='' WHERE primaryId=? AND status='kept_both'", [act_id])
     for sid in seg_ids:
         _refresh_prs(db, sid)

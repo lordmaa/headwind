@@ -459,6 +459,10 @@ All 68 screens below use the same synthetic demo data (a fictional rider on real
 - Segments are shared both ways with linked friends.
 - **Ride segments and run segments.** Each segment is for rides or for runs: runs only match run segments, rides only ride segments. Create a run segment from a run's page (phone-recorded runs and walks open the same page as a ride, from **Workouts**); the Segments page has a tab for each and run segments show pace per mile.
 
+### Phone sensors and live rides (Android app 0.18+)
+- The Android app can record the phone's motion sensors (shake, tilt, barometer) once a second and upload them as a **sidecar** that Headwind attaches to the ride it overlaps in time, so you can ride with a Garmin Edge as the main recorder and still get roughness, tilt and a barometric climb on the ride page ("Sensors only" mode), or record them with a phone-recorded ride.
+- **Share live with Home Assistant** streams position, speed and sensor readings every few seconds to Headwind, which publishes them as Live Ride sensors and a device tracker, so the example dashboard's **Live** tab can show the ride as it happens.
+
 ### Running
 - Best times for 1 km, 1 mile, 3 km, 5 km, 10 km, 15 km, half and full marathon, worked out from the GPS of your recorded runs (the fastest stretch of that distance inside any one run), plus pace, weekly/monthly/yearly totals, 12 weeks of distance, recent runs and the latest route. Runs come from the phone app or a Garmin. Shown in Home Assistant on a **Running** tab (see `docs/ha`).
 

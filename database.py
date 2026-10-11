@@ -539,6 +539,25 @@ def migrate_db():
     if not cur or ' '.join((cur[0] or '').split()) != ' '.join(seg_view.split()):      # only write when it is missing or has changed, so start-up never takes a write lock needlessly
         db.execute('DROP VIEW IF EXISTS SegActivity')
         db.execute(seg_view)
+    # Phone sensor recordings kept beside rides (see services/sensors.py): one row per recording, attached to the overlapping ride by time.
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS RideSensor (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            riderId     INTEGER NOT NULL,
+            clientId    TEXT NOT NULL UNIQUE,
+            startUtc    TEXT NOT NULL,
+            endUtc      TEXT NOT NULL,
+            data        TEXT NOT NULL,
+            summary     TEXT,
+            device      TEXT,
+            mount       TEXT,
+            sensorsOnly INTEGER DEFAULT 0,
+            rideKind    TEXT,
+            rideId      TEXT,
+            createdAt   TEXT DEFAULT (datetime('now'))
+        )
+    ''')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_ridesensor_ride ON RideSensor(rideId)')
     db.execute('''
         CREATE TABLE IF NOT EXISTS RunEffort (
             runId      TEXT NOT NULL,

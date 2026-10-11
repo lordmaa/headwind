@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [0.3.0-beta] - 2026-10-11
+
+Upgrading is automatic (one new table, `RideSensor`). Nothing changes unless a phone running Headwind Android 0.18 or later sends sensor data.
+
+### Added
+- **Phone sensor recordings ("sidecars").** `POST /api/v1/sensors` accepts what a phone's motion sensors saw during a ride: one row per second with roughness (RMS shake), peak shock, gyro, tilt, barometer
+  and, if the phone had them, GPS. The sidecar is kept separately from the ride and **attached to whichever ride overlaps it in time**, whichever of the two arrives first (a Garmin Edge ride that syncs
+  hours later still picks it up), so the duplicate-recording rule never has to choose between a Garmin and a phone. Idempotent per `client_id`. A phone-recorded ride or run can carry its own.
+  Headline numbers are worked out on the server: average and 95th-percentile roughness, biggest shock, maximum tilt, barometric climb, hard-braking events and the three roughest stretches.
+  The ride page shows a **Phone sensors** card (roughness and barometric altitude against time, with the stats), `GET /api/v1/rides/<kind>/<id>` returns a `sensors` block, and deleting the ride keeps the
+  sidecar for the next ride that overlaps it. Table `RideSensor`.
+- **Live ride in Home Assistant.** `POST /api/v1/live` takes the phone's position, speed, distance, elapsed time, elevation, roughness, tilt, pressure and battery every few seconds while it records, and
+  publishes them over MQTT (the server stays the only publisher): sensors `Live Ride Status / Sport / Speed / Distance / Elapsed / Elevation / Roughness / Lean / Pressure / Phone Battery` and a
+  `Live Ride Position` device tracker whose attributes carry the position, so the HA map card can follow the ride. A final `idle` ends it, and if the phone just stops talking the ride goes idle after
+  90 seconds. Discovery config is retained. See `services/live.py`.
+- **Example dashboard: Live tab** (`docs/ha/build_dashboard.py`), added only when the Live Ride sensors exist: elapsed, speed, distance, elevation, roughness, lean and pressure while riding, a map card
+  with a trail that appears only during a ride, and last-hour graphs. If your Home Assistant also has `sensor.live_ride_distance_home` and `sensor.live_ride_eta_home` (two template sensors, see
+  `docs/ha/README.md`) it shows how far from home you are and a rough ETA.
+
 ### Fixed
 - Start-up no longer rewrites the `SegActivity` view every time (it only does when it is missing or changed), so a start-up, a helper script or a backup running alongside a live instance can no longer hit "database is locked" there.
 

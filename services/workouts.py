@@ -77,6 +77,11 @@ def save_from_gpx(rider_id, data, sport=None, name=None, client_id=None, steps=N
                 act.get('averageSpeed'), act.get('averageHeartrate'), kcal, steps, act.get('startLat'), act.get('startLng'),
                 act.get('streams') if isinstance(act.get('streams'), str) else json.dumps(act.get('streams') or {}), weather, source, kcal_raw])
     refresh_derived(db, wid)
+    try:
+        from services import sensors
+        sensors.attach_for_ride(db, wid)
+    except Exception:
+        pass
     db.commit()
     return dict(query_db('SELECT * FROM Workout WHERE id=?', [wid], one=True)), True
 
@@ -141,6 +146,7 @@ def forget(db, wid):
     seg_ids = [r[0] for r in db.execute('SELECT DISTINCT segmentId FROM SegmentEffort WHERE activityId=?', [wid]).fetchall()]
     db.execute('DELETE FROM SegmentEffort WHERE activityId=?', [wid])
     db.execute('DELETE FROM RunEffort WHERE runId=?', [wid])
+    db.execute('UPDATE RideSensor SET rideKind=NULL, rideId=NULL WHERE rideId=?', [wid])
     for sid in seg_ids:
         _refresh_prs(db, sid)
 
