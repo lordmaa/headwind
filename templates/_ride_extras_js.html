@@ -1,0 +1,127 @@
+<script>
+(function () {
+  var RID = {{ activity.id | string | tojson }};
+  var PHOTOS = {{ rx_photos | tojson }};
+  var FAULTS = {{ rx_faults | tojson }};
+  var URL_PHOTO = {{ url_for('ride_extras.photo_file', name='__N__') | tojson }};
+  var ICON_WRENCH = {{ mdi('wrench') | tojson }};
+  var $ = function (id) { return document.getElementById(id); };
+  function full(p) { return URL_PHOTO.replace('__N__', p.file); }
+  function thumb(p) { return URL_PHOTO.replace('__N__', p.file.replace('.jpg', '_t.jpg')); }
+  function post(url, body) { return fetch(url, { method: 'POST', body: body, headers: { 'X-Requested-With': 'fetch', 'Accept': 'application/json' } }); }
+  function toast(msg, keep) {
+    var t = $('rxToast'); t.textContent = msg; t.hidden = false;
+    clearTimeout(toast._t); if (!keep) toast._t = setTimeout(function () { t.hidden = true; }, 3500);
+  }
+
+  // ---- upload ----
+  function upload(files, faultId) {
+    files = Array.prototype.slice.call(files || []);
+    if (!files.length) return;
+    var done = 0, bad = [];
+    function next() {
+      if (!files.length) {
+        if (bad.length) toast(bad.join(' | '), true);
+        if (done) setTimeout(function () { location.hash = '#photos'; location.reload(); }, bad.length ? 2500 : 200);
+        return;
+      }
+      var f = files.shift(), fd = new FormData();
+      fd.append('photo', f);
+      if (f.lastModified) fd.append('taken_ms', f.lastModified);
+      if (faultId) fd.append('fault', faultId);
+      toast('Uploading ' + (done + 1) + ' of ' + (done + files.length + 1) + '...', true);
+      post('/rides/' + encodeURIComponent(RID) + '/photos', fd).then(function (r) { return r.json(); }).then(function (j) {
+        if (j.ok) done++; else bad.push((j.errors && j.errors[0]) || j.error || 'upload failed');
+      }).catch(function () { bad.push('upload failed'); }).then(next);
+    }
+    next();
+  }
+  $('rxAddBtn').addEventListener('click', function () { $('rxFile').click(); });
+  $('rxFile').addEventListener('change', function () { upload(this.files); });
+  Array.prototype.forEach.call(document.querySelectorAll('input[data-fault]'), function (inp) {
+    inp.addEventListener('change', function () { upload(this.files, this.getAttribute('data-fault')); });
+  });
+
+  // ---- lightbox ----
+  var cur = 0, placing = null;
+  function show(i) {
+    if (!PHOTOS.length) return;
+    cur = (i + PHOTOS.length) % PHOTOS.length;
+    var p = PHOTOS[cur];
+    $('rxLbImg').src = full(p);
+    $('rxLbCap').value = p.caption || '';
+    $('rxLbWhere').textContent = p.lat != null ? (p.placedBy === 'time' ? 'Placed by the time it was taken' : p.placedBy === 'manual' ? 'Placed by you' : 'From the photo location') : 'No location';
+    $('rxLbPlace').querySelector('span').textContent = p.lat != null ? 'Move on map' : 'Place on map';
+    $('rxLb').hidden = false; document.body.style.overflow = 'hidden';
+  }
+  function close() { $('rxLb').hidden = true; document.body.style.overflow = ''; $('rxLbImg').removeAttribute('src'); }
+  function openById(pid) { for (var i = 0; i < PHOTOS.length; i++) if (PHOTOS[i].id === pid) return show(i); }
+  Array.prototype.forEach.call(document.querySelectorAll('.rx-thumb'), function (b) {
+    b.addEventListener('click', function () { b.dataset.pid ? openById(parseInt(b.dataset.pid, 10)) : show(parseInt(b.dataset.i, 10)); });
+  });
+  $('rxLbClose').addEventListener('click', close);
+  $('rxLbPrev').addEventListener('click', function () { show(cur - 1); });
+  $('rxLbNext').addEventListener('click', function () { show(cur + 1); });
+  $('rxLb').addEventListener('click', function (e) { if (e.target === $('rxLb')) close(); });
+  document.addEventListener('keydown', function (e) {
+    if ($('rxLb').hidden) return;
+    if (e.key === 'Escape') close(); else if (e.key === 'ArrowLeft' && e.target.tagName !== 'INPUT') show(cur - 1); else if (e.key === 'ArrowRight' && e.target.tagName !== 'INPUT') show(cur + 1);
+  });
+  var sx = null;
+  $('rxLb').addEventListener('touchstart', function (e) { sx = e.touches[0].clientX; }, { passive: true });
+  $('rxLb').addEventListener('touchend', function (e) { if (sx === null) return; var dx = e.changedTouches[0].clientX - sx; sx = null; if (Math.abs(dx) > 60) show(cur + (dx < 0 ? 1 : -1)); }, { passive: true });
+  $('rxLbCap').addEventListener('change', function () {
+    var p = PHOTOS[cur], fd = new FormData(); fd.append('caption', this.value); p.caption = this.value;
+    post('/rides/photos/' + p.id + '/caption', fd);
+  });
+  $('rxLbDel').addEventListener('click', function () {
+    if (!confirm('Delete this photo?')) return;
+    post('/rides/photos/' + PHOTOS[cur].id + '/delete', new FormData()).then(function () { location.reload(); });
+  });
+  $('rxLbPlace').addEventListener('click', function () {
+    if (!window._rideMap) { toast('This activity has no map to place it on.'); return; }
+    placing = PHOTOS[cur]; close();
+    var tab = document.querySelector('.rtabs button[data-tab="map"]'); if (tab) tab.click();
+    toast('Tap the map where this was taken.', true);
+    window._rideMap.getContainer().style.cursor = 'crosshair';
+    window._rideMap.once('click', function (ev) {
+      var fd = new FormData(); fd.append('lat', ev.latlng.lat); fd.append('lng', ev.latlng.lng);
+      window._rideMap.getContainer().style.cursor = '';
+      post('/rides/photos/' + placing.id + '/place', fd).then(function () { toast('Placed.'); setTimeout(function () { location.reload(); }, 500); });
+    });
+  });
+
+  document.querySelectorAll('.rx-placefault').forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (!window._rideMap) { toast('This activity has no map to pin it on.'); return; }
+      var tab = document.querySelector('.rtabs button[data-tab="map"]'); if (tab) tab.click();
+      toast('Tap the map where it went wrong.', true);
+      var m = window._rideMap; m.getContainer().style.cursor = 'crosshair';
+      m.once('click', function (ev) {
+        var fd = new FormData(); fd.append('lat', ev.latlng.lat); fd.append('lng', ev.latlng.lng);
+        m.getContainer().style.cursor = '';
+        post('/rides/faults/' + b.dataset.fid + '/place', fd).then(function () { toast('Pinned.'); setTimeout(function () { location.reload(); }, 500); });
+      });
+    });
+  });
+
+  // ---- markers on the map ----
+  var map = window._rideMap;
+  if (map && window.L) {
+    PHOTOS.forEach(function (p, i) {
+      if (p.lat == null) return;
+      var m = L.marker([p.lat, p.lng], { icon: L.divIcon({ className: '', iconSize: [44, 44], iconAnchor: [22, 22], html: '<div class="rx-mk"><img src="' + thumb(p) + '" alt=""></div>' }), zIndexOffset: 500 }).addTo(map);
+      m.on('click', function () { show(i); });
+    });
+    FAULTS.forEach(function (f) {
+      if (f.lat == null) return;
+      L.marker([f.lat, f.lng], { icon: L.divIcon({ className: '', iconSize: [34, 34], iconAnchor: [17, 17], html: '<div class="rx-mk fault">' + ICON_WRENCH + '</div>' }), zIndexOffset: 600 })
+        .addTo(map).bindPopup('<b>' + f.categoryLabel.replace(/</g, '&lt;') + '</b>' + (f.description ? '<br>' + f.description.replace(/</g, '&lt;') : ''));
+    });
+  }
+
+  // ---- rename ----
+  var rb = $('rxRenameBtn');
+  if (rb) rb.addEventListener('click', function () { var d = $('rxRename'); if (d.showModal) { d.showModal(); $('rxRenameInput').select(); } else { var n = prompt('Rename this activity', $('rxRenameInput').value); if (n) { $('rxRenameInput').value = n; d.querySelector('form').submit(); } } });
+})();
+</script>

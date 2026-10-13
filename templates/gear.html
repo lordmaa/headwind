@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+{% block title %}Gear{% endblock %}
+{% block page_title %}Gear{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/gear.css') }}">{% endblock %}
+
+{% block topbar_actions %}
+  {% if riders %}
+  <form method="GET" style="display:inline;"><select name="rider" onchange="this.form.submit()">{% for r in riders %}<option value="{{ r.id }}" {{ 'selected' if r.id == rid }}>{{ r.name }}</option>{% endfor %}</select></form>
+  {% endif %}
+  <a href="{{ url_for('gear.bike_form', rider=rid) }}" class="btn btn-primary">+ Add bike</a>
+{% endblock %}
+
+{% macro bike_icon() %}<svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="16" r="3.5"/><circle cx="18.5" cy="16" r="3.5"/><path d="M5.5 16 9 8h5l4.5 8M9 8l3.5 8M14 8l-1-3h-2"/></svg>{% endmacro %}
+
+{% block content %}
+{% if error %}<div class="gear-err">{{ error }}</div>{% endif %}
+<div class="pill-row">
+  <a href="{{ url_for('gear.faults_page', rider=rid) }}">{{ mdi('wrench') }} Faults &amp; stats</a>
+  <a href="{{ url_for('gear.assign_page', rider=rid) }}">{{ mdi('calendar') }} Assign rides</a>
+</div>
+
+{% if span.unassigned and bikes %}
+<div class="gear-note">
+  <div><strong>{{ '{:,}'.format(span.unassigned) }}</strong> of {{ '{:,}'.format(span.total) }} rides have no bike yet. New rides get your default bike automatically; use the calendar to say which bike rode the older ones.</div>
+  <a class="btn btn-primary btn-sm" href="{{ url_for('gear.assign_page', rider=rid) }}">Assign rides by calendar</a>
+</div>
+{% endif %}
+
+{% if pending or fault_total %}
+<div class="card" id="pending-repairs" style="margin-bottom:1rem;">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap;margin-bottom:.4rem;">
+    <div class="card-title" style="margin:0;">Faults &amp; pending repairs{% if pending %} <span class="chip overdue" style="margin-left:.4rem;">{{ pending | length }} open</span>{% endif %}</div>
+    <a class="btn btn-secondary btn-sm" href="{{ url_for('gear.faults_page', rider=rid) }}">All faults &amp; stats</a>
+  </div>
+  {% if pending %}
+  <div class="due-list">
+    {% for f in pending %}
+    <div class="due-row">
+      <span class="chip due">{{ f.categoryLabel.split(' (')[0].split(' /')[0] }}</span>
+      <div class="t"><a href="{{ url_for('rides.detail', rid=f.rideId) }}#faults"><strong>{{ f.description or f.categoryLabel }}</strong></a>
+        <div class="hint">{{ f.date | fmt_date }}{% if f.bikeName %} &middot; {{ f.bikeName }}{% endif %}{% if f.partName %} &middot; {{ f.partName }}{% endif %}{% if f.outcomeLabel %} &middot; {{ f.outcomeLabel }}{% endif %}</div></div>
+      <form method="POST" action="{{ url_for('ride_extras.fault_repaired', fid=f.id) }}" style="margin:0;"><input type="hidden" name="next" value="gear"><button class="btn btn-primary btn-sm">{{ mdi('check-circle') }} Mark repaired</button></form>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}<p class="hint" style="margin:.2rem 0 0;">Nothing waiting to be fixed. Breakdowns you mark on a ride (Mark a fault) appear here until you mark them repaired.</p>{% endif %}
+</div>
+{% endif %}
+
+{% if due %}
+<div class="card" style="margin-bottom:1rem;">
+  <div class="card-title">Needs attention</div>
+  <div class="due-list">
+    {% for d in due %}
+    {% set st = d.status %}
+    {% set r = (st.check if st.due == 'check' else st.replace) %}
+    <div class="due-row">
+      <span class="chip {{ st.level }}">{{ st.level }}</span>
+      <div class="t"><a href="{{ url_for('gear.bike', bike_id=d.bike.id) }}#parts"><strong>{{ d.part.name }}</strong></a> on {{ d.bike.name }}
+        <div class="hint">{{ 'Replace' if st.due == 'replace' else 'Check' }}:
+          {% if st.due == 'replace' %}{{ st.meters | fmt_dist }}{% if d.part.replaceEveryM %} of {{ d.part.replaceEveryM | fmt_dist }}{% endif %}{% if d.part.replaceEveryDays %} · {{ st.days }} of {{ d.part.replaceEveryDays }} days{% endif %}
+          {% else %}{{ st.meters_since_check | fmt_dist }}{% if d.part.checkEveryM %} of {{ d.part.checkEveryM | fmt_dist }}{% endif %}{% if d.part.checkEveryDays %} · {{ st.days_since_check }} of {{ d.part.checkEveryDays }} days{% endif %} since last check{% endif %}
+        </div></div>
+      <div class="bar {{ st.level }}" style="width:140px;"><i style="width:{{ [100, ((r.ratio or 0) * 100) | round | int] | min }}%"></i></div>
+      <a class="btn btn-secondary btn-sm" href="{{ url_for('gear.bike', bike_id=d.bike.id) }}#log">Log service</a>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if not bikes %}
+<div class="empty-art">
+  <img src="{{ url_for('static', filename='img/empty_bikes.jpg') }}" alt="" width="520" height="347">
+  <h3>Add your first bike</h3>
+  <p>Track what is on each bike, how far every chain, tyre and cassette has gone, and get a nudge when something is due. Pick a default bike and every new ride lands on it.</p>
+  <a class="btn btn-primary" href="{{ url_for('gear.bike_form', rider=rid) }}">+ Add a bike</a>
+</div>
+{% else %}
+<div class="bike-grid">
+  {% for b in bikes %}
+  <div class="bike-card">
+    <a class="ph" href="{{ url_for('gear.bike', bike_id=b.bike.id) }}">{% if b.bike.photo %}<img src="{{ url_for('gear.photo', name=b.bike.photo) }}" alt="{{ b.bike.name }}">{% else %}{{ bike_icon() }}{% endif %}</a>
+    <div class="body">
+      <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;">
+        <h3><a href="{{ url_for('gear.bike', bike_id=b.bike.id) }}" style="color:inherit;text-decoration:none;">{{ b.bike.name }}</a></h3>
+        {% if b.bike.id == default_id %}<span class="chip default">Default</span>{% endif %}
+        {% if b.bike.archived %}<span class="chip">Archived</span>{% endif %}
+        {% if b.health.level != 'ok' %}<span class="chip {{ b.health.level }}">{{ b.health.attention or b.health.soon }} {{ 'to do' if b.health.attention else 'soon' }}</span>{% endif %}
+      </div>
+      <div class="sub">{{ [b.bike.brand, b.bike.model, b.bike.year] | select | join(' ') }}</div>
+      <div class="odo">{{ b.odometer | fmt_dist }}</div>
+      <div class="sub">{{ '{:,}'.format(b.stats.rides) }} ride{{ '' if b.stats.rides == 1 else 's' }}{% if b.stats.last %} · last {{ b.stats.last | fmt_date }}{% endif %}</div>
+      <div class="mini-actions" style="margin-top:.3rem;">
+        {% if b.bike.id != default_id and not b.bike.archived %}
+        <form method="POST" action="{{ url_for('gear.set_default') }}"><input type="hidden" name="rider" value="{{ rid }}"><input type="hidden" name="bike" value="{{ b.bike.id }}"><button class="btn btn-secondary btn-sm" type="submit">Make default</button></form>
+        {% endif %}
+        <a class="btn btn-secondary btn-sm" href="{{ url_for('gear.bike', bike_id=b.bike.id) }}">Open</a>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% if has_archived %}<p class="hint" style="margin-top:1rem;"><a href="{{ url_for('gear.index', rider=rid, archived=(0 if show_archived else 1)) }}">{{ 'Hide' if show_archived else 'Show' }} archived bikes</a></p>{% endif %}
+{% endif %}
+{% endblock %}

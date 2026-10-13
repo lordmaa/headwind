@@ -1,0 +1,31 @@
+{
+  "name": "Headwind Steps",
+  "short_name": "Steps",
+  "description": "Log today's steps in one tap",
+  "start_url": "/nutrition/steps",
+  "scope": "/nutrition/",
+  "display": "standalone",
+  "background_color": "#0b0f12",
+  "theme_color": "#0b0f12",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/static/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

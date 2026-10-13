@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}{% endblock %} — Headwind</title>
+  <meta name="theme-color" content="#0b0f12">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}?v=9">
+  <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+  <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icon-192.png') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+  {% block head %}{% endblock %}
+</head>
+<body class="has-tabbar">
+
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div style="display:flex; align-items:center; gap:0.6rem;">
+        <img src="{{ url_for('static', filename='logo.png') }}" alt="" style="width:34px; height:34px; border-radius:9px; flex-shrink:0;">
+        <div class="app-name">Headwind</div>
+      </div>
+    </div>
+    <div class="sidebar-nav">
+      <div class="nav-section-label">Overview</div>
+      <a href="{{ url_for('dashboard.dashboard') }}"
+         class="nav-item {% if request.endpoint == 'dashboard.dashboard' %}active{% endif %}">
+        {{ mdi('home-variant') }} Home
+      </a>
+      <a href="{{ url_for('garmin_page.index') }}"
+         class="nav-item {% if request.blueprint == 'garmin_page' %}active{% endif %}">
+        {{ mdi('heart-pulse') }} Recovery
+      </a>
+
+      <div class="nav-section-label">Activity</div>
+      <a href="{{ url_for('activities.index') }}"
+         class="nav-item {% if request.blueprint == 'activities' %}active{% endif %}">
+        {{ mdi('bike') }} Activities
+      </a>
+      <a href="{{ url_for('data.index') }}"
+         class="nav-item {% if request.blueprint == 'data' %}active{% endif %}">
+        {{ mdi('chart-bar') }} Analytics
+      </a>
+      <a href="{{ url_for('segments.index') }}"
+         class="nav-item {% if request.blueprint == 'segments' %}active{% endif %}">
+        {{ mdi('flag-checkered') }} Segments
+      </a>
+      <a href="{{ url_for('gear.index') }}"
+         class="nav-item {% if request.blueprint == 'gear' %}active{% endif %}">
+        {{ mdi('wrench') }} Gear
+      </a>
+      <a href="{{ url_for('heatmap.index') }}"
+         class="nav-item {% if request.blueprint == 'heatmap' %}active{% endif %}">
+        {{ mdi('map') }} Heatmap
+      </a>
+      <a href="{{ url_for('roughness.index') }}"
+         class="nav-item {% if request.blueprint == 'roughness' %}active{% endif %}">
+        {{ mdi('road-variant') }} Roughness
+      </a>
+      <a href="{{ url_for('route_builder.index') }}"
+         class="nav-item {% if request.blueprint == 'route_builder' %}active{% endif %}">
+        {{ mdi('map-marker-path') }} Planner
+      </a>
+      <a href="{{ url_for('ai_page.index') }}"
+         class="nav-item {% if request.blueprint == 'ai_page' %}active{% endif %}">
+        {{ mdi('creation') }} AI Coach
+      </a>
+
+      <div class="nav-section-label">Health</div>
+      <a href="{{ url_for('nutrition.index') }}"
+         class="nav-item {% if request.blueprint == 'nutrition' %}active{% endif %}">
+        {{ mdi('food-apple') }} Nutrition
+      </a>
+      <a href="{{ url_for('workouts_ui.workouts_page') }}"
+         class="nav-item {% if request.endpoint == 'workouts_ui.workouts_page' %}active{% endif %}">
+        {{ mdi('run') }} Workouts
+      </a>
+      <a href="{{ url_for('nutrition.steps_page') }}"
+         class="nav-item {% if request.endpoint == 'nutrition.steps_page' %}active{% endif %}">
+        {{ mdi('shoe-print') }} Steps
+      </a>
+
+      <div class="nav-section-label">System</div>
+      <a href="{{ url_for('riders.index') }}"
+         class="nav-item {% if request.blueprint == 'riders' %}active{% endif %}">
+        {{ mdi('account-group') }} {{ 'Riders' if multi_rider else 'Profile' }}
+      </a>
+      <a href="{{ url_for('phones.index') }}"
+         class="nav-item {% if request.blueprint == 'phones' %}active{% endif %}">
+        {{ mdi('cellphone') }} Phones
+      </a>
+      <a href="{{ url_for('import_rides.index') }}"
+         class="nav-item {% if request.blueprint == 'import_rides' %}active{% endif %}">
+        {{ mdi('upload') }} Import
+      </a>
+      <a href="{{ url_for('settings.index') }}"
+         class="nav-item {% if request.blueprint == 'settings' %}active{% endif %}">
+        {{ mdi('cog') }} Settings
+      </a>
+      <div class="nav-divider"></div>
+      <a href="{{ url_for('login.logout') }}" class="nav-item" style="color:var(--text-muted);">
+        {{ mdi('logout') }} Logout
+      </a>
+    </div>
+  </nav>
+
+  <main class="main">
+    {% if demo_mode %}<div class="demo-banner">LIVE DEMO &middot; a fictional rider and made-up food diary &middot; play with anything &middot; it resets every night &middot; <a href="https://github.com/lordmaa/headwind" target="_blank" rel="noopener">get Headwind</a> &middot; <img src="{{ url_for('demo.counter') }}" alt="visitor counter" width="130" style="vertical-align:middle;image-rendering:pixelated;"></div>{% endif %}
+    <div class="topbar">
+      <button class="menu-toggle" id="menuToggle" aria-label="Menu">
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+      </button>
+      <h1>{% block page_title %}{% endblock %}</h1>
+      <div class="topbar-actions">{% block topbar_actions %}{% endblock %}</div>
+    </div>
+    <div class="content">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+          <div class="flash flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+
+  <nav class="tabbar" aria-label="Main">
+    <a class="tab {% if request.endpoint == 'dashboard.dashboard' %}active{% endif %}" href="{{ url_for('dashboard.dashboard') }}">{% include 'icons/_m_home.svg' %}<span>Home</span></a>
+    <a class="tab {% if request.blueprint in ('activities', 'rides', 'workouts_ui') %}active{% endif %}" href="{{ url_for('activities.index') }}">{% include 'icons/_m_bike.svg' %}<span>Activities</span></a>
+    <a class="tab {% if request.blueprint == 'data' %}active{% endif %}" href="{{ url_for('data.index') }}">{% include 'icons/_m_stats.svg' %}<span>Stats</span></a>
+    <a class="tab {% if request.blueprint == 'nutrition' %}active{% endif %}" href="{{ url_for('nutrition.index') }}">{% include 'icons/_m_food.svg' %}<span>Nutrition</span></a>
+    <button type="button" class="tab" id="tabMore">{% include 'icons/_m_more.svg' %}<span>More</span></button>
+  </nav>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  <script>
+  // Global UK date helpers — available to all templates
+  var _MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  function fmtDate(iso) {
+    // "2024-03-15" → "15 Mar 2024"
+    var p = iso.split('-');
+    return parseInt(p[2]) + ' ' + _MONTHS[parseInt(p[1])-1] + ' ' + p[0];
+  }
+  function fmtMonth(ym) {
+    // "2024-03" → "Mar 2024"
+    var p = ym.split('-');
+    return _MONTHS[parseInt(p[1])-1] + ' ' + p[0];
+  }
+  </script>
+  {% block scripts %}{% endblock %}
+  <script>
+  (function () {
+    var tip = document.createElement('div');
+    tip.style.cssText = 'position:fixed;z-index:9999;pointer-events:none;display:none;'
+      + 'border-radius:50%;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.6);'
+      + 'border:2px solid var(--border);width:96px;height:96px;';
+    var tipImg = document.createElement('img');
+    tipImg.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
+    tip.appendChild(tipImg);
+    document.body.appendChild(tip);
+
+    document.addEventListener('mouseover', function (e) {
+      var img = e.target;
+      if (img.tagName !== 'IMG' || !img.src.includes('/avatars/')) return;
+      tipImg.src = img.src;
+      tip.style.display = 'block';
+    });
+    document.addEventListener('mousemove', function (e) {
+      if (tip.style.display === 'none') return;
+      var x = e.clientX, y = e.clientY;
+      var left = x + 14;
+      var top  = y - 48;
+      if (left + 100 > window.innerWidth)  left = x - 110;
+      if (top  < 8)                         top  = 8;
+      if (top  + 100 > window.innerHeight)  top  = window.innerHeight - 104;
+      tip.style.left = left + 'px';
+      tip.style.top  = top  + 'px';
+    });
+    document.addEventListener('mouseout', function (e) {
+      var img = e.target;
+      if (img.tagName === 'IMG' && img.src.includes('/avatars/')) tip.style.display = 'none';
+    });
+    document.addEventListener('click', function (e) {
+      var img = e.target;
+      if (img.tagName !== 'IMG' || !img.src.includes('/avatars/')) return;
+      var rid = img.getAttribute('data-rider-id');
+      if (rid) window.location = '/riders/' + rid;
+    });
+  })();
+  </script>
+  <script>
+    (function () {
+      var toggle  = document.getElementById('menuToggle');
+      var sidebar = document.getElementById('sidebar');
+      var overlay = document.getElementById('sidebarOverlay');
+      function openSidebar()  { sidebar.classList.add('open'); overlay.classList.add('open'); }
+      function closeSidebar() { sidebar.classList.remove('open'); overlay.classList.remove('open'); }
+      if (window.innerWidth >= 768) openSidebar();
+      toggle.addEventListener('click', function () {
+        sidebar.classList.contains('open') ? closeSidebar() : openSidebar();
+      });
+      overlay.addEventListener('click', closeSidebar);
+      var more = document.getElementById('tabMore');
+      if (more) more.addEventListener('click', function () { sidebar.classList.contains('open') ? closeSidebar() : openSidebar(); });
+      sidebar.querySelectorAll('.nav-item').forEach(function (a) {
+        a.addEventListener('click', function () {
+          if (window.innerWidth < 768) closeSidebar();
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

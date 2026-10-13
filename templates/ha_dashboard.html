@@ -1,0 +1,84 @@
+{% extends 'base.html' %}
+{% block title %}Home Assistant dashboard{% endblock %}
+{% block page_title %}Home Assistant dashboard{% endblock %}
+
+{% block head %}
+<style>
+  .hd-wrap { display:flex; flex-direction:column; gap:1rem; max-width:640px; }
+  .hd-wrap input[type=text] { width:100%; box-sizing:border-box; min-height:46px; font-size:16px; }
+  .hd-wrap .btn { min-height:46px; justify-content:center; }
+  .hd-row { display:flex; gap:0.6rem; flex-wrap:wrap; }
+  .hd-row > .btn { flex:1; }
+  .hd-status { font-size:0.9rem; line-height:1.5; min-height:1.2em; }
+  .hd-status.err { color:#f87171; }
+  .hd-wrap a { color:#38bdf8; }
+  .hd-wrap p { margin:0 0 1rem; }
+  .hd-list { margin:0.4rem 0 0 1.1rem; padding:0; line-height:1.6; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="hd-wrap">
+  <div class="hero" style="min-height:150px;">
+    <img src="{{ url_for('static', filename='img/hero_night.jpg') }}" alt="" width="1100" height="733">
+    <div class="hero-text"><h2>Your Headwind dashboard</h2><div class="sub">One click in Home Assistant, built from the sensors you already have.</div></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Build your Headwind dashboard</div>
+    <p style="color:var(--text-muted); font-size:0.9rem; line-height:1.5;">
+      Creates a dashboard in Home Assistant from the Headwind sensors it already has: food and water, weight, steps, ride totals,
+      Garmin recovery and the live ride. It uses Home Assistant's own cards, so nothing extra needs installing. Running it again
+      refreshes the dashboard, and replaces any edits you made to it in Home Assistant.
+    </p>
+    {% if not connected %}
+      <p class="hd-status err">Home Assistant is not connected yet. <a href="{{ url_for('homeassistant.index') }}">Connect it first</a>.</p>
+    {% else %}
+      <div class="form-group"><label>Dashboard name</label><input type="text" id="hdTitle" value="Headwind"></div>
+      <div class="form-group"><label>Dashboard address</label><input type="text" id="hdPath" value="{{ default_path }}" autocapitalize="off">
+        <small style="color:var(--text-muted)">Must start with "headwind-". Headwind never touches your other dashboards.</small></div>
+      <div class="hd-row">
+        <button class="btn btn-secondary" id="hdCheck">See what I'll get</button>
+        <button class="btn btn-primary" id="hdMake">Create dashboard</button>
+      </div>
+      <div class="hd-status" id="hdStatus" style="margin-top:0.75rem;"></div>
+    {% endif %}
+  </div>
+  {% if connected %}
+  <div class="card">
+    <div class="card-title">Not seeing your sensors?</div>
+    <p style="color:var(--text-muted); font-size:0.9rem; line-height:1.5;">
+      Headwind sends its sensors to Home Assistant over MQTT. Set that up in <a href="{{ url_for('settings.index') }}">Settings</a>
+      {% if in_addon %}(as a Home Assistant add-on it picks up the Mosquitto broker add-on automatically once that is installed){% endif %},
+      then press <b>Push sensors to Home Assistant</b> and try again.
+    </p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const st = document.getElementById('hdStatus');
+function say(html, err) { st.className = 'hd-status' + (err ? ' err' : ''); st.innerHTML = html; }
+async function go(path, busy) {
+  say(busy);
+  const r = await fetch('/settings/home-assistant/dashboard/' + path, {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({title: document.getElementById('hdTitle').value, path: document.getElementById('hdPath').value})});
+  const j = await r.json().catch(() => ({error: 'Unexpected reply from Headwind.'}));
+  if (!r.ok) { say(j.error || 'Something went wrong.', true); return null; }
+  return j;
+}
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+document.getElementById('hdCheck')?.addEventListener('click', async () => {
+  const j = await go('preview', 'Asking Home Assistant…'); if (!j) return;
+  if (!j.modules.length) { say('Home Assistant has no Headwind sensors yet. See the box below.', true); return; }
+  say('Found: <ul class="hd-list">' + j.modules.map(m => '<li>' + esc(m.label) + '</li>').join('') + '</ul>' +
+      'That makes ' + j.views.length + ' page' + (j.views.length > 1 ? 's' : '') + ' (' + j.views.map(esc).join(', ') + ') using ' + j.entities + ' sensors.' +
+      (j.existing.length ? '<br>Existing Headwind dashboards: ' + j.existing.map(esc).join(', ') + '.' : ''));
+});
+document.getElementById('hdMake')?.addEventListener('click', async () => {
+  const j = await go('create', 'Building…'); if (!j) return;
+  say((j.created ? 'Created' : 'Updated') + ' the dashboard with ' + j.views.length + ' pages. Open Home Assistant and look for <b>' + esc(document.getElementById('hdTitle').value) + '</b> in the sidebar (address <b>/' + esc(j.path) + '</b>).');
+});
+</script>
+{% endblock %}

@@ -1,0 +1,16 @@
+{# one activity as a card: route thumbnail, name, sport and date, three headline numbers. Expects `a` (see services/activity_list). #}
+<a class="act-card" href="{{ url_for('rides.detail', rid=a.id) }}">
+  <div class="act-thumb">
+    {% if a.path %}<svg viewBox="0 0 100 100" aria-hidden="true"><path d="{{ a.path }}" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    {% else %}<span class="act-thumb-ic">{{ a.sport | sport_icon }}</span>{% endif %}
+  </div>
+  <div class="act-main">
+    <div class="act-name">{{ a.name or a.sport }}{% if a.fault %}<span class="act-fault" title="Mechanical fault on this ride">{{ mdi('wrench') }}</span>{% endif %}</div>
+    <div class="act-sub">{{ a.sport | sport_icon }} {{ a.sport }} &middot; {{ a.startDateLocal | fmt_date }}{% if a.city %} &middot; {{ a.city }}{% endif %}</div>
+    <div class="act-nums">
+      <div><b>{{ (a.distance or 0) | fmt_dist }}</b><span>Distance</span></div>
+      <div><b>{{ (a.movingTime or 0) | fmt_duration }}</b><span>Time</span></div>
+      <div><b>{{ (a.elev or 0) | fmt_elev }}</b><span>Climb</span></div>
+    </div>
+  </div>
+</a>

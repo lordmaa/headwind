@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+{% block title %}{{ 'Edit bike' if bike else 'Add bike' }}{% endblock %}
+{% block page_title %}{{ 'Edit ' ~ bike.name if bike else 'Add a bike' }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/gear.css') }}">{% endblock %}
+{% block topbar_actions %}<a class="btn btn-secondary" href="{{ url_for('gear.bike', bike_id=bike.id) if bike else url_for('gear.index') }}">Cancel</a>{% endblock %}
+{% block content %}
+{% if error %}<div class="gear-err">{{ error }}</div>{% endif %}
+<div class="card" style="max-width:760px;">
+  <form method="POST" action="{{ url_for('gear.bike_save') }}" enctype="multipart/form-data" class="gform">
+    {% if bike %}<input type="hidden" name="id" value="{{ bike.id }}">{% endif %}
+    <input type="hidden" name="rider" value="{{ rid }}">
+    <label class="wide">Name<input name="name" required maxlength="80" value="{{ bike.name if bike else '' }}" placeholder="e.g. Roubaix, Winter bike, Gravel"></label>
+    <label>Type<select name="kind">{% for k, l in kinds %}<option value="{{ k }}" {{ 'selected' if bike and bike.kind == k }}>{{ l }}</option>{% endfor %}</select></label>
+    <label>Brand<input name="brand" maxlength="80" value="{{ bike.brand or '' if bike else '' }}"></label>
+    <label>Model<input name="model" maxlength="80" value="{{ bike.model or '' if bike else '' }}"></label>
+    <label>Year<input name="year" type="number" min="1900" max="2100" value="{{ bike.year or '' if bike else '' }}"></label>
+    <label>Bought on (optional)<input name="boughtOn" type="date" value="{{ bike.boughtOn or '' if bike else '' }}"></label>
+    <label>Already ridden before Headwind ({{ 'km' if units == 'metric' else 'miles' }})<input name="start" type="number" min="0" step="1" value="{{ start_disp }}" placeholder="0"></label>
+    <label class="wide">Photo (optional)<input name="photo" type="file" accept="image/*"></label>
+    <label class="wide">Notes<textarea name="notes" rows="3" maxlength="1000">{{ bike.notes or '' if bike else '' }}</textarea></label>
+    <div class="wide"><button class="btn btn-primary" type="submit">{{ 'Save changes' if bike else 'Add bike' }}</button>
+      <span class="hint" style="margin-left:.6rem;">{% if not bike %}The first bike you add becomes your default: new rides are put on it automatically.{% else %}Photos are resized and stored beside your database.{% endif %}</span></div>
+  </form>
+</div>
+{% endblock %}

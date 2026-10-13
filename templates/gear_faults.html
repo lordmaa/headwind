@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+{% block title %}Mechanical faults{% endblock %}
+{% block page_title %}Mechanical faults{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/gear.css') }}">
+<style>
+.fs-tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:.7rem; margin-bottom:1rem; }
+.fs-tile { background:var(--card-bg); border:1px solid var(--border); border-radius:20px; padding:.9rem 1rem; }
+.fs-tile b { display:block; font-size:1.6rem; font-variant-numeric:tabular-nums; }
+.fs-tile span { color:var(--text-muted); font-size:.78rem; text-transform:uppercase; letter-spacing:.06em; font-weight:700; }
+.fs-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:1rem; margin-bottom:1rem; }
+.fs-row { display:grid; grid-template-columns:minmax(90px,170px) 1fr auto; gap:.6rem; align-items:center; padding:.3rem 0; font-size:.875rem; }
+.fs-row .bar { min-width:0; }
+.fs-row .bar > i { background:var(--accent); }
+.fs-row em { font-style:normal; color:var(--text-muted); font-variant-numeric:tabular-nums; }
+.fs-list a { color:inherit; text-decoration:none; }
+.fs-item { display:flex; gap:.8rem; padding:.6rem 0; border-top:1px solid var(--border); }
+.fs-item:first-child { border-top:0; }
+.fs-item .d { flex:none; width:92px; color:var(--text-muted); font-size:.8125rem; }
+</style>{% endblock %}
+{% block topbar_actions %}
+  <form method="GET" style="display:inline;">
+    {% if riders %}<select name="rider" onchange="this.form.submit()">{% for r in riders %}<option value="{{ r.id }}" {{ 'selected' if r.id == rid }}>{{ r.name }}</option>{% endfor %}</select>{% else %}<input type="hidden" name="rider" value="{{ rid }}">{% endif %}
+    <select name="year" onchange="this.form.submit()" aria-label="Year"><option value="">All years</option>{% for y in st.years %}<option value="{{ y }}" {{ 'selected' if year|string == y }}>{{ y }}</option>{% endfor %}</select>
+  </form>
+  <a class="btn btn-secondary" href="{{ url_for('gear.index', rider=rid) }}">&larr; Gear</a>
+{% endblock %}
+
+{% block content %}
+{% if not st.total %}
+<div class="card empty-art">
+  <img src="{{ url_for('static', filename='img/empty_faults.jpg') }}" alt="" width="520" height="347">
+  <h3 style="margin:.2rem 0;">No faults logged{% if year %} in {{ year }}{% endif %}</h3>
+  <p class="hint" style="max-width:520px;margin:.4rem auto 0;">Open a ride after a breakdown and use <b>Mark a fault</b>. It goes into that bike's service log, and this page then shows what keeps breaking, on which bike and in which season.</p>
+</div>
+{% else %}
+{% set miles = st.metres / 1609.344 %}
+{% set per = (st.total / (st.metres / (1000 if units == 'metric' else 1609.344)) * 1000) if st.metres else 0 %}
+<div class="fs-tiles">
+  <div class="fs-tile"><b>{{ st.total }}</b><span>Faults</span></div>
+  <div class="fs-tile"><b>{{ st.rides_with }}{% if st.rides %} <small style="font-size:.9rem;color:var(--text-muted)">of {{ '{:,}'.format(st.rides) }}</small>{% endif %}</b><span>Rides affected</span></div>
+  <div class="fs-tile"><b>{{ '%.1f' | format(per) }}</b><span>Per 1,000 {{ 'km' if units == 'metric' else 'miles' }}</span></div>
+  <div class="fs-tile"><b>{{ st.minutes_lost }}</b><span>Minutes lost</span></div>
+  <div class="fs-tile"><b style="color:{{ '#fb923c' if st.pending else '#22c55e' }}">{{ st.pending }}</b><span>Pending repairs</span></div>
+</div>
+
+<div class="fs-grid">
+  <div class="card"><div class="card-title">By type</div>    {% set top = st.by_category[0][2] %}
+    {% for k, label, n in st.by_category %}<div class="fs-row"><span>{{ label }}</span><div class="bar"><i style="width:{{ ((n / top) * 100) | round | int }}%"></i></div><em>{{ n }}</em></div>{% endfor %}
+  </div>
+  <div class="card"><div class="card-title">By season</div>
+    {% set stop = ([1] + (st.by_season | map(attribute=1) | list)) | max %}
+    {% for s, n, r in st.by_season %}<div class="fs-row"><span>{{ s }}</span><div class="bar"><i style="width:{{ ((n / stop) * 100) | round | int }}%"></i></div><em>{{ n }}{% if r %} <span style="opacity:.7">in {{ r }} rides</span>{% endif %}</em></div>{% endfor %}
+    <div class="hint" style="margin-top:.5rem;">Winter is Dec-Feb, spring Mar-May, summer Jun-Aug, autumn Sep-Nov.</div>
+  </div>
+  <div class="card"><div class="card-title">By bike</div>
+    {% set btop = st.by_bike[0][1] %}
+    {% for name, n in st.by_bike %}<div class="fs-row"><span>{{ name }}</span><div class="bar"><i style="width:{{ ((n / btop) * 100) | round | int }}%"></i></div><em>{{ n }}</em></div>{% endfor %}
+  </div>
+  {% if st.by_month | length > 1 %}
+  <div class="card"><div class="card-title">By month</div>
+    {% set mtop = (st.by_month | map(attribute=1) | max) %}
+    {% for m, n in st.by_month %}<div class="fs-row"><span>{{ m }}</span><div class="bar"><i style="width:{{ ((n / mtop) * 100) | round | int }}%"></i></div><em>{{ n }}</em></div>{% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+<div class="card fs-list"><div class="card-title">Every fault</div>
+  {% for f in st.recent %}
+  <a class="fs-item" href="{{ url_for('rides.detail', rid=f.rideId) }}#faults">
+    <div class="d">{{ f.date | fmt_date }}</div>
+    <div><b>{{ f.categoryLabel }}</b>{% if f.partName %} <span class="hint">({{ f.partName }})</span>{% endif %}
+      {% if f.description %}<div>{{ f.description }}</div>{% endif %}
+      <div class="hint">{{ f.rideName or 'Ride' }}{% if f.bikeName %} &middot; {{ f.bikeName }}{% endif %}{% if f.outcomeLabel %} &middot; {{ f.outcomeLabel }}{% endif %}{% if f.minutesLost %} &middot; {{ f.minutesLost }} min lost{% endif %} &middot; <b style="color:{{ '#22c55e' if f.repairedOn else '#fb923c' }}">{{ 'repaired' if f.repairedOn else 'repair pending' }}</b></div></div>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

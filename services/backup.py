@@ -1,0 +1,166 @@
+"""Safe backup staging + restore. Uploads never choose their own filesystem paths, zips are read member-by-member
+with size limits, and the live database is replaced through SQLite's backup API (atomic, WAL-aware, no file swap)."""
+import os
+import re
+import shutil
+import sqlite3
+import tempfile
+import zipfile
+
+MAX_DB_BYTES = 2 * 1024 ** 3
+MAX_AVATAR_BYTES = 5 * 1024 ** 2
+MAX_AVATARS = 500
+REQUIRED_TABLES = {'Rider', 'Activity', 'Settings'}
+_AVATAR_RE = re.compile(r'^avatars/(rider_\d+\.(?:jpg|png|gif|webp))$')
+_FOODIMG_RE = re.compile(r'^foodimg/([A-Za-z0-9_.-]{1,120}\.(?:jpg|png|gif|webp))$')
+_BIKEIMG_RE = re.compile(r'^bikeimg/(bike_\d+_[a-f0-9]{8}\.jpg)$')
+_RIDEIMG_RE = re.compile(r'^rideimg/(rp_[a-f0-9]{12}(?:_t)?\.jpg)$')
+MAX_RIDEIMGS = 100_000
+MAX_RIDEIMG_BYTES = 25 * 1024 ** 2
+MAX_BIKEIMGS = 2_000
+MAX_BIKEIMG_BYTES = 15 * 1024 ** 2
+MAX_FOODIMGS = 50_000
+MAX_FOODIMG_BYTES = 10 * 1024 ** 2
+
+
+class BackupError(Exception):
+    pass
+
+
+def _copy_member(zf, info, dest, limit):
+    if info.file_size > limit:
+        raise BackupError(f'{info.filename} is too large')
+    written = 0
+    with zf.open(info) as src, open(dest, 'wb') as out:
+        while chunk := src.read(1 << 20):
+            written += len(chunk)
+            if written > limit:   # trust the stream, not the zip header
+                raise BackupError(f'{info.filename} is too large')
+            out.write(chunk)
+
+
+def stage_upload(file_storage):
+    """Save an uploaded .db or backup .zip under a fresh temp dir with generated names.
+    Returns (tmp_dir, db_path, assets) where assets maps 'avatars'/'foodimg'/'bikeimg' to staged dirs (None for a bare .db). Caller must shutil.rmtree(tmp_dir)."""
+    tmp_dir = tempfile.mkdtemp(prefix='hw-restore-')
+    try:
+        upload = os.path.join(tmp_dir, 'upload.bin')
+        file_storage.save(upload)
+        db_path = os.path.join(tmp_dir, 'staged.db')
+        if not zipfile.is_zipfile(upload):
+            os.replace(upload, db_path)
+            return tmp_dir, db_path, {}
+        av_dir = os.path.join(tmp_dir, 'avatars')
+        fi_dir = os.path.join(tmp_dir, 'foodimg')
+        bi_dir = os.path.join(tmp_dir, 'bikeimg')
+        ri_dir = os.path.join(tmp_dir, 'rideimg')
+        os.makedirs(ri_dir)
+        os.makedirs(av_dir)
+        os.makedirs(fi_dir)
+        os.makedirs(bi_dir)
+        found_db, n_av, n_fi, n_bi, n_ri = False, 0, 0, 0, 0
+        with zipfile.ZipFile(upload) as zf:
+            for info in zf.infolist():
+                if info.filename == 'headwind.db':
+                    _copy_member(zf, info, db_path, MAX_DB_BYTES)
+                    found_db = True
+                elif (m := _AVATAR_RE.match(info.filename)):
+                    n_av += 1
+                    if n_av > MAX_AVATARS:
+                        raise BackupError('too many avatar files')
+                    _copy_member(zf, info, os.path.join(av_dir, m.group(1)), MAX_AVATAR_BYTES)
+                elif (m := _FOODIMG_RE.match(info.filename)):
+                    n_fi += 1
+                    if n_fi > MAX_FOODIMGS:
+                        raise BackupError('too many food images')
+                    _copy_member(zf, info, os.path.join(fi_dir, m.group(1)), MAX_FOODIMG_BYTES)
+                elif (m := _BIKEIMG_RE.match(info.filename)):
+                    n_bi += 1
+                    if n_bi > MAX_BIKEIMGS:
+                        raise BackupError('too many bike pictures')
+                    _copy_member(zf, info, os.path.join(bi_dir, m.group(1)), MAX_BIKEIMG_BYTES)
+                elif (m := _RIDEIMG_RE.match(info.filename)):
+                    n_ri += 1
+                    if n_ri > MAX_RIDEIMGS:
+                        raise BackupError('too many ride pictures')
+                    _copy_member(zf, info, os.path.join(ri_dir, m.group(1)), MAX_RIDEIMG_BYTES)
+                # anything else in the archive is ignored
+        if not found_db:
+            raise BackupError('Invalid backup zip — headwind.db not found inside.')
+        os.remove(upload)
+        return tmp_dir, db_path, {'avatars': av_dir, 'foodimg': fi_dir, 'bikeimg': bi_dir, 'rideimg': ri_dir}
+    except Exception:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise
+
+
+def validate(db_path):
+    """Returns rider_count; raises BackupError if the file is not a sound Headwind database."""
+    try:
+        conn = sqlite3.connect(f'file:{db_path}?mode=ro', uri=True)
+        try:
+            if conn.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
+                raise BackupError('Backup database failed its integrity check.')
+            tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            if not REQUIRED_TABLES.issubset(tables):
+                raise BackupError(f'Invalid backup — missing tables: {REQUIRED_TABLES - tables}')
+            return conn.execute('SELECT COUNT(*) FROM Rider').fetchone()[0]
+        finally:
+            conn.close()
+    except sqlite3.DatabaseError as e:
+        raise BackupError(f'Not a valid SQLite database: {e}')
+
+
+SMOKE_QUERIES = (
+    'SELECT id, name FROM Rider LIMIT 1',
+    'SELECT id, riderId, startDateLocal, distance, streams FROM Activity LIMIT 1',
+    'SELECT * FROM Settings LIMIT 1',
+)
+
+
+def prepare(staged_db):
+    """Migrate the *staged* database to the current schema and smoke-test it, so a backup this version can't use is
+    rejected before anything live is touched. Run after validate(), before apply()."""
+    from flask import Flask
+    from database import close_db, get_db, migrate_db
+    app = Flask(__name__)
+    app.config['DATABASE'] = staged_db
+    app.teardown_appcontext(close_db)
+    try:
+        with app.app_context():
+            migrate_db()
+            db = get_db()
+            for q in SMOKE_QUERIES:
+                db.execute(q).fetchone()
+            db.commit()
+    except Exception as e:
+        raise BackupError(f'This backup is not compatible with this version of Headwind ({e}). Nothing was changed.')
+    validate(staged_db)
+
+
+def apply(live_db, staged_db, assets, avatar_dest):
+    """Snapshot the live DB to <live>.pre-restore (consistent, includes WAL), copy the photo files, and only then swap
+    the (already migrated) staged DB in via the backup API in one atomic step. The DB swap is last on purpose: if
+    anything earlier fails the live database has not been touched, so there is nothing to roll back."""
+    snap = sqlite3.connect(live_db + '.pre-restore')
+    live = sqlite3.connect(live_db, timeout=60)
+    try:
+        live.backup(snap)
+    finally:
+        snap.close()
+        live.close()
+    for key, dest in (('avatars', avatar_dest), ('foodimg', os.path.join(os.path.dirname(os.path.abspath(live_db)), 'foodimg')),
+                      ('bikeimg', os.path.join(os.path.dirname(os.path.abspath(live_db)), 'bikeimg')),
+                      ('rideimg', os.path.join(os.path.dirname(os.path.abspath(live_db)), 'rideimg'))):
+        src_dir = (assets or {}).get(key)
+        if src_dir and os.path.isdir(src_dir):
+            os.makedirs(dest, exist_ok=True)
+            for name in os.listdir(src_dir):
+                shutil.copy2(os.path.join(src_dir, name), os.path.join(dest, name))
+    src = sqlite3.connect(f'file:{staged_db}?mode=ro', uri=True)
+    dst = sqlite3.connect(live_db, timeout=60)
+    try:
+        src.backup(dst)
+    finally:
+        src.close()
+        dst.close()

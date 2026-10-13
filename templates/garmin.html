@@ -1,0 +1,226 @@
+{% extends 'base.html' %}
+
+{% block title %}Recovery{% endblock %}
+{% block page_title %}Recovery{% endblock %}
+
+{% block topbar_actions %}
+<div style="display:flex; gap:0.4rem; align-items:center;">
+  {% for d in [30, 60, 90] %}
+  <a href="?days={{ d }}" class="rc-pill {{ 'on' if days == d }}">{{ d }}d</a>
+  {% endfor %}
+  <button class="rc-pill" id="syncBtn" onclick="doSync()">Sync</button>
+  <span id="syncStatus" style="font-size:0.75rem; color:var(--text-muted);"></span>
+</div>
+{% endblock %}
+
+{% block head %}
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    .rc-pill { display:inline-flex; align-items:center; padding:.34rem .8rem; border-radius:999px; border:1px solid var(--hair); background:var(--surface-hi); color:var(--text-muted);
+               font-size:.8125rem; font-weight:600; text-decoration:none; cursor:pointer; font-family:inherit; }
+    .rc-pill.on { background:rgba(255,90,31,.14); border-color:var(--accent); color:var(--text); }
+    .rc-hero { display:grid; grid-template-columns:auto 1fr; gap:1.4rem; align-items:center; margin-bottom:1rem; }
+    @media (max-width:560px) { .rc-hero { grid-template-columns:1fr; justify-items:center; text-align:center; } }
+    .ring { position:relative; width:168px; height:168px; }
+    .ring svg { width:100%; height:100%; transform:rotate(-90deg); }
+    .ring .v { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+    .ring .v b { font-size:2.6rem; letter-spacing:-.03em; line-height:1; }
+    .ring .v span { font-size:.6875rem; letter-spacing:.1em; text-transform:uppercase; color:var(--text-muted); font-weight:600; margin-top:.3rem; }
+    .rc-read h2 { margin:0 0 .3rem; font-size:1.25rem; letter-spacing:-.01em; }
+    .rc-read p { margin:0; color:var(--text-muted); font-size:.875rem; line-height:1.5; }
+    .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:.7rem; margin-bottom:1.1rem; }
+    .tile { background:var(--card-bg); border:1px solid var(--hair); border-radius:var(--r-tile); padding:.85rem 1rem; box-shadow:var(--shadow); }
+    .tile .l { font-size:.6875rem; letter-spacing:.09em; text-transform:uppercase; color:var(--text-muted); font-weight:600; }
+    .tile .n { font-size:1.55rem; font-weight:700; letter-spacing:-.02em; margin-top:.2rem; }
+    .tile .n small { font-size:.78rem; font-weight:600; color:var(--text-muted); margin-left:.15rem; }
+    .tile .d { font-size:.75rem; margin-top:.1rem; color:var(--text-muted); }
+    .tile .d.good { color:#34d399; } .tile .d.bad { color:#f59e0b; }
+    .rc-tabs { display:flex; gap:.25rem; padding:.3rem; background:var(--card-bg); border:1px solid var(--hair); border-radius:999px; margin-bottom:1.1rem; position:sticky; top:56px; z-index:20; backdrop-filter:blur(10px); }
+    .rc-tab { flex:1; text-align:center; padding:.55rem .4rem; border-radius:999px; font-size:.8125rem; font-weight:600; color:var(--text-muted); cursor:pointer; border:0; background:transparent; font-family:inherit; }
+    .rc-tab.on { background:var(--accent); color:#fff; box-shadow:0 4px 14px rgba(255,90,31,.3); }
+    .rc-panel { display:none; } .rc-panel.on { display:block; }
+    .rc-card { margin-bottom:1rem; }
+    .rc-card .card-title { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:.15rem; }
+    .rc-card .card-title em { font-style:normal; font-size:.75rem; font-weight:500; letter-spacing:0; text-transform:none; color:var(--text-muted); }
+    .rc-card .sub { font-size:.8125rem; color:var(--text-muted); margin:0 0 .7rem; }
+    .cbox { position:relative; height:clamp(200px,22vw,280px); }
+    .rc-grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1rem; } .rc-grid .rc-card { margin:0; }
+    @media (max-width:900px) { .rc-grid { grid-template-columns:1fr; } }
+    .log-row { display:grid; grid-template-columns:7.5rem repeat(6, minmax(0,1fr)); gap:.5rem; padding:.7rem 0; border-top:1px solid var(--hair); align-items:center; font-size:.875rem; }
+    .log-row:first-of-type { border-top:0; }
+    .log-row.head { color:var(--text-muted); font-size:.6875rem; letter-spacing:.08em; text-transform:uppercase; font-weight:600; border-top:0; }
+    .log-row .c { text-align:right; font-variant-numeric:tabular-nums; }
+    .log-row .dt { font-weight:600; }
+    .g { color:#34d399; } .a { color:#f59e0b; } .r { color:#f87171; } .mu { color:var(--text-muted); }
+    @media (max-width:640px) {
+      .log-row { grid-template-columns:repeat(3, 1fr); row-gap:.45rem; }
+      .log-row.head { display:none; }
+      .log-row .dt { grid-column:1 / -1; }
+      .log-row .c { text-align:left; }
+      .log-row .c::before { content:attr(data-l); display:block; font-size:.625rem; letter-spacing:.08em; text-transform:uppercase; color:var(--text-muted); font-weight:600; }
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+
+{% if not table_rows %}
+<div class="card" style="color:var(--text-muted);">
+  No Garmin data yet for this period. Hit <strong>Sync</strong> above, or configure credentials in
+  <a href="/settings" style="color:var(--accent);">Settings</a>.
+</div>
+{% else %}
+
+{# ── readiness ── #}
+{% set bb = body_battery %}
+{% set bbc = '#ef4444' if (bb or 0) < 25 else ('#f59e0b' if (bb or 0) < 50 else '#22c55e') %}
+{% set rhr_t = tiles | selectattr('key', 'equalto', 'rhr') | first %}
+{% set sl_t = tiles | selectattr('key', 'equalto', 'sleep') | first %}
+<div class="card rc-hero">
+  <div class="ring">
+    <svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" fill="none" stroke="#222a32" stroke-width="10"/>
+      <circle cx="60" cy="60" r="52" fill="none" stroke="{{ bbc }}" stroke-width="10" stroke-linecap="round" stroke-dasharray="{{ ((bb or 0) / 100 * 326.7) | round(1) }} 326.7"/></svg>
+    <div class="v"><b>{{ bb if bb is not none else '–' }}</b><span>Body battery</span></div>
+  </div>
+  <div class="rc-read">
+    <h2>{% if bb is none %}No body battery yet{% elif bb >= 75 %}Well recovered{% elif bb >= 50 %}Reasonably fresh{% elif bb >= 25 %}Running a bit low{% else %}Running on empty{% endif %}</h2>
+    <p>
+      {% if latest_day %}Latest reading {{ latest_day | fmt_date }}.{% endif %}
+      {% if rhr_t %} Resting heart rate {{ rhr_t.value }} bpm{% if rhr_t.diff %}, {{ rhr_t.diff | abs }} {{ 'above' if rhr_t.diff > 0 else 'below' }} your {{ days }}-day average{% endif %}.{% endif %}
+      {% if sl_t %} Sleep {{ sl_t.value }}h last night against an average of {{ sl_t.avg }}h.{% endif %}
+      {% if ride_days %} You trained on {{ ride_days }} of the last {{ days }} days.{% endif %}
+    </p>
+  </div>
+</div>
+
+<div class="tiles">
+  {% for t in tiles %}
+  <div class="tile"><div class="l">{{ t.label }}</div>
+    <div class="n">{{ '{:,}'.format(t.value) if t.value is integer else t.value }}<small>{{ t.unit }}</small></div>
+    <div class="d {{ 'good' if t.good == true else 'bad' if t.good == false }}">{% if t.diff %}{{ '+' if t.diff > 0 }}{{ t.diff }} vs avg {{ '{:,}'.format(t.avg) if t.avg is integer else t.avg }}{% else %}in line with average{% endif %}</div></div>
+  {% endfor %}
+</div>
+
+<div class="rc-tabs" role="tablist">
+  <button class="rc-tab on" data-tab="today">Today</button>
+  <button class="rc-tab" data-tab="trends">Trends</button>
+  <button class="rc-tab" data-tab="log">Daily log</button>
+</div>
+
+<section class="rc-panel on" id="p-today">
+  {% if today_hr_stream or today_bb_stream %}
+  <div class="rc-grid">
+    <div class="card rc-card"><div class="card-title"><span>Heart rate</span>{% if today_intraday_date %}<em>{{ today_intraday_date | fmt_date }}</em>{% endif %}</div><div class="cbox"><canvas id="hrIntradayChart"></canvas></div></div>
+    <div class="card rc-card"><div class="card-title"><span>Body battery</span>{% if today_intraday_date %}<em>{{ today_intraday_date | fmt_date }}</em>{% endif %}</div><div class="cbox"><canvas id="bbIntradayChart"></canvas></div></div>
+  </div>
+  {% else %}
+  <div class="card rc-card"><p class="sub" style="margin:0">No intraday heart rate or body battery yet. They arrive with the next Garmin sync.</p></div>
+  {% endif %}
+</section>
+
+<section class="rc-panel" id="p-trends">
+  <p class="sub" style="margin:0 0 .6rem .2rem; font-size:.75rem; color:var(--text-muted);">Orange bands are days you trained.</p>
+  <div class="rc-card card"><div class="card-title"><span>Resting heart rate</span></div><p class="sub">Lower is fitter and fresher.</p><div class="cbox"><canvas id="rhrChart"></canvas></div></div>
+  <div class="rc-card card"><div class="card-title"><span>Body battery</span></div><p class="sub">The day's reading.</p><div class="cbox"><canvas id="batteryChart"></canvas></div></div>
+  <div class="rc-grid">
+    <div class="card rc-card"><div class="card-title"><span>Sleep</span></div><p class="sub">Hours a night; amber is under 7.</p><div class="cbox"><canvas id="sleepChart"></canvas></div></div>
+    <div class="card rc-card"><div class="card-title"><span>Stress</span></div><p class="sub">Lower is calmer.</p><div class="cbox"><canvas id="stressChart"></canvas></div></div>
+  </div>
+  <div class="card rc-card"><div class="card-title"><span>Steps</span></div><p class="sub">Daily total.</p><div class="cbox"><canvas id="stepsChart"></canvas></div></div>
+</section>
+
+<section class="rc-panel" id="p-log">
+  <div class="card rc-card">
+    <div class="log-row head"><div>Date</div><div class="c">Resting HR</div><div class="c">HRV</div><div class="c">Sleep</div><div class="c">Sleep score</div><div class="c">Battery</div><div class="c">Steps</div></div>
+    {% for r in table_rows %}
+    <div class="log-row">
+      <div class="dt">{{ r.date | fmt_date }}</div>
+      <div class="c {{ 'r' if r.restingHR and r.restingHR > 65 else 'a' if r.restingHR and r.restingHR > 58 else 'g' if r.restingHR else 'mu' }}" data-l="Resting HR">{{ r.restingHR ~ ' bpm' if r.restingHR else '–' }}</div>
+      <div class="c {{ '' if r.hrv else 'mu' }}" data-l="HRV">{{ r.hrv or '–' }}</div>
+      <div class="c {{ '' if r.sleepHours else 'mu' }}" data-l="Sleep">{{ (r.sleepHours ~ 'h') if r.sleepHours else '–' }}</div>
+      <div class="c {{ '' if r.sleepScore else 'mu' }}" data-l="Sleep score">{{ r.sleepScore or '–' }}</div>
+      <div class="c {{ 'r' if r.bodyBattery and r.bodyBattery < 25 else 'a' if r.bodyBattery and r.bodyBattery < 50 else 'g' if r.bodyBattery else 'mu' }}" data-l="Battery">{{ (r.bodyBattery ~ '%') if r.bodyBattery else '–' }}</div>
+      <div class="c {{ '' if r.steps else 'mu' }}" data-l="Steps">{{ '{:,}'.format(r.steps) if r.steps else '–' }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const GRID = 'rgba(255,255,255,0.06)', MUTED = '#8d98a3';
+Chart.defaults.color = MUTED; Chart.defaults.borderColor = GRID;
+Chart.defaults.font.family = getComputedStyle(document.body).fontFamily; Chart.defaults.font.size = 11;
+Chart.defaults.maintainAspectRatio = false; Chart.defaults.animation = false;
+Chart.defaults.plugins.legend.display = false;
+Chart.defaults.plugins.tooltip.backgroundColor = '#222a32'; Chart.defaults.plugins.tooltip.padding = 10; Chart.defaults.plugins.tooltip.cornerRadius = 10; Chart.defaults.plugins.tooltip.displayColors = false;
+const el = id => document.getElementById(id);
+const built = {}; const builders = {};
+
+function tsToTime(ms) { return new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); }
+function grad(ctx, color) { const g = ctx.createLinearGradient(0, 0, 0, ctx.canvas.clientHeight || 220); g.addColorStop(0, color + '55'); g.addColorStop(1, color + '00'); return g; }
+
+// ── intraday ──
+const hrIntraday = {{ today_hr_stream | tojson }}, bbIntraday = {{ today_bb_stream | tojson }};
+function intraday(id, data, color, yMin, yMax, unit) {
+  const c = el(id); if (!c || !data.length) return;
+  new Chart(c, { type: 'line', data: { labels: data.map(p => p[0]), datasets: [{ data: data.map(p => p[1]), borderColor: color, borderWidth: 2.5, pointRadius: 0, tension: .3, fill: true, backgroundColor: grad(c.getContext('2d'), color) }] },
+    options: { interaction: { mode: 'index', intersect: false },
+      plugins: { tooltip: { callbacks: { title: c => tsToTime(c[0].label * 1), label: c => c.parsed.y + unit } } },
+      scales: { x: { grid: { display: false }, border: { display: false }, ticks: { maxRotation: 0, maxTicksLimit: 6, callback: function (v) { return tsToTime(this.getLabelForValue(v) * 1); } } },
+                y: { min: yMin, max: yMax, grid: { color: GRID }, border: { display: false }, ticks: { maxTicksLimit: 5 } } } } });
+}
+builders.today = function () { intraday('hrIntradayChart', hrIntraday, '#ef5350', 30, 200, ' bpm'); intraday('bbIntradayChart', bbIntraday, '#22c55e', 0, 100, '%'); };
+
+// ── multi-day ──
+const labels = {{ labels | tojson }}, rideData = {{ has_ride | tojson }};
+const short = labels.map(d => new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }));
+const rideBands = { id: 'rideBands', beforeDatasetsDraw(chart) {
+  const { ctx, chartArea: a, scales: { x } } = chart; if (!a) return;
+  const w = Math.max(3, (a.right - a.left) / labels.length); ctx.save(); ctx.fillStyle = 'rgba(255,90,31,0.14)';
+  rideData.forEach((v, i) => { if (v) ctx.fillRect(x.getPixelForValue(i) - w / 2, a.top, w, a.bottom - a.top); }); ctx.restore(); } };
+function opts(unit, extra) {
+  return Object.assign({ interaction: { mode: 'index', intersect: false },
+    plugins: { tooltip: { callbacks: { label: c => c.raw === null ? 'no data' : c.raw.toLocaleString() + unit } } },
+    scales: { x: { grid: { display: false }, border: { display: false }, ticks: { maxRotation: 0, maxTicksLimit: 7 } }, y: { grid: { color: GRID }, border: { display: false }, ticks: { maxTicksLimit: 5 } } } }, extra || {});
+}
+function line(id, data, color, unit, yopts) {
+  const c = el(id); const o = opts(unit); Object.assign(o.scales.y, yopts || {});
+  new Chart(c, { type: 'line', data: { labels: short, datasets: [{ data, borderColor: color, borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 4, tension: .35, spanGaps: true, fill: true, backgroundColor: grad(c.getContext('2d'), color) }] }, options: o, plugins: [rideBands] });
+}
+function bars(id, data, colors, unit, yopts) {
+  const o = opts(unit); Object.assign(o.scales.y, yopts || { beginAtZero: true });
+  new Chart(el(id), { type: 'bar', data: { labels: short, datasets: [{ data, backgroundColor: colors, borderRadius: 4, borderSkipped: false, maxBarThickness: 18 }] }, options: o, plugins: [rideBands] });
+}
+builders.trends = function () {
+  const sleep = {{ sleep | tojson }}, steps = {{ steps | tojson }};
+  line('rhrChart', {{ rhr | tojson }}, '#ff5a1f', ' bpm', { suggestedMin: 40 });
+  line('batteryChart', {{ battery | tojson }}, '#22c55e', '%', { min: 0, max: 100 });
+  bars('sleepChart', sleep, sleep.map(v => v !== null && v < 7 ? '#f5a524' : '#8b7cf6'), 'h');
+  line('stressChart', {{ stress | tojson }}, '#35c2d8', '', { min: 0, max: 100 });
+  bars('stepsChart', steps, steps.map(v => v !== null && v >= 10000 ? '#22c55e' : 'rgba(53,194,216,0.75)'), ' steps');
+};
+builders.log = function () {};
+
+function showTab(n) {
+  document.querySelectorAll('.rc-tab').forEach(b => b.classList.toggle('on', b.dataset.tab === n));
+  document.querySelectorAll('.rc-panel').forEach(p => p.classList.toggle('on', p.id === 'p-' + n));
+  if (!built[n]) { built[n] = true; builders[n](); }
+  try { history.replaceState(null, '', '#' + n); } catch (e) {}
+}
+document.querySelectorAll('.rc-tab').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+if (el('p-today')) showTab(builders[location.hash.slice(1)] ? location.hash.slice(1) : 'today');
+
+function doSync() {
+  const btn = el('syncBtn'), status = el('syncStatus');
+  btn.disabled = true; status.textContent = 'Syncing…';
+  fetch('/garmin/sync', { method: 'POST' }).then(r => r.json()).then(d => {
+    if (d.error) { status.textContent = 'Error: ' + d.error; status.style.color = 'var(--danger)'; btn.disabled = false; }
+    else { status.textContent = 'Done'; status.style.color = 'var(--success)'; setTimeout(() => location.reload(), 800); }
+  }).catch(() => { status.textContent = 'Failed'; status.style.color = 'var(--danger)'; btn.disabled = false; });
+}
+</script>
+{% endblock %}

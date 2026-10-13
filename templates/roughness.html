@@ -1,0 +1,104 @@
+{% extends 'base.html' %}
+
+{% block title %}Road Roughness{% endblock %}
+{% block page_title %}Road Roughness{% endblock %}
+
+{% block head %}
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    #roughMap { height: calc(100vh - 210px); min-height: 420px; width: 100%; border-radius: 10px; }
+    .rg-bar { display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap; margin-bottom:0.75rem; }
+    .rg-chip { font-size:0.75rem; padding:0.2rem 0.6rem; border-radius:999px; border:1px solid #2c363f; background:transparent; color:var(--text-muted); cursor:pointer; }
+    .rg-chip.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .rg-legend { display:flex; gap:0.9rem; flex-wrap:wrap; font-size:0.75rem; color:var(--text-muted); align-items:center; }
+    .rg-legend i { display:inline-block; width:12px; height:12px; border-radius:3px; margin-right:4px; vertical-align:-1px; }
+    .rg-worst a { color:var(--text); text-decoration:none; }
+  </style>
+{% endblock %}
+
+{% block content %}
+<div class="rg-bar">
+  <span style="font-size:0.8125rem; color:var(--text-muted);">Show</span>
+  <button class="rg-chip active" data-since="" onclick="setSince(this)">All rides</button>
+  <button class="rg-chip" data-since="90" onclick="setSince(this)">Last 90 days</button>
+  <button class="rg-chip" data-since="30" onclick="setSince(this)">Last 30 days</button>
+  <label style="font-size:0.8125rem; color:var(--text-muted); margin-left:0.5rem;"><input type="checkbox" id="pocket" onchange="load()"> include phone-in-pocket rides</label>
+  <span id="rgCount" style="margin-left:auto; font-size:0.8125rem; color:var(--text-muted);"></span>
+</div>
+
+<div id="rgEmpty" class="card" style="display:none; max-width:640px;">
+  <div class="card-title">No roughness data yet</div>
+  <p style="color:var(--text-muted); line-height:1.7; font-size:0.9375rem; margin:0;">
+    Record a ride in the Headwind Android app with <strong style="color:var(--text);">Record phone sensors</strong> on (phone on the handlebars or frame gives the cleanest result; a pocket works but is left out by default).
+    Each ride lays down a colour per 20 m of road, and rides over the same road average out. {{ recordings }} sensor recording{{ '' if recordings == 1 else 's' }} so far.
+  </p>
+</div>
+
+<div id="rgMain">
+  <div id="roughMap"></div>
+  <div class="rg-legend" style="margin-top:0.75rem;" id="rgLegend"></div>
+  <div class="card" style="margin-top:1rem;">
+    <div class="card-title">Roughest spots</div>
+    <div id="rgWorst" class="rg-worst" style="font-size:0.875rem;"></div>
+    <p style="color:var(--text-muted); font-size:0.75rem; margin:0.7rem 0 0; line-height:1.5;">Readings are scaled to a steady 18 mph so a fast descent does not look rougher than it is, and averaged per 20 m of road. Colours are relative to your own roads: the red end is your roughest 5%.</p>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var map = L.map('roughMap', { zoomControl: true });
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics' }).addTo(map);
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, opacity: 1 }).addTo(map);
+var layer = L.layerGroup().addTo(map), fitted = false, since = '';
+var COLOURS = ['#22c55e', '#a3e635', '#fbbf24', '#fb923c', '#ef4444'], NAMES = ['smooth', 'good', 'ok', 'rough', 'roughest'];
+
+function setSince(btn) {
+  document.querySelectorAll('.rg-chip').forEach(function(b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  var d = btn.getAttribute('data-since');
+  since = d ? new Date(Date.now() - d * 864e5).toISOString().slice(0, 10) : '';
+  load();
+}
+
+function dotRadius() { var z = map.getZoom(); return z >= 17 ? 12 : z >= 15 ? 7 : z >= 13 ? 4.5 : 3; }
+map.on('zoomend', function() { layer.eachLayer(function(l) { l.setRadius(dotRadius()); }); });
+
+function colour(r, b) { for (var i = 0; i < b.length; i++) { if (r < b[i]) return COLOURS[i]; } return COLOURS[COLOURS.length - 1]; }
+
+function load() {
+  var q = [];
+  if (since) q.push('since=' + since);
+  if (document.getElementById('pocket').checked) q.push('pocket=1');
+  fetch('/roughness/data?' + q.join('&')).then(function(r) { return r.json(); }).then(function(d) {
+    layer.clearLayers();
+    var cells = d.cells || [], s = d.summary || {};
+    document.getElementById('rgEmpty').style.display = cells.length ? 'none' : 'block';
+    document.getElementById('rgMain').style.display = cells.length ? 'block' : 'none';
+    if (cells.length) map.invalidateSize();           // the map was hidden (zero size) while there was nothing to show, so its tiles must be re-measured
+    document.getElementById('rgCount').textContent = cells.length ? s.km + ' km of road · ' + cells.length + ' cells' : '';
+    if (!cells.length) { fitted = false; return; }
+    var b = s.breaks, bounds = [];
+    cells.forEach(function(c) {
+      var col = colour(c.r, b);
+      L.circleMarker([c.lat, c.lng], { radius: dotRadius(), stroke: false, fillColor: col, fillOpacity: Math.min(0.9, 0.45 + c.n / 20) })
+        .bindTooltip('Roughness ' + c.r + ' · ' + c.n + ' s over ' + c.rides + ' ride' + (c.rides === 1 ? '' : 's')).addTo(layer);
+      bounds.push([c.lat, c.lng]);
+    });
+    if (!fitted) { map.fitBounds(bounds, { padding: [30, 30] }); fitted = true; }
+    else map.invalidateSize();
+    setTimeout(function() { map.invalidateSize(); }, 150);
+    document.getElementById('rgLegend').innerHTML = COLOURS.map(function(c, i) {
+      var lo = i === 0 ? 0 : b[i - 1], hi = i < b.length ? b[i] : s.max;
+      return '<span><i style="background:' + c + '"></i>' + NAMES[i] + ' ' + lo + '–' + hi + '</span>';
+    }).join('');
+    document.getElementById('rgWorst').innerHTML = (s.worst || []).map(function(c, i) {
+      return '<div style="padding:0.3rem 0; border-top:1px solid #232b33;"><a href="#" onclick="map.setView([' + c.lat + ',' + c.lng + '], 18); return false;">' +
+        (i + 1) + '. ' + c.lat.toFixed(5) + ', ' + c.lng.toFixed(5) + '</a> <span style="color:var(--text-muted);">· roughness ' + c.r + ' · ' + c.n + ' s · ' + c.rides + ' ride' + (c.rides === 1 ? '' : 's') + '</span></div>';
+    }).join('');
+  });
+}
+load();
+</script>
+{% endblock %}

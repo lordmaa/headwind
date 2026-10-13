@@ -1,0 +1,484 @@
+{% extends 'base.html' %}
+
+{% block title %}Stats{% endblock %}
+{% block page_title %}Stats{% endblock %}
+
+{% block head %}
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    .st-chips { display:flex; gap:.5rem; overflow-x:auto; padding:.15rem 0 .35rem; scrollbar-width:none; -webkit-overflow-scrolling:touch; }
+    .st-chips::-webkit-scrollbar { display:none; }
+    .st-chip { flex:0 0 auto; display:inline-flex; align-items:center; gap:.5rem; padding:.42rem .95rem; border-radius:999px; border:1px solid var(--hair);
+               background:var(--surface-hi); color:var(--text-muted); font-size:.8125rem; font-weight:600; text-decoration:none; white-space:nowrap; }
+    .st-chip.on { background:rgba(255,90,31,.14); border-color:var(--accent); color:var(--text); }
+    .st-chip .ri { width:22px; height:22px; border-radius:50%; object-fit:cover; display:inline-flex; align-items:center; justify-content:center; background:var(--surface-hi2); font-size:.7rem; }
+    .st-row { margin-bottom:.7rem; }
+    .st-cap { font-size:.6875rem; letter-spacing:.09em; text-transform:uppercase; color:var(--text-muted); font-weight:600; margin:0 0 .35rem .15rem; }
+
+    .kpis { display:grid; grid-template-columns:repeat(3,1fr); gap:.7rem; margin:1rem 0 1.1rem; }
+    .kpi { background:var(--card-bg); border:1px solid var(--hair); border-radius:var(--r-tile); padding:.9rem 1rem; box-shadow:var(--shadow); min-width:0; }
+    .kpi .k-l { font-size:.6875rem; letter-spacing:.09em; text-transform:uppercase; color:var(--text-muted); font-weight:600; }
+    .kpi .k-v { font-size:1.65rem; font-weight:700; letter-spacing:-.02em; line-height:1.15; margin-top:.2rem; }
+    .kpi .k-v small { font-size:.8rem; font-weight:600; color:var(--text-muted); margin-left:.15rem; letter-spacing:0; }
+    .kpi .k-d { font-size:.75rem; margin-top:.15rem; color:var(--text-muted); }
+    .kpi .up { color:#34d399; } .kpi .down { color:#f87171; }
+    .kpi.lead { border-color:rgba(255,90,31,.35); background:linear-gradient(160deg, rgba(255,90,31,.14), var(--card-bg) 70%); }
+    .kpi.lead .k-v { color:var(--accent); }
+    @media (max-width:560px) { .kpis { grid-template-columns:repeat(2,1fr); } .kpi .k-v { font-size:1.45rem; } }
+
+    .st-tabs { display:flex; gap:.25rem; padding:.3rem; background:var(--card-bg); border:1px solid var(--hair); border-radius:999px; margin-bottom:1.1rem; position:sticky; top:56px; z-index:20; backdrop-filter:blur(10px); }
+    .st-tab { flex:1; text-align:center; padding:.55rem .4rem; border-radius:999px; font-size:.8125rem; font-weight:600; color:var(--text-muted); cursor:pointer; border:0; background:transparent; font-family:inherit; }
+    .st-tab.on { background:var(--accent); color:#fff; box-shadow:0 4px 14px rgba(255,90,31,.3); }
+    .st-panel { display:none; } .st-panel.on { display:block; }
+
+    .cbox { position:relative; width:100%; }
+    .cbox-wide { height:clamp(220px,22vw,320px); } .cbox-half { height:clamp(220px,22vw,300px); } .cbox-scatter { height:clamp(260px,26vw,400px); }
+    .st-grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1rem; }
+    @media (max-width:900px) { .st-grid { grid-template-columns:1fr; } }
+    .st-card { margin-bottom:1rem; }
+    .st-card .card-title { margin-bottom:.15rem; }
+    .st-card .sub { font-size:.8125rem; color:var(--text-muted); margin:0 0 .7rem; line-height:1.45; }
+    .st-card .big { font-size:1.5rem; font-weight:700; letter-spacing:-.02em; }
+
+    .rec-head { display:flex; align-items:center; justify-content:space-between; gap:.75rem; flex-wrap:wrap; margin-bottom:.8rem; }
+    .rec-head .card-title { margin:0; }
+    .rec { display:grid; grid-template-columns:64px minmax(0,1fr) auto; align-items:center; gap:.85rem; padding:.8rem 0; border-top:1px solid var(--hair); }
+    .rec:first-child { border-top:0; }
+    .rec .d { font-size:1.05rem; font-weight:700; }
+    .rec .d small { display:block; font-size:.6875rem; font-weight:600; color:var(--text-muted); letter-spacing:.06em; text-transform:uppercase; }
+    .rec .m { min-width:0; } .rec .m a { color:var(--text); text-decoration:none; font-weight:600; font-size:.9rem; display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .rec .m span { font-size:.75rem; color:var(--text-muted); }
+    .rec .v { text-align:right; font-size:1.25rem; font-weight:700; color:var(--accent); font-variant-numeric:tabular-nums; }
+    .rec .v small { display:block; font-size:.75rem; font-weight:500; color:var(--text-muted); }
+    .rec-empty { color:var(--text-muted); font-size:.875rem; padding:.6rem 0; }
+
+    .heatmap-wrap { overflow-x:auto; padding-bottom:.5rem; }
+    .legend-row { display:flex; align-items:center; gap:6px; margin-top:.75rem; font-size:.75rem; color:var(--text-muted); flex-wrap:wrap; }
+    .legend-cell { width:12px; height:12px; border-radius:3px; flex-shrink:0; }
+  </style>
+{% endblock %}
+
+{% block content %}
+{% macro href(r=None, y=None, s=None) -%}
+{%- set q = [] -%}{%- if r %}{% set _ = q.append('rider=' ~ r) %}{% endif -%}{%- if y %}{% set _ = q.append('year=' ~ y) %}{% endif -%}{%- if s %}{% set _ = q.append('sport=' ~ (s | urlencode)) %}{% endif -%}
+/data{{ '?' ~ q | join('&') if q }}
+{%- endmacro %}
+
+{% if all_riders | length > 1 %}
+<div class="st-row"><div class="st-chips">
+  {% for r in all_riders %}
+  <a class="st-chip {{ 'on' if r.id == active_rider.id }}" href="{{ href(r.id if not r.isDefault else None, year, sport) }}">
+    {% if r.avatarPath %}<img class="ri" src="{{ url_for('static', filename='avatars/' + r.avatarPath) }}">{% else %}<span class="ri">{{ r.name[0] | upper }}</span>{% endif %}{{ r.name }}
+  </a>
+  {% endfor %}
+</div></div>
+{% endif %}
+
+<div class="st-row"><div class="st-chips">
+  <a class="st-chip {{ 'on' if not year }}" href="{{ href(active_rider.id if not active_rider.isDefault else None, None, sport) }}">All time</a>
+  {% for y in years %}<a class="st-chip {{ 'on' if y == year }}" href="{{ href(active_rider.id if not active_rider.isDefault else None, y, sport) }}">{{ y }}</a>{% endfor %}
+</div></div>
+
+{% if sport_types | length > 1 %}
+<div class="st-row"><div class="st-chips">
+  <a class="st-chip {{ 'on' if not sport }}" href="{{ href(active_rider.id if not active_rider.isDefault else None, year, None) }}">All sports</a>
+  {% for st in sport_types %}<a class="st-chip {{ 'on' if sport == st.sportType }}" href="{{ href(active_rider.id if not active_rider.isDefault else None, year, st.sportType) }}">{{ st.sportType }}</a>{% endfor %}
+</div></div>
+{% endif %}
+
+{% macro delta(cur, prev, unit='', lower_better=False) -%}
+  {%- if prev_totals and prev -%}
+    {%- set d = cur - prev -%}{%- set pct = ((d / prev) * 100) | round | int -%}
+    {%- if d != 0 -%}<div class="k-d {{ 'up' if (d > 0) != lower_better else 'down' }}">{{ '+' if d > 0 }}{{ pct }}% vs {{ (year | int) - 1 }}</div>{%- else -%}<div class="k-d">same as {{ (year | int) - 1 }}</div>{%- endif -%}
+  {%- else -%}<div class="k-d">&nbsp;</div>{%- endif -%}
+{%- endmacro %}
+
+<div class="kpis">
+  <div class="kpi lead"><div class="k-l">Distance</div><div class="k-v">{{ '{:,}'.format(totals.miles) }}<small>mi</small></div>{{ delta(totals.miles, prev_totals.miles if prev_totals else 0) }}</div>
+  <div class="kpi"><div class="k-l">Activities</div><div class="k-v">{{ '{:,}'.format(totals.rides) }}</div>{{ delta(totals.rides, prev_totals.rides if prev_totals else 0) }}</div>
+  <div class="kpi"><div class="k-l">Time</div><div class="k-v">{{ '{:,}'.format(totals.hours) }}<small>h</small></div>{{ delta(totals.hours, prev_totals.hours if prev_totals else 0) }}</div>
+  <div class="kpi"><div class="k-l">Climbing</div><div class="k-v">{{ '{:,}'.format(totals.climb_ft) }}<small>ft</small></div>{{ delta(totals.climb_ft, prev_totals.climb_ft if prev_totals else 0) }}</div>
+  <div class="kpi"><div class="k-l">Avg speed</div><div class="k-v">{{ totals.mph }}<small>mph</small></div>{{ delta(totals.mph, prev_totals.mph if prev_totals else 0) }}</div>
+  <div class="kpi"><div class="k-l">Longest</div><div class="k-v">{{ totals.longest_mi }}<small>mi</small></div>{{ delta(totals.longest_mi, prev_totals.longest_mi if prev_totals else 0) }}</div>
+</div>
+
+<div class="st-tabs" role="tablist">
+  <button class="st-tab on" data-tab="trends">Trends</button>
+  <button class="st-tab" data-tab="records">Records</button>
+  <button class="st-tab" data-tab="weather">Weather</button>
+  <button class="st-tab" data-tab="calendar">Calendar</button>
+</div>
+
+<!-- ───── Trends ───── -->
+<section class="st-panel on" id="p-trends">
+  <div class="card st-card">
+    <div class="card-title">{{ 'Distance by month, ' ~ year if year else 'Distance by year' }}</div>
+    <p class="sub">{{ 'Miles ridden each month.' if year else 'Miles ridden each year, every year on record.' }}</p>
+    <div class="cbox cbox-half"><canvas id="distChart"></canvas></div>
+  </div>
+  <div class="card st-card">
+    <div class="card-title">Year on year</div>
+    <p class="sub">Cumulative miles through the year{{ ', ' ~ year ~ ' highlighted' if year else ', this year highlighted' }}.</p>
+    <div class="cbox cbox-half"><canvas id="yoyChart"></canvas></div>
+  </div>
+  <div class="card st-card">
+    <div class="card-title">Average speed</div>
+    <p class="sub">Each dot is a ride; the line is the average of the last 20.</p>
+    <div class="cbox cbox-wide"><canvas id="speedChart"></canvas></div>
+  </div>
+  <div class="card st-card">
+    <div class="card-title">Calories per ride</div>
+    <p class="sub">The line is the average of the last 20 rides.</p>
+    <div class="cbox cbox-wide"><canvas id="calChart"></canvas></div>
+  </div>
+  <div class="st-grid">
+    <div class="card st-card" style="margin:0"><div class="card-title">Ride length</div><p class="sub">How long your rides tend to be.</p><div class="cbox cbox-half"><canvas id="histChart"></canvas></div></div>
+    <div class="card st-card" style="margin:0"><div class="card-title">Day of the week</div><p class="sub">When you ride.</p><div class="cbox cbox-half"><canvas id="dowChart"></canvas></div></div>
+  </div>
+</section>
+
+<!-- ───── Records ───── -->
+<section class="st-panel" id="p-records">
+  <div class="card st-card">
+    <div class="rec-head">
+      <div class="card-title">Best efforts</div>
+      <div class="sel-row" style="display:flex; gap:.5rem;">
+        <select id="recYear" aria-label="Year">{% for y in records_by_year | sort(reverse=true) %}<option value="{{ y }}">{{ y }}</option>{% endfor %}</select>
+        <select id="recMonth" aria-label="Month"><option value="all">All months</option></select>
+      </div>
+    </div>
+    {% if has_efforts %}
+      <div id="recList"></div>
+    {% else %}
+      <p class="rec-empty">Your fastest 5, 10, 20 miles and more. <button class="btn btn-secondary" id="effortsBtn" onclick="computeEfforts()">Find my best efforts</button></p>
+    {% endif %}
+    <div id="effortsStatus" class="rec-empty" style="display:none;"></div>
+  </div>
+
+  {% if climbing_by_year %}
+  <div class="card st-card">
+    <div class="rec-head">
+      <div class="card-title">Climbing</div>
+      <div class="sel-row" style="display:flex; gap:.5rem;">
+        <select id="climbYear" aria-label="Year">{% for y in climbing_by_year | sort(reverse=true) %}<option value="{{ y }}">{{ y }}</option>{% endfor %}</select>
+        <select id="climbMonth" aria-label="Month"><option value="all">All months</option></select>
+      </div>
+    </div>
+    <div id="climbList"></div>
+  </div>
+  {% endif %}
+</section>
+
+<!-- ───── Weather ───── -->
+<section class="st-panel" id="p-weather">
+{% if wx_temp_x %}
+  <div class="st-grid">
+    <div class="card st-card" style="margin:0"><div class="card-title">Speed and temperature</div><p class="sub">Tap a dot to open the ride.</p><div class="cbox cbox-scatter"><canvas id="wxTempChart"></canvas></div></div>
+    <div class="card st-card" style="margin:0"><div class="card-title">Speed and wind</div><p class="sub">Coloured by whether the wind was with you or against you.</p><div class="cbox cbox-scatter"><canvas id="wxWindChart"></canvas></div></div>
+  </div>
+{% if alcohol_recovery %}
+<div class="card st-card">
+  <div class="card-title">Alcohol and recovery</div>
+  {% if alcohol_recovery.enough %}
+  <p style="color:var(--text-muted); font-size:0.8125rem; line-height:1.5; margin:0 0 0.6rem;">The morning after a day with 2 or more units ({{ alcohol_recovery.drink_days }} days) against the morning after a dry day with food logged ({{ alcohol_recovery.dry_days }} days), from your Garmin data.</p>
+  <table class="table-compact" style="width:100%;">
+    <thead><tr><th></th><th>After drinking</th><th>After a dry day</th><th>Difference</th></tr></thead>
+    <tbody>
+    {% for r in alcohol_recovery.rows %}
+      {% set worse = (r.diff < 0) if r.better_when_higher else (r.diff > 0) %}
+      <tr><td>{{ r.label }}</td><td>{{ r.drink }} {{ r.unit }}</td><td>{{ r.dry }} {{ r.unit }}</td>
+          <td style="font-weight:700; color:{{ '#f87171' if worse and r.diff != 0 else '#34d399' if r.diff != 0 else 'var(--text-muted)' }};">{{ '+' if r.diff > 0 }}{{ r.diff }} {{ r.unit }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p style="color:var(--text-muted); font-size:0.75rem; margin:0.6rem 0 0; line-height:1.5;">This shows what happens, not why: a late night out is also a short night. The more days you log, the steadier the comparison.</p>
+  {% else %}
+  <p style="color:var(--text-muted); font-size:0.875rem; margin:0;">Needs a few more logged drinks to compare ({{ alcohol_recovery.drink_days }} drinking day{{ '' if alcohol_recovery.drink_days == 1 else 's' }} with recovery data so far; it starts at 5).</p>
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="card st-card">
+  <div class="card-title">Avg Speed by Weather Condition</div>
+  <div class="cbox cbox-wide"><canvas id="wxCondChart"></canvas></div>
+  <p style="color:var(--text-muted); font-size:0.75rem; margin:0.6rem 0 0; line-height:1.5;">Bars are your average speed in each condition (left axis, from zero); the dots are how many rides that is (right axis), so a condition with few rides is easy to spot. Set a ride's conditions by hand on its page.</p>
+  {% if wx_storm %}
+  {% set claimed = wx_storm | selectattr('condition', 'equalto', 'Storm') | list %}
+  {% set other = wx_storm | rejectattr('condition', 'equalto', 'Storm') | list %}
+  <details style="margin-top:0.9rem;">
+    <summary style="cursor:pointer; color:var(--accent); font-size:0.875rem;">Storm rides — {{ claimed | length }} counted as Storm{% if other %}, {{ other | length }} to review{% endif %}</summary>
+    <p style="color:var(--text-muted); font-size:0.8125rem; line-height:1.5; margin:0.5rem 0;">A storm is only a storm where you rode it, so a name alone is not enough. A ride on a day the Met Office named a storm counts as <strong>Storm</strong> when the weather at its own place and hour had gusts of 50 km/h or more; that outranks the lookup's own condition (Rain, Snow, Cloudy). Rides to review: a named-storm day with gusts of 40–49 km/h, a named day that stayed calm where you rode, and violent wind (75 km/h+) on a day with no named storm. Tap <strong>Storm</strong> to count one, or <strong>Not a storm</strong> to take one back.</p>
+    <div style="max-height:24rem; overflow:auto; font-size:0.8125rem;">
+      {% for r in claimed + other %}
+      <div id="storm_{{ r.id }}" style="display:flex; align-items:center; gap:0.6rem; padding:0.35rem 0; border-top:1px solid #232b33; flex-wrap:wrap;">
+        <a href="/rides/{{ r.id }}" style="flex:1 1 13rem;">{{ r.date_txt }} · {{ r.name or 'Ride' }}<br><span style="color:var(--text-muted);">Storm {{ r.storm }} · {{ (r.distance / 1609.344) | round(1) }} mi · {% if r.gust_kph is not none %}gusts {{ r.gust_kph | round | int }} kph{% else %}no wind data{% endif %}{% if r.condition and r.condition != 'Storm' %} · {{ r.condition }}{% endif %}</span></a>
+        {% if r.condition == 'Storm' %}
+        <button class="btn btn-secondary" style="padding:0.2rem 0.6rem;" onclick="stormPick('{{ r.id }}','notstorm')">Not a storm</button>
+        {% else %}
+        <button class="btn btn-secondary" style="padding:0.2rem 0.6rem;" onclick="stormPick('{{ r.id }}','Storm')">Storm</button>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </details>
+  {% endif %}
+
+  {% if wx_fog %}
+  <details style="margin-top:0.9rem;">
+    <summary style="cursor:pointer; color:var(--accent); font-size:0.875rem;">Possible fog rides ({{ wx_fog|length }}) — confirm the ones that were</summary>
+    <p style="color:var(--text-muted); font-size:0.8125rem; line-height:1.5; margin:0.5rem 0;">Weather models almost never report fog because it is so local. These rides started damp and still (humidity 97%+, light wind, no rain), so some were probably fog. Only you know: tap <strong>Fog</strong> to count it, or <strong>Not fog</strong> to stop it being suggested.</p>
+    <div id="fogList" style="max-height:22rem; overflow:auto; font-size:0.8125rem;">
+      {% for f in wx_fog %}
+      <div class="fogRow" id="fog_{{ f.id }}" style="display:flex; align-items:center; gap:0.6rem; padding:0.35rem 0; border-top:1px solid #232b33; flex-wrap:wrap;">
+        <a href="/rides/{{ f.id }}" style="flex:1 1 11rem;">{{ f.date }} · {{ f.name or 'Ride' }}</a>
+        <span style="color:var(--text-muted);">{{ f.weatherHumidity }}% humidity · {{ f.weatherWindKph|round|int }} kph{% if f.weatherTempC is not none %} · {{ f.weatherTempC|round|int }}°C{% endif %}</span>
+        <button class="btn btn-secondary" style="padding:0.2rem 0.6rem;" onclick="fogPick('{{ f.id }}','Fog')">Fog</button>
+        <button class="btn btn-secondary" style="padding:0.2rem 0.6rem;" onclick="fogPick('{{ f.id }}','keep')">Not fog</button>
+      </div>
+      {% endfor %}
+    </div>
+  </details>
+  {% endif %}
+</div>
+{% else %}
+  <div class="card st-card"><p class="sub" style="margin:0">No weather data for this period yet. Rides get their weather when they are imported; the ride page has a backfill button.</p></div>
+{% endif %}
+</section>
+
+<!-- ───── Calendar ───── -->
+<section class="st-panel" id="p-calendar">
+  <div class="card st-card">
+    <div class="rec-head">
+      <div class="card-title">Activity calendar</div>
+      <div style="display:flex; align-items:center; gap:.5rem; font-size:.875rem; color:var(--text-muted);">
+        <select id="heatFrom" onchange="renderHeatmap()" aria-label="From year"></select><span>to</span><select id="heatTo" onchange="renderHeatmap()" aria-label="To year"></select>
+      </div>
+    </div>
+    <div id="heatmapContainer"></div>
+    <div class="legend-row">Less
+      <div class="legend-cell" style="background:#222a32;"></div><div class="legend-cell" style="background:#4a2c15;"></div><div class="legend-cell" style="background:#8c4a1e;"></div><div class="legend-cell" style="background:#c4621f;"></div><div class="legend-cell" style="background:#ff5a1f;"></div>
+      More <span id="heatLegendNote" style="margin-left:.75rem;"></span></div>
+  </div>
+</section>
+
+{% endblock %}
+{% block scripts %}
+<script>
+const ORANGE = '#ff5a1f', TEAL = '#35c2d8', AMBER = '#f5a524', MUTED = '#8d98a3', GRID = 'rgba(255,255,255,0.06)';
+const YEAR = {{ year | tojson }};
+Chart.defaults.color = MUTED;
+Chart.defaults.borderColor = GRID;
+Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+Chart.defaults.font.size = 11;
+Chart.defaults.maintainAspectRatio = false;
+Chart.defaults.animation = false;
+Chart.defaults.plugins.legend.display = false;
+Chart.defaults.plugins.tooltip.backgroundColor = '#222a32';
+Chart.defaults.plugins.tooltip.titleColor = '#fff';
+Chart.defaults.plugins.tooltip.bodyColor = '#dfe6ec';
+Chart.defaults.plugins.tooltip.padding = 10;
+Chart.defaults.plugins.tooltip.cornerRadius = 10;
+Chart.defaults.plugins.tooltip.displayColors = false;
+
+function axes(yTitle, extra) {
+  return Object.assign({
+    x: { grid: { display: false }, border: { display: false }, ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } },
+    y: { grid: { color: GRID }, border: { display: false }, beginAtZero: true, ticks: { maxTicksLimit: 5 }, title: { display: false } }
+  }, extra || {});
+}
+function gradient(ctx, color) {
+  const g = ctx.createLinearGradient(0, 0, 0, ctx.canvas.clientHeight || 260);
+  g.addColorStop(0, color + '55'); g.addColorStop(1, color + '00');
+  return g;
+}
+const built = {};
+function once(key, fn) { if (!built[key]) { built[key] = true; fn(); } }
+const el = id => document.getElementById(id);
+
+// ── Trends ───────────────────────────────────────────────────────
+const builders = {};
+builders.trends = function () {
+  // distance: months of the chosen year, or every year
+  (function () {
+    let labels, values, hi = -1;
+    if (YEAR) {
+      const M = {{ month_labels | tojson }};
+      const have = {};
+      {{ monthly_labels | tojson }}.forEach((ym, i) => have[parseInt(ym.slice(5))] = {{ monthly_values | tojson }}[i]);
+      labels = M; values = M.map((_, i) => have[i + 1] || 0);
+    } else {
+      labels = {{ yearly_labels | tojson }}; values = {{ yearly_values | tojson }}; hi = labels.length - 1;
+    }
+    new Chart(el('distChart'), { type: 'bar',
+      data: { labels, datasets: [{ data: values, borderRadius: 8, borderSkipped: false, maxBarThickness: 36,
+        backgroundColor: values.map((_, i) => hi < 0 || i === hi ? ORANGE : 'rgba(255,90,31,0.55)') }] },
+      options: { plugins: { tooltip: { callbacks: { label: c => c.parsed.y.toLocaleString() + ' mi' } } }, scales: axes() } });
+  })();
+
+  // year on year, cumulative
+  (function () {
+    const yoy = {{ year_on_year | tojson }}, months = {{ month_labels | tojson }};
+    const years = Object.keys(yoy).sort();
+    const focus = YEAR || years[years.length - 1];
+    const cum = a => { let t = 0; return a.map(v => t += v); };
+    const datasets = years.map(y => ({ label: y, data: cum(yoy[y]), tension: .3, pointRadius: 0, pointHoverRadius: 4,
+      borderColor: y === focus ? ORANGE : 'rgba(141,152,163,0.28)', borderWidth: y === focus ? 3 : 1.2, order: y === focus ? 0 : 1 }));
+    new Chart(el('yoyChart'), { type: 'line', data: { labels: months, datasets },
+      options: { interaction: { mode: 'nearest', intersect: false },
+        plugins: { tooltip: { displayColors: false, callbacks: { title: c => c[0].dataset.label, label: c => months[c.dataIndex] + ': ' + Math.round(c.parsed.y).toLocaleString() + ' mi' } } },
+        scales: axes() } });
+  })();
+
+  function trend(id, labels, vals, roll, color, unit) {
+    const c = el(id), ctx = c.getContext('2d');
+    new Chart(c, { type: 'line', data: { labels, datasets: [
+      { data: vals, showLine: false, pointRadius: 2.2, pointHoverRadius: 5, pointBackgroundColor: color + '55', pointBorderColor: 'transparent', order: 2 },
+      { data: roll, borderColor: color, borderWidth: 3, pointRadius: 0, tension: .35, fill: true, backgroundColor: gradient(ctx, color), order: 1 } ] },
+      options: { interaction: { mode: 'index', intersect: false },
+        plugins: { tooltip: { callbacks: { title: c => fmtDate(labels[c[0].dataIndex]), label: c => (c.datasetIndex ? '20-ride avg ' : 'This ride ') + c.parsed.y.toLocaleString() + ' ' + unit } } },
+        scales: axes('', { x: { grid: { display: false }, border: { display: false },
+          ticks: { maxRotation: 0, maxTicksLimit: 7, callback: function (v) { const l = this.getLabelForValue(v); return YEAR ? fmtMonth(l.slice(0, 7)).split(' ')[0] : l.slice(0, 4); } } } }) } });
+  }
+  trend('speedChart', {{ speed_labels | tojson }}, {{ speed_values | tojson }}, {{ speed_rolling | tojson }}, TEAL, 'mph');
+  trend('calChart', {{ cal_labels | tojson }}, {{ cal_values | tojson }}, {{ cal_rolling | tojson }}, AMBER, 'kcal');
+
+  const bars = (id, labels, data, color, unit) => new Chart(el(id), { type: 'bar',
+    data: { labels, datasets: [{ data, backgroundColor: color, borderRadius: 8, borderSkipped: false, maxBarThickness: 44 }] },
+    options: { plugins: { tooltip: { callbacks: { label: c => c.parsed.y + ' ' + unit } } }, scales: axes() } });
+  bars('histChart', {{ hist_labels | tojson }}, {{ hist_values | tojson }}, TEAL, 'rides');
+  bars('dowChart', {{ dow_labels | tojson }}, {{ dow_values | tojson }}, ORANGE, 'rides');
+};
+
+// ── Records ──────────────────────────────────────────────────────
+function fmtT(s) { const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return h ? `${h}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}` : `${m}:${String(x).padStart(2, '0')}`; }
+function recRow(big, unit, rec, val, sub) {
+  const row = document.createElement('div'); row.className = 'rec';
+  const d = document.createElement('div'); d.className = 'd'; d.textContent = big; const u = document.createElement('small'); u.textContent = unit; d.appendChild(u);
+  const m = document.createElement('div'); m.className = 'm';
+  const a = document.createElement('a'); a.href = '/rides/' + encodeURIComponent(rec.rideId); a.textContent = rec.ride || 'Ride';
+  const dt = document.createElement('span'); dt.textContent = fmtDate(rec.date); m.append(a, dt);
+  const v = document.createElement('div'); v.className = 'v'; v.textContent = val; if (sub) { const s = document.createElement('small'); s.textContent = sub; v.appendChild(s); }
+  row.append(d, m, v); return row;
+}
+function pickerList(prefix, byYear, byMonth, render) {
+  const ys = el(prefix + 'Year'), ms = el(prefix + 'Month'), out = el(prefix + 'List');
+  if (!ys || !out) return;
+  function months() { ms.innerHTML = '<option value="all">All months</option>'; Object.keys(byMonth).filter(k => k.startsWith(ys.value)).sort().reverse().forEach(k => ms.add(new Option(fmtMonth(k), k))); }
+  function draw() {
+    const src = ms.value === 'all' ? (byYear[ys.value] || {}) : (byMonth[ms.value] || {});
+    out.replaceChildren(); let n = 0;
+    Object.keys(src).sort((a, b) => a - b).forEach(k => { out.appendChild(render(k, src[k])); n++; });
+    if (!n) { const e = document.createElement('div'); e.className = 'rec-empty'; e.textContent = 'Nothing for this period.'; out.appendChild(e); }
+  }
+  ys.addEventListener('change', () => { months(); draw(); }); ms.addEventListener('change', draw);
+  if (YEAR && [...ys.options].some(o => o.value === YEAR)) ys.value = YEAR;
+  months(); draw();
+}
+builders.records = function () {
+  pickerList('rec', {{ records_by_year | tojson }}, {{ records_by_month | tojson }}, (k, r) => recRow(k, 'miles', r, fmtT(r.secs), r.mph + ' mph'));
+  pickerList('climb', {{ climbing_by_year | tojson }}, {{ climbing_by_month | tojson }}, (k, r) => recRow(Number(k).toLocaleString(), 'feet +', r, r.ft.toLocaleString() + ' ft', ''));
+};
+function computeEfforts() {
+  const btn = el('effortsBtn'), st = el('effortsStatus');
+  if (btn) btn.disabled = true; st.style.display = 'block'; st.textContent = 'Scanning rides, this may take a moment.';
+  fetch('/data/scan-efforts', { method: 'POST' }).then(r => r.json()).then(d => { st.textContent = `Scanned ${d.scanned} rides. Reload to see your records.`; }).catch(() => { st.textContent = 'Scan failed.'; });
+}
+
+// ── Weather ──────────────────────────────────────────────────────
+builders.weather = function () {
+  {% if wx_temp_x %}
+  function scatter(id, xs, ys, groups, ids, palette, names, xTitle) {
+    const sets = {};
+    xs.forEach((x, i) => { const g = groups[i] || 'calm'; (sets[g] = sets[g] || { label: names[g] || g, data: [], backgroundColor: palette[g] || 'rgba(150,150,150,.5)', pointRadius: 2.6, pointHoverRadius: 6 }).data.push({ x, y: ys[i], id: ids[i] }); });
+    const c = el(id);
+    new Chart(c, { type: 'scatter', data: { datasets: Object.values(sets) },
+      options: { onClick(e, els) { if (els.length) { const p = this.data.datasets[els[0].datasetIndex].data[els[0].index]; if (p.id) location = '/rides/' + p.id; } },
+        plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 8, boxHeight: 8, usePointStyle: true, color: '#aab3bc' } }, tooltip: { callbacks: { label: c => `${c.parsed.y} mph at ${c.parsed.x}` } } },
+        scales: { x: { grid: { color: GRID }, border: { display: false }, title: { display: true, text: xTitle, color: MUTED } }, y: { grid: { color: GRID }, border: { display: false }, title: { display: true, text: 'Avg speed (mph)', color: MUTED } } } } });
+    c.style.cursor = 'pointer';
+  }
+  scatter('wxTempChart', {{ wx_temp_x | tojson }}, {{ wx_temp_y | tojson }}, {{ wx_temp_season | tojson }}, {{ wx_temp_ids | tojson }},
+    { Winter: 'rgba(100,181,246,.6)', Spring: 'rgba(129,199,132,.6)', Summer: 'rgba(255,183,77,.6)', Autumn: 'rgba(229,115,115,.6)' }, {}, 'Temperature (°C)');
+  scatter('wxWindChart', {{ wx_wind_x | tojson }}, {{ wx_wind_y | tojson }}, {{ wx_wind_rel | tojson }}, {{ wx_wind_ids | tojson }},
+    { headwind: 'rgba(239,83,80,.65)', tailwind: 'rgba(102,187,106,.65)', crosswind: 'rgba(255,183,77,.65)', calm: 'rgba(100,181,246,.65)', mixed: 'rgba(170,170,180,.55)' },
+    { headwind: 'Headwind', tailwind: 'Tailwind', crosswind: 'Crosswind', calm: 'Calm', mixed: 'Mixed (loop)' }, 'Wind speed (mph)');
+
+  const labels = {{ wx_cond_labels | tojson }}, avgs = {{ wx_cond_avgs | tojson }}, counts = {{ wx_cond_counts | tojson }};
+  const col = { Clear: '#f5a524', Cloudy: '#6fa8dc', Fog: '#90a4ae', Rain: '#4b86c7', Snow: '#cfeaf2', Storm: '#ef5350' };
+  new Chart(el('wxCondChart'), { type: 'bar',
+    data: { labels: labels.map((l, i) => l + ' (' + counts[i] + ')'), datasets: [
+      { data: avgs, backgroundColor: labels.map(l => col[l] || '#6fa8dc'), borderRadius: 8, borderSkipped: false, maxBarThickness: 48, yAxisID: 'y' },
+      { type: 'line', data: counts, yAxisID: 'y2', showLine: false, pointStyle: 'rectRot', pointRadius: 6, pointBackgroundColor: ORANGE, pointBorderColor: '#fff' }] },
+    options: { plugins: { tooltip: { callbacks: { label: c => c.datasetIndex ? c.parsed.y + ' rides' : c.parsed.y + ' mph' } } },
+      scales: { x: { grid: { display: false }, border: { display: false } }, y: { beginAtZero: true, grid: { color: GRID }, border: { display: false }, ticks: { maxTicksLimit: 5 } },
+        y2: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false }, border: { display: false }, ticks: { color: ORANGE, maxTicksLimit: 5 } } } } });
+  {% endif %}
+};
+
+// ── Calendar ─────────────────────────────────────────────────────
+builders.calendar = function () {
+  const heatmap = {{ heatmap | tojson }};
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'], DAY_NAMES = ['', 'Mon', '', 'Wed', '', 'Fri', ''];
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const heatColor = mi => mi <= 0 ? '#222a32' : mi < 10 ? '#4a2c15' : mi < 20 ? '#8c4a1e' : mi < 30 ? '#c4621f' : '#ff5a1f';
+  const dataYears = [...new Set(Object.keys(heatmap).map(d => parseInt(d.slice(0, 4))))].sort();
+  const minYear = dataYears[0] || today.getFullYear(), maxYear = today.getFullYear();
+  const fromSel = el('heatFrom'), toSel = el('heatTo');
+  for (let y = minYear; y <= maxYear; y++) { fromSel.add(new Option(y, y)); toSel.add(new Option(y, y)); }
+  fromSel.value = YEAR ? YEAR : Math.max(minYear, maxYear - 2); toSel.value = YEAR ? YEAR : maxYear;
+  const CELL = 12, GAP = 3, STEP = CELL + GAP;
+  const ymd = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  window.renderHeatmap = function () {
+    let fy = parseInt(fromSel.value), ty = parseInt(toSel.value); if (fy > ty) { const t = fy; fy = ty; ty = t; }
+    const rangeEnd = new Date(Math.min(new Date(ty, 11, 31), today)), jan1 = new Date(fy, 0, 1), start = new Date(jan1); start.setDate(jan1.getDate() - jan1.getDay());
+    const weeks = Math.ceil((rangeEnd - start) / (7 * 864e5)) + 1, box = el('heatmapContainer'); box.innerHTML = '';
+    const wrap = document.createElement('div'); wrap.className = 'heatmap-wrap';
+    const inner = document.createElement('div'); inner.style.cssText = 'display:flex;flex-direction:column;width:max-content;';
+    const mr = document.createElement('div'); mr.style.cssText = 'position:relative;height:16px;margin-left:28px;width:' + (weeks * STEP) + 'px;';
+    let last = -1;
+    for (let w = 0; w < weeks; w++) { const d = new Date(start); d.setDate(start.getDate() + w * 7); const mo = d.getMonth();
+      if (mo !== last && d <= rangeEnd) { const l = document.createElement('div'); l.style.cssText = 'position:absolute;top:0;font-size:10px;color:#8d98a3;white-space:nowrap;left:' + (w * STEP) + 'px;'; l.textContent = mo === 0 ? `${MONTHS[mo]} ${d.getFullYear()}` : MONTHS[mo]; mr.appendChild(l); last = mo; } }
+    const row = document.createElement('div'); row.style.display = 'flex';
+    const dc = document.createElement('div'); dc.style.cssText = 'width:28px;flex-shrink:0;display:flex;flex-direction:column;gap:' + GAP + 'px;position:sticky;left:0;z-index:1;background:var(--card-bg,#13181d);';
+    DAY_NAMES.forEach(n => { const l = document.createElement('div'); l.style.cssText = 'height:' + CELL + 'px;font-size:9px;color:#8d98a3;line-height:' + CELL + 'px;'; l.textContent = n; dc.appendChild(l); });
+    row.appendChild(dc);
+    const grid = document.createElement('div'); grid.style.cssText = 'display:flex;gap:' + GAP + 'px;flex-shrink:0;';
+    for (let w = 0; w < weeks; w++) { const col = document.createElement('div'); col.style.cssText = 'display:flex;flex-direction:column;gap:' + GAP + 'px;flex-shrink:0;';
+      for (let d = 0; d < 7; d++) { const cd = new Date(start); cd.setDate(start.getDate() + w * 7 + d);
+        const c = document.createElement('div'); c.style.cssText = 'width:' + CELL + 'px;height:' + CELL + 'px;border-radius:3px;flex-shrink:0;';
+        if (cd > rangeEnd || cd > today || cd.getFullYear() < fy) c.style.background = 'transparent';
+        else { const ds = ymd(cd), mi = heatmap[ds] || 0; c.style.background = heatColor(mi); c.title = mi > 0 ? `${fmtDate(ds)}: ${mi.toFixed(1)} mi` : fmtDate(ds); }
+        col.appendChild(c); }
+      grid.appendChild(col); }
+    row.appendChild(grid); inner.append(mr, row); wrap.appendChild(inner); box.appendChild(wrap); wrap.scrollLeft = wrap.scrollWidth;
+    el('heatLegendNote').textContent = 'Each square is a day (miles). Scroll sideways for earlier years.';
+  };
+  renderHeatmap();
+};
+
+// ── Tabs ─────────────────────────────────────────────────────────
+function showTab(name) {
+  document.querySelectorAll('.st-tab').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
+  document.querySelectorAll('.st-panel').forEach(p => p.classList.toggle('on', p.id === 'p-' + name));
+  once(name, builders[name]);
+  try { history.replaceState(null, '', '#' + name); } catch (e) {}
+}
+document.querySelectorAll('.st-tab').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+showTab(builders[location.hash.slice(1)] ? location.hash.slice(1) : 'trends');
+
+function stormPick(id, what) {
+  fetch('/rides/' + id + '/weather', { method: 'POST', body: new URLSearchParams({ condition: what }) }).then(r => r.json()).then(d => {
+    if (d.error) { alert('Could not save: ' + d.error); return; }
+    const row = el('storm_' + id);
+    if (row) row.innerHTML = '<span style="color:var(--text-muted);">' + (what === 'Storm' ? 'Counted as a storm ride. Refresh to update the chart.' : 'Taken back to ' + (d.condition || 'its own condition') + '.') + '</span>';
+  });
+}
+function fogPick(id, what) {
+  fetch('/rides/' + id + '/weather', { method: 'POST', body: new URLSearchParams({ condition: what }) }).then(r => r.json()).then(d => {
+    if (d.error) { alert('Could not save: ' + d.error); return; }
+    const row = el('fog_' + id);
+    if (row) row.innerHTML = '<span style="color:var(--text-muted);">' + (what === 'Fog' ? 'Marked as fog. Refresh to update the chart.' : 'Kept as it was.') + '</span>';
+  });
+}
+</script>
+{% endblock %}

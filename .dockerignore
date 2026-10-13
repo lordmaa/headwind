@@ -1,0 +1,14 @@
+.env
+*.db
+*.db-shm
+*.db-wal
+static/avatars/rider_*.jpg
+.garmin_tokens/
+__pycache__/
+**/__pycache__/
+*.pyc
+.git/
+.gitignore
+CLAUDE.md
+AGENTS.md
+.claude/

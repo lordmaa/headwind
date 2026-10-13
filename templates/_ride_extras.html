@@ -1,0 +1,113 @@
+{# Photos + mechanical faults for one ride. Expects rx_photos, rx_faults, rx_parts, fault_cats, fault_outs, activity, is_ride, is_workout. #}
+<div class="card rx-card" id="photosCard">
+  <div class="rx-head">
+    <div class="card-title" style="margin:0;" id="photos">Photos</div>
+    <button type="button" class="btn btn-secondary btn-sm" id="rxAddBtn">{{ mdi('image-plus') }} Add photos</button>
+    <input type="file" id="rxFile" accept="image/*" multiple hidden>
+  </div>
+  <div class="rx-hint" id="rxStatus">Pictures with a location are pinned on the map, and ones without are placed by the time they were taken. Tap one to enlarge it.</div>
+  {% if not rx_photos %}<div class="empty-art" style="padding:.4rem 0 .6rem;"><img src="{{ url_for('static', filename='img/empty_photos.jpg') }}" alt="" style="max-width:220px;margin:0;"></div>{% endif %}
+  {% if rx_photos %}
+  <div class="rx-grid" id="rxGrid">
+    {% for p in rx_photos %}
+    <button type="button" class="rx-thumb" data-i="{{ loop.index0 }}" aria-label="Open photo {{ loop.index }}">
+      <img loading="lazy" src="{{ url_for('ride_extras.photo_file', name=p.file.replace('.jpg', '_t.jpg')) }}" alt="{{ p.caption or 'Ride photo' }}">
+      {% if p.lat is not none %}<span class="rx-pin" title="Shown on the map">{{ mdi('map-marker') }}</span>{% endif %}
+    </button>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+{% if rx_photos and coords %}
+<div class="card rx-card" id="mapPhotosCard">
+  <div class="card-title">Photos from this ride</div>
+  <div class="rx-hint">Ones with a pin are on the map. Tap a photo to enlarge it; use "Place on map" for any without one.</div>
+  <div class="rx-strip">
+    {% for p in rx_photos %}<button type="button" class="rx-thumb sm" data-i="{{ loop.index0 }}" aria-label="Open photo {{ loop.index }}"><img loading="lazy" src="{{ url_for('ride_extras.photo_file', name=p.file.replace('.jpg', '_t.jpg')) }}" alt=""></button>{% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if is_ride and not is_workout %}
+<div class="card rx-card" id="faultsCard">
+  <div class="rx-head">
+    <div class="card-title" style="margin:0;" id="faults">Mechanical faults</div>
+    <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('rxFaultForm').toggleAttribute('hidden')">{{ mdi('wrench') }} Mark a fault</button>
+  </div>
+  <div class="rx-hint">Something broke on this ride? Mark it here. It goes into the bike's service log in Gear, and the AI summary knows to read the ride accordingly.</div>
+
+  <form method="POST" action="{{ url_for('ride_extras.fault_add', rid=activity.id) }}" enctype="multipart/form-data" id="rxFaultForm" class="rx-form" hidden>
+    <label>What went wrong<select name="category">{% for k, l in fault_cats %}<option value="{{ k }}">{{ l }}</option>{% endfor %}</select></label>
+    <label>What happened next<select name="outcome">{% for k, l in fault_outs %}<option value="{{ k }}">{{ l }}</option>{% endfor %}</select></label>
+    {% if rx_parts %}<label>Which part (optional)<select name="part"><option value="">Not sure / the bike in general</option>{% for pt in rx_parts %}<option value="{{ pt.id }}">{{ pt.name }}</option>{% endfor %}</select></label>{% endif %}
+    <label>Time lost, minutes (optional)<input type="number" name="minutes_lost" min="0" max="1440" inputmode="numeric"></label>
+    <label class="wide">Details<input name="description" maxlength="500" placeholder="e.g. rear mech hanger snapped, rode home single speed"></label>
+    <label class="wide">Photos (optional)<input type="file" name="photo" accept="image/*" multiple></label>
+    <div class="wide rx-note">
+      {% if activity.bikeId %}It will be added to this bike's service log in Gear.{% else %}This ride has no bike chosen yet. Pick one above and the fault is added to its service log automatically.{% endif %}
+    </div>
+    <div class="wide"><button class="btn btn-primary" type="submit">Save fault</button></div>
+  </form>
+
+  {% for f in rx_faults %}
+  <div class="rx-fault">
+    <div class="rx-fault-ic">{{ mdi('wrench') }}</div>
+    <div class="rx-fault-main">
+      <div class="rx-fault-t">{{ f.categoryLabel }}{% if f.partName %} <span class="rx-dim">({{ f.partName }})</span>{% endif %}</div>
+      {% if f.description %}<div>{{ f.description }}</div>{% endif %}
+      <div class="rx-dim">{% if f.outcomeLabel %}{{ f.outcomeLabel }}{% endif %}{% if f.minutesLost %} &middot; {{ f.minutesLost }} min lost{% endif %}{% if f.bikeName %} &middot; {{ f.bikeName }}{% endif %}{% if f.logId %} &middot; <a href="{{ url_for('gear.bike', bike_id=f.bikeId) }}#log">in the service log</a>{% endif %}</div>
+      <div class="rx-status {{ 'ok' if f.repairedOn else 'open' }}">
+        {% if f.repairedOn %}Repaired {{ f.repairedOn | fmt_date }}
+        <form method="POST" action="{{ url_for('ride_extras.fault_reopen', fid=f.id) }}" style="display:inline;"><button class="rx-link">Not actually fixed</button></form>
+        {% else %}Repair pending
+        <form method="POST" action="{{ url_for('ride_extras.fault_repaired', fid=f.id) }}" style="display:inline;"><button class="btn btn-primary btn-sm">{{ mdi('check-circle') }} Mark repaired</button></form>{% endif %}
+      </div>
+      <div class="rx-fault-ph">
+        {% for p in rx_photos if p.faultId == f.id %}
+        <button type="button" class="rx-thumb sm" data-i="{{ loop.index0 }}" data-pid="{{ p.id }}" aria-label="Open fault photo"><img loading="lazy" src="{{ url_for('ride_extras.photo_file', name=p.file.replace('.jpg', '_t.jpg')) }}" alt="Fault photo"></button>
+        {% endfor %}
+        <button type="button" class="btn btn-secondary btn-sm rx-placefault" data-fid="{{ f.id }}">{{ mdi('map-marker') }} {{ 'Move pin' if f.lat is not none else 'Pin on map' }}</button>
+        <label class="btn btn-secondary btn-sm rx-addph">{{ mdi('camera') }} Add photo<input type="file" accept="image/*" multiple hidden data-fault="{{ f.id }}"></label>
+      </div>
+      <details class="rx-edit"><summary>Edit</summary>
+        <form method="POST" action="{{ url_for('ride_extras.fault_edit', fid=f.id) }}" class="rx-form">
+          <label>What went wrong<select name="category">{% for k, l in fault_cats %}<option value="{{ k }}" {{ 'selected' if k == f.category }}>{{ l }}</option>{% endfor %}</select></label>
+          <label>What happened next<select name="outcome">{% for k, l in fault_outs %}<option value="{{ k }}" {{ 'selected' if k == f.outcome }}>{{ l }}</option>{% endfor %}</select></label>
+          {% if rx_parts %}<label>Which part<select name="part"><option value="">Not sure / the bike in general</option>{% for pt in rx_parts %}<option value="{{ pt.id }}" {{ 'selected' if pt.id == f.partId }}>{{ pt.name }}</option>{% endfor %}</select></label>{% endif %}
+          <label>Time lost, minutes<input type="number" name="minutes_lost" min="0" max="1440" value="{{ f.minutesLost or '' }}"></label>
+          <label class="wide">Details<input name="description" maxlength="500" value="{{ f.description or '' }}"></label>
+          <div class="wide" style="display:flex;gap:.5rem;"><button class="btn btn-primary btn-sm" type="submit">Save</button></div>
+        </form>
+        <form method="POST" action="{{ url_for('ride_extras.fault_delete', fid=f.id) }}" onsubmit="return confirm('Delete this fault, its photos and its service-log entry?')" style="margin-top:.5rem;"><button class="btn btn-secondary btn-sm">Delete fault</button></form>
+      </details>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="rx-lb" id="rxLb" data-keep hidden role="dialog" aria-modal="true" aria-label="Photo">
+  <button type="button" class="rx-lb-x" id="rxLbClose" aria-label="Close">{{ mdi('close') }}</button>
+  <button type="button" class="rx-lb-nav prev" id="rxLbPrev" aria-label="Previous photo">{{ mdi('chevron-left') }}</button>
+  <button type="button" class="rx-lb-nav next" id="rxLbNext" aria-label="Next photo">{{ mdi('chevron-right') }}</button>
+  <img id="rxLbImg" alt="">
+  <div class="rx-lb-bar">
+    <input id="rxLbCap" maxlength="200" placeholder="Add a caption" aria-label="Caption">
+    <span id="rxLbWhere" class="rx-dim"></span>
+    <button type="button" class="btn btn-secondary btn-sm" id="rxLbPlace">{{ mdi('crosshairs-gps') }} <span>Place on map</span></button>
+    <button type="button" class="btn btn-secondary btn-sm" id="rxLbDel">{{ mdi('delete') }} Delete</button>
+  </div>
+</div>
+<div class="rx-toast" id="rxToast" data-keep hidden></div>
+
+<dialog id="rxRename" data-keep class="rx-dialog">
+  <form method="POST" action="{{ url_for('ride_extras.rename', rid=activity.id) }}">
+    <div class="card-title">Rename this activity</div>
+    <input name="name" id="rxRenameInput" maxlength="120" value="{{ activity.name or '' }}" required autocomplete="off" style="width:100%;box-sizing:border-box;">
+    <div style="display:flex;gap:.5rem;margin-top:.8rem;justify-content:flex-end;">
+      <button type="button" class="btn btn-secondary" onclick="this.closest('dialog').close()">Cancel</button>
+      <button class="btn btn-primary" type="submit">Save</button>
+    </div>
+  </form>
+</dialog>

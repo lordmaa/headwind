@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block title %}Activities{% endblock %}
+{% block page_title %}Activities{% endblock %}
+
+{% block content %}
+<form class="act-filters" method="get" action="{{ url_for('activities.index') }}">
+  {% if rider %}<input type="hidden" name="rider" value="{{ rider }}">{% endif %}
+  <div class="chips">
+    {% for key, label in sports %}
+      <a class="chip {% if sport == key %}active{% endif %}" href="{{ url_for('activities.index', sport=key or None, q=q or None, rider=rider) }}">{{ label }}</a>
+    {% endfor %}
+  </div>
+  <input type="search" name="q" value="{{ q }}" placeholder="Search name or place" class="act-search">
+  {% if sport %}<input type="hidden" name="sport" value="{{ sport }}">{% endif %}
+</form>
+
+{% if items %}
+<div class="act-count">{{ total }} {{ 'activity' if total == 1 else 'activities' }}{% if q or sport %} found{% endif %}</div>
+<div class="act-list">
+  {% for a in items %}{% include '_activity_card.html' %}{% endfor %}
+</div>
+{% if more %}
+<div style="text-align:center; margin:1.25rem 0;">
+  <a class="btn btn-secondary" href="{{ url_for('activities.index', sport=sport or None, q=q or None, rider=rider, n=shown + step) }}">Show more</a>
+</div>
+{% endif %}
+{% else %}
+<div class="empty-art">
+  <img src="{{ url_for('static', filename='img/empty_activities.jpg') }}" alt="" width="520" height="347">
+  <h3>{{ 'Nothing matches that' if (q or sport) else 'No activities yet' }}</h3>
+  <p>{{ 'Try a different search or sport.' if (q or sport) else 'Sync Garmin, import a ride, or record one with the phone app.' }}</p>
+  {% if not (q or sport) %}<a class="btn btn-primary" href="{{ url_for('import_rides.index') }}">Import rides</a>{% endif %}
+</div>
+{% endif %}
+{% endblock %}
