@@ -80,6 +80,10 @@
          class="nav-item {% if request.endpoint == 'nutrition.steps_page' %}active{% endif %}">
         {{ mdi('shoe-print') }} Steps
       </a>
+      <a href="{{ url_for('export.page') }}"
+         class="nav-item {% if request.blueprint == 'export' %}active{% endif %}">
+        {{ mdi('file-export') }} Export
+      </a>
 
       <div class="nav-section-label">System</div>
       <a href="{{ url_for('riders.index') }}"

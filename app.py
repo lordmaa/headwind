@@ -180,6 +180,30 @@ def _garmin_heartbeat(app):
         time.sleep(interval_hours * 3600)
 
 
+def _garmin_steps_fast(app):
+    """Refresh today's steps every few minutes (the full Garmin sync only runs every garminSyncHours) and push the new
+    figure to Home Assistant at once. Backs off after failures so Garmin never sees a hammering client."""
+    import logging
+    time.sleep(120)
+    fails = 0
+    while True:
+        try:
+            with app.app_context():
+                from database import query_db
+                s = query_db('SELECT garminEmail, garminPassword FROM Settings WHERE id=1', one=True)
+                if s and s['garminEmail'] and s['garminPassword']:
+                    from services.garmin import sync_steps_today
+                    if sync_steps_today(s['garminEmail'], s['garminPassword']):
+                        from services.mqtt import push_update_nutrition, push_update
+                        push_update_nutrition()
+                        push_update()
+                    fails = 0
+        except Exception as e:
+            fails += 1
+            logging.getLogger(__name__).warning('Garmin fast steps poll failed (%d): %s', fails, e)
+        time.sleep(min(180 * (2 ** min(fails, 4)), 1800))   # 3 min normally, backing off to 30
+
+
 def create_app():
     app = Flask(__name__)
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
@@ -302,11 +326,13 @@ def create_app():
     from routes.telemetry_forward import bp as telemetry_forward_bp
     from routes.friends       import bp as friends_bp
     from routes.nutrition      import bp as nutrition_bp
+    from routes.export         import bp as export_bp
+    from routes.privacy        import bp as privacy_bp
     from routes.route_builder  import bp as route_builder_bp
 
     # ── Auth guard ───────────────────────────────────────────────
     _PUBLIC = {'login.login_page', 'login.logout', 'static', 'demo.counter', 'demo.health',
-               'friends.feed', 'friends.riders_list', 'import_rides.api_upload_ride',
+               'privacy.privacy', 'friends.feed', 'friends.riders_list', 'import_rides.api_upload_ride',
                'friends.foods_feed', 'friends.food_image', 'telemetry_forward.ping', 'avatar_files'}
 
     # The phone app authenticates with a per-device Bearer token (services/device_auth.py) instead of a login session — accepted
@@ -437,6 +463,8 @@ def create_app():
     app.register_blueprint(telemetry_forward_bp)
     app.register_blueprint(friends_bp)
     app.register_blueprint(nutrition_bp)
+    app.register_blueprint(export_bp)
+    app.register_blueprint(privacy_bp)
     app.register_blueprint(route_builder_bp)
     from routes.api_v1 import bp as api_v1_bp, ui as workouts_ui_bp
     from routes.phones import bp as phones_bp
@@ -455,6 +483,7 @@ def create_app():
     else:
         threading.Thread(target=_mqtt_heartbeat,   args=(app,), daemon=True).start()
         threading.Thread(target=_garmin_heartbeat, args=(app,), daemon=True).start()
+        threading.Thread(target=_garmin_steps_fast, args=(app,), daemon=True).start()
         threading.Thread(target=__import__('services.mqtt_commands', fromlist=['run']).run, args=(app,), daemon=True).start()
         threading.Thread(target=_friends_autosync, args=(app,), daemon=True).start()
 

@@ -269,6 +269,11 @@ def migrate_db():
         ('stepsSource',          'TEXT'),
         ('goalAuto',             'INTEGER DEFAULT 0'),
         ('goalAutoLast',         'TEXT'),
+        ('calGoalTrim',          'INTEGER'),
+        ('calGoalTrimFrom',      'TEXT'),
+        ('milestoneLb',          'REAL'),
+        ('milestoneDate',        'TEXT'),
+        ('milestoneLabel',       'TEXT'),
         ('rideKcalWeek',         'REAL'),
         ('rideGoalWeek',         'INTEGER'),
         ('goalWeightKg',         'REAL'),
@@ -657,6 +662,13 @@ def migrate_db():
     ''')
     db.execute('CREATE INDEX IF NOT EXISTS idx_sharedfood_barcode ON SharedFood(barcode)')
 
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS WorkoutTombstone (
+            id        TEXT PRIMARY KEY,
+            riderId   INTEGER,
+            createdAt TEXT DEFAULT (datetime('now'))
+        )
+    ''')
     db.execute('''
         CREATE TABLE IF NOT EXISTS FoodCache (
             key             TEXT PRIMARY KEY,

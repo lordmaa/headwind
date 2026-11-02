@@ -14,8 +14,9 @@ COPY . .
 # Stamp build time so the settings page can show it and check for updates
 RUN date -u +%Y-%m-%dT%H:%M:%SZ > /app/build_time.txt
 
-# Persistent data lives outside the image; rider avatars are symlinked into the /data volume so they survive upgrades
-RUN mkdir -p /data/avatars /app/.garmin_tokens && rm -rf /app/static/avatars && ln -s /data/avatars /app/static/avatars
+# Persistent data lives outside the image; rider avatars are symlinked into the /data volume so they survive upgrades (the shipped default
+# avatar is kept in /app/default_avatars and copied into the volume by the entrypoint, otherwise new riders get a broken image)
+RUN mkdir -p /data/avatars /app/.garmin_tokens && cp -a /app/static/avatars /app/default_avatars && rm -rf /app/static/avatars && ln -s /data/avatars /app/static/avatars
 
 EXPOSE 5001
 

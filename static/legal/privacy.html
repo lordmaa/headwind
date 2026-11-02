@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en-GB"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Headwind (Android): Privacy Policy</title>
+<style>
+body{font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:46rem;margin:0 auto;padding:1.5rem 1.1rem 4rem;color:#1b2a35;background:#fff}
+h1{font-size:1.7rem;line-height:1.25;margin:.2rem 0 1rem}h2{font-size:1.2rem;margin:2rem 0 .5rem;padding-top:.4rem;border-top:1px solid #e3eaef}
+table{border-collapse:collapse;width:100%;margin:.8rem 0;font-size:.95rem}th,td{border:1px solid #d5dee5;padding:.5rem .6rem;text-align:left;vertical-align:top}th{background:#f1f5f8}
+li{margin:.3rem 0}code{background:#f1f5f8;padding:.05rem .3rem;border-radius:4px}a{color:#c2410c}
+@media (prefers-color-scheme:dark){body{background:#0e1820;color:#d6e4ee}h2{border-color:#24384a}th{background:#16263a}th,td{border-color:#2a4156}code{background:#16263a}a{color:#fb923c}}
+</style></head><body>
+<h1>Headwind (Android app): Privacy Policy</h1>
+<p><strong>Effective date:</strong> 14 October 2026
+<strong>App:</strong> Headwind for Android (package <code>com.headwind</code>)
+<strong>Developer:</strong> LordMerchant
+<strong>Contact:</strong> open an issue at github.com/lordmaa/headwind</p>
+<h2>The short version</h2>
+<ul>
+<li>Headwind keeps your data <strong>on your phone</strong>. There is no Headwind account and no Headwind cloud service. The developer does not receive, store or see your data.</li>
+<li>The app contains <strong>no advertising, no analytics and no crash-reporting or tracking services</strong>.</li>
+<li>Your data leaves your phone only when you use a feature that needs another service to work. Each one is listed in section 4, and most are optional.</li>
+<li>You can delete your data at any time (section 8).</li>
+</ul>
+<h2>1. Who this policy covers</h2>
+<p>This policy covers the Headwind app for Android. Headwind is a nutrition, weight, steps and cycling tracker. It can run entirely on your phone, or it can connect to a <strong>Headwind server that you run yourself</strong>. That server is separate software under your control, not a service operated by the developer.</p>
+<h2>2. What the app stores on your phone</h2>
+<p>Everything below is stored in the app's private storage on your phone. Android does not back it up to the cloud (the app switches that off), and it is removed when you uninstall the app.</p>
+<ul>
+<li><strong>Food and drink:</strong> what you log, calories and nutrients, saved meals and recipes, and food photos you choose to attach.</li>
+<li><strong>Body and activity:</strong> your weight entries, water, daily steps, and the goals and profile details you enter (for example height, age and weight goals).</li>
+<li><strong>Activities:</strong> rides, walks and runs you record, including the GPS route, time, speed and elevation, and readings from your phone's motion and air-pressure sensors while you record. You can also add photos, bike and gear details and notes. A ride photo can carry the place it was taken, so the app can show it on the map.</li>
+<li><strong>Settings and credentials you type in:</strong> your server address and pairing token, your Home Assistant or MQTT broker login, and your OpenAI API key if you choose to add one. These are kept in the app's private storage.</li>
+</ul>
+<h2>3. Permissions and why the app asks for them</h2>
+<table>
+<thead>
+<tr>
+<th>Permission</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Location</strong> (precise and approximate)</td>
+<td>To record your route and speed while you record a ride, walk or run, to show your position on the map, and to note where a ride photo taken with the app's camera button was taken. The app uses location <strong>only while you are recording or using the map</strong>.</td>
+</tr>
+<tr>
+<td><strong>Physical activity</strong></td>
+<td>To count your steps.</td>
+</tr>
+<tr>
+<td><strong>Notifications</strong></td>
+<td>For reminders you switch on, and to show that an activity is being recorded.</td>
+</tr>
+<tr>
+<td><strong>Health Connect: read steps, read weight</strong></td>
+<td>Optional. To fill in your Steps and Weight pages automatically. See section 5.</td>
+</tr>
+<tr>
+<td><strong>Internet</strong></td>
+<td>To reach the services in section 4.</td>
+</tr>
+<tr>
+<td><strong>Foreground service and wake lock</strong></td>
+<td>To keep recording your activity reliably when the screen is off.</td>
+</tr>
+</tbody>
+</table>
+<p>The app does not request the Camera permission. When you take a photo, it opens your phone's own camera app and receives only the picture you take. Barcode scanning uses Google's code scanner provided through Google Play services.</p>
+<h2>4. When your data leaves your phone</h2>
+<p>Headwind sends data to another service only in the situations below. Nothing is sent to the developer.</p>
+<ol>
+<li><strong>Your own Headwind server (optional).</strong> If you pair the app with a server, the app syncs your logs, weight, steps, activities and photos to that server over an encrypted (HTTPS) connection. While you record an activity, it can also send your live position and sensor readings to that server every few seconds so it can show a live view (this is switched on by default once paired, and you can turn it off in the app). You run that server, so you decide where it lives and who can reach it. The developer has no access to it.</li>
+<li><strong>Open Food Facts.</strong> When you scan a barcode or search for a food, the barcode or search words are sent to Open Food Facts to find the product. Like any internet request, this reveals your IP address to them. No account is used.</li>
+<li><strong>Open-Meteo.</strong> To add weather to an activity, or to show elevation on a route you plan, the app sends coordinates (the start of the activity, or points along a planned route) and the date to Open-Meteo. No account is used.</li>
+<li><strong>OpenFreeMap.</strong> Map tiles are downloaded from OpenFreeMap. The request shows which area of the map you are viewing, and your IP address.</li>
+<li><strong>OpenAI (only if you add your own API key).</strong> The AI features send the content of a request, such as a photo of a meal, or a text summary of your logged food, weight or ride, <strong>directly from your phone to OpenAI</strong>, using your key. Without a key, nothing is sent. Use of OpenAI is under OpenAI's own terms and privacy policy, and your own account.</li>
+<li><strong>Your Home Assistant or MQTT broker (optional).</strong> If you configure one, the app publishes your figures (for example calories, water, weight and steps) to the broker you specify. The app can use an encrypted (TLS) connection if you switch that on and your broker supports it. Without it, the connection is not encrypted.</li>
+<li><strong>Google Play services.</strong> The app uses Google Play services for location and barcode scanning. Google processes data under its own privacy policy.</li>
+<li><strong>Things you choose to send.</strong> If you export a backup or an activity file, or share a photo, it goes wherever you send it.</li>
+<li><strong>Links.</strong> The Headwind project page (GitHub) and the "Buy me a coffee" page open in your browser if you tap them. Those sites then apply their own policies.</li>
+</ol>
+<h2>5. Health Connect</h2>
+<p>If you allow it, Headwind reads your <strong>step count and weight</strong> from Health Connect. It is read-only. Headwind does not write to Health Connect.</p>
+<ul>
+<li>It is used only to fill in the Steps and Weight pages in the app.</li>
+<li>It is stored on your phone, and sent to your own Headwind server only if you have paired one.</li>
+<li>It is <strong>not</strong> sold, <strong>not</strong> used for advertising, credit or insurance decisions, and <strong>not</strong> given to anyone else.</li>
+<li>You can withdraw access at any time in Health Connect (Settings, then Health Connect, then Headwind), and the app keeps working without it.</li>
+</ul>
+<p>Headwind's use of information received from Health Connect follows the Google Play User Data policy, including its Limited Use requirements.</p>
+<h2>6. What the app does not do</h2>
+<ul>
+<li>No advertising, and no advertising identifiers.</li>
+<li>No analytics, no usage tracking and no crash-reporting services.</li>
+<li>No selling, renting or sharing of your data.</li>
+<li>No account and no profile held by the developer.</li>
+</ul>
+<h2>7. Security</h2>
+<ul>
+<li>Connections to your server and to the services above use HTTPS, and the app blocks plain, unencrypted HTTP. The one exception you control is your own MQTT broker (see section 4).</li>
+<li>Your data, pairing token, broker login and API key sit in the app's private storage, which other apps cannot read. Keep your phone locked and up to date.</li>
+<li>Cloud backup of the app's data is switched off.</li>
+<li>Your own server and broker are only as secure as you make them.</li>
+</ul>
+<h2>8. How long data is kept, and deleting it</h2>
+<ul>
+<li>Data stays on your phone until you delete it. You can remove individual entries in the app.</li>
+<li><strong>Uninstalling the app, or clearing its storage in Android settings, removes everything stored on your phone.</strong></li>
+<li>Data copied to your own Headwind server or Home Assistant stays there until you delete it from that server or from Home Assistant.</li>
+<li>Data you sent to Open Food Facts, Open-Meteo, OpenFreeMap, OpenAI or Google is kept under their own policies. The developer cannot delete it for you.</li>
+</ul>
+<h2>9. Your rights</h2>
+<p>The developer does not hold your data, so there is nothing for the developer to access, correct or delete on your behalf. For the services in section 4, you can contact each one directly. If you are in the UK and think your data has been mishandled, you can complain to the Information Commissioner's Office (ico.org.uk).</p>
+<h2>10. Children</h2>
+<p>Headwind is not aimed at children under 13, and the developer does not knowingly collect any data from them.</p>
+<h2>11. Changes</h2>
+<p>If the app changes in a way that affects this policy, for example by adding a new service, the policy will be updated and the effective date above will change. The latest version is always at the address on the app's store page.</p>
+<h2>12. Contact</h2>
+<p>LordMerchant
+github.com/lordmaa/headwind (open an issue)</p>
+</body></html>

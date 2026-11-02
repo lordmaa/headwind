@@ -39,7 +39,7 @@ def _or_default(v, default):
 
 
 def profile():
-    s = query_db('SELECT sex, birthYear, heightCm, lossLbPerWeek, stepGoal, goalAuto, rideKcalWeek, rideGoalWeek FROM Settings WHERE id=1', one=True)
+    s = query_db('SELECT sex, birthYear, heightCm, lossLbPerWeek, stepGoal, goalAuto, rideKcalWeek, rideGoalWeek, calGoalTrim, calGoalTrimFrom FROM Settings WHERE id=1', one=True)
     s = dict(s) if s else {}
     by = s.get('birthYear')
     return {
@@ -52,6 +52,8 @@ def profile():
         'ride_kcal_week': _or_default(s.get('rideKcalWeek'), DEFAULT_RIDE_KCAL_WEEK),
         'auto': bool(s.get('goalAuto')),
         'ride_goal_week': s.get('rideGoalWeek') or RIDE_GOAL_WEEK,
+        # extra kcal/day taken off the goal from a start date (Settings.calGoalTrim / calGoalTrimFrom); the floor still applies
+        'trim': (s.get('calGoalTrim') or 0) if (s.get('calGoalTrimFrom') or '') <= _today().isoformat() else 0,
     }
 
 
@@ -75,7 +77,7 @@ def _working(kg, p):
     neat = bmr * p['activity']
     ride_per_day = p['ride_kcal_week'] / 7   # fixed allowance — riding more or less this week does not move the goal
     tdee = neat + ride_per_day
-    deficit = p['loss_lb_week'] * KCAL_PER_LB_WEEK
+    deficit = p['loss_lb_week'] * KCAL_PER_LB_WEEK + p.get('trim', 0)
     floor = bmr * FLOOR_X_BMR
     goal = int(round(max(floor, tdee - deficit) / 10.0) * 10)
     return bmr, neat, ride_per_day, tdee, deficit, floor, goal

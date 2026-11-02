@@ -33,9 +33,18 @@ def _today():
     return datetime.now(ZoneInfo('Europe/London')).date().isoformat()
 
 
+def _title(n):
+    """Activity title for the phone: always a string ('' when none), never JSON null or the word 'null'."""
+    from services.workouts import clean_name
+    return clean_name(n) or ''
+
+
 def _public(w):
     w = dict(w)
     w.pop('streams', None)
+    if 'name' in w:                                      # the app must always get a usable string, never JSON null or 'null'
+        from services.workouts import clean_name
+        w['name'] = clean_name(w.get('name')) or ''
     return w
 
 
@@ -278,7 +287,7 @@ def rides():
         except Exception:
             return []
 
-    items = [{'kind': r['kind'], 'id': r['id'], 'preview': preview(r['kind'], r['id']), 'name': r['name'], 'sport': r['sport'], 'date': str(r['startDateLocal'])[:19],
+    items = [{'kind': r['kind'], 'id': r['id'], 'preview': preview(r['kind'], r['id']), 'name': _title(r['name']), 'sport': r['sport'], 'date': str(r['startDateLocal'])[:19],
               'distance_m': round(r['distance'] or 0), 'moving_s': int(r['movingTime'] or 0), 'elev_m': round(r['elev'] or 0),
               'avg_speed_mps': round(r['spd'] or 0, 2), 'avg_hr': round(r['hr']) if r['hr'] else None,
               'calories': round(r['calories']) if r['calories'] else None, 'city': r['city']} for r in rows]
@@ -314,6 +323,20 @@ def post_sensors():
         return jsonify({'error': err}), 400
     db.commit()
     return jsonify(res)
+
+
+@bp.route('/crash', methods=['POST'])
+def post_crash():
+    """A crash / ANR report from the phone app (JSON: time, app, device, kind, trace, log). Saved under crash-reports/ and published to MQTT headwind/crash/<rider>."""
+    from services import crash
+    rider = _rider()
+    report = request.get_json(silent=True)
+    if not isinstance(report, dict):
+        return jsonify({'error': 'bad report'}), 400
+    stored = crash.store(report, rider['name'] if rider and 'name' in rider.keys() else 'rider')
+    if not stored:
+        return jsonify({'error': 'bad report'}), 400
+    return jsonify({'ok': True, 'file': stored[0], 'mqtt': crash.publish(report, stored[1])})
 
 
 @bp.route('/live', methods=['POST', 'GET'])
@@ -381,7 +404,7 @@ def ride_detail(kind, rid):
 
     return jsonify({
         'duplicates': dups,
-        'kind': kind, 'id': str(r['id']), 'name': r.get('name'), 'sport': r.get('sportType') or r.get('sport'),
+        'kind': kind, 'id': str(r['id']), 'name': _title(r.get('name')), 'sport': r.get('sportType') or r.get('sport'),
         'date': str(r.get('startDateLocal'))[:19], 'city': r.get('city'), 'source': r.get('source'),
         'distance_m': num('distance', 0), 'moving_s': r.get('movingTime'), 'elapsed_s': r.get('elapsedTime'), 'elev_m': num('totalElevationGain', 0),
         'avg_speed_mps': num('averageSpeed', 2), 'max_speed_mps': num('maxSpeed', 2),
@@ -489,7 +512,12 @@ def delete_workout(wid):
     rider = _rider()
     db = get_db()
     from services import workouts as _wk
-    _wk.forget(db, wid)
+    own = bool(rider and db.execute('SELECT 1 FROM Workout WHERE id=? AND riderId=?', [wid, rider['id']]).fetchone())
+    if own:
+        _wk.forget(db, wid)
+        from services import ride_extras
+        ride_extras.delete_ride_extras(db, wid)
+        _wk.bury(db, wid, rider['id'])
     n = db.execute('DELETE FROM Workout WHERE id=? AND riderId=?', [wid, rider['id'] if rider else -1]).rowcount
     db.commit()
     if n:
@@ -585,7 +613,12 @@ def delete_ride(kind, rid):
     db = get_db()
     if kind == 'workout':
         from services import workouts as _wk
-        _wk.forget(db, rid)
+        own = bool(rider and db.execute('SELECT 1 FROM Workout WHERE id=? AND riderId=?', [rid, rider['id']]).fetchone())
+        if own:
+            _wk.forget(db, rid)
+            from services import ride_extras
+            ride_extras.delete_ride_extras(db, rid)
+            _wk.bury(db, rid, rider['id'])
         n = db.execute('DELETE FROM Workout WHERE id=? AND riderId=?', [rid, rider['id'] if rider else -1]).rowcount
     elif kind == 'ride':
         row = db.execute('SELECT riderId FROM Activity WHERE id=?', [rid]).fetchone()
@@ -664,6 +697,7 @@ def workouts_delete(wid):
     from services import ride_extras
     if rider and db.execute('SELECT 1 FROM Workout WHERE id=? AND riderId=?', [wid, rider['id']]).fetchone():
         ride_extras.delete_ride_extras(db, wid)
+        _wk.bury(db, wid, rider['id'])
     db.execute('DELETE FROM Workout WHERE id=? AND riderId=?', [wid, rider['id'] if rider else -1])
     db.commit()
     _refresh_after_change('workout')

@@ -55,6 +55,8 @@ def save_from_gpx(rider_id, data, sport=None, name=None, client_id=None, steps=N
     existing = query_db('SELECT * FROM Workout WHERE id=?', [wid], one=True)
     if existing:
         return dict(existing), False
+    if query_db('SELECT 1 FROM WorkoutTombstone WHERE id=?', [wid], one=True):     # deleted or converted on the server: a phone retry must not bring it back
+        return {'id': wid, 'riderId': rider_id, 'sport': sport, 'name': None, 'deleted': True}, False
     from services import goal_model
     kg = goal_model.current_weight_kg(rider_id) or 70.0
     dist, secs, gain = act.get('distance') or 0, int(act.get('movingTime') or 0), act.get('totalElevationGain') or 0
@@ -73,7 +75,7 @@ def save_from_gpx(rider_id, data, sport=None, name=None, client_id=None, steps=N
                                        totalElevationGain, averageSpeed, averageHeartrate, calories, steps, startLat, startLng,
                                        streams, weatherSummary, source, caloriesRaw)
                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
-               [wid, rider_id, sport, (name or '').strip() or None, utc, local, dist, secs, int(act.get('elapsedTime') or secs), gain,
+               [wid, rider_id, sport, clean_name(name), utc, local, dist, secs, int(act.get('elapsedTime') or secs), gain,
                 act.get('averageSpeed'), act.get('averageHeartrate'), kcal, steps, act.get('startLat'), act.get('startLng'),
                 act.get('streams') if isinstance(act.get('streams'), str) else json.dumps(act.get('streams') or {}), weather, source, kcal_raw])
     refresh_derived(db, wid)
@@ -86,10 +88,26 @@ def save_from_gpx(rider_id, data, sport=None, name=None, client_id=None, steps=N
     return dict(query_db('SELECT * FROM Workout WHERE id=?', [wid], one=True)), True
 
 
+def bury(db, wid, rider_id=None):
+    """Remember that this workout id was deleted or converted, so a late upload retry (same client_id) cannot recreate it."""
+    db.execute('INSERT OR IGNORE INTO WorkoutTombstone (id, riderId) VALUES (?, ?)', [wid, rider_id])
+
+
+_PLACEHOLDER_NAMES = {'null', 'none', 'undefined', 'nan', 'n/a'}
+
+
+def clean_name(name):
+    """A user/app-supplied title, or None when it is empty or a stringified placeholder ('null', 'None'...)."""
+    if not isinstance(name, str):
+        return None
+    n = name.strip()
+    return None if not n or n.lower() in _PLACEHOLDER_NAMES else n
+
+
 def label(w):
     """'Morning walk' style label for a workout without a name of its own."""
     hour = int(str(w.get('startDateLocal') or 'T12')[11:13] or 12)
-    return (w.get('name') or '').strip() or f"{'Morning' if hour < 12 else 'Afternoon' if hour < 17 else 'Evening'} {w['sport'].lower()}"
+    return clean_name(w.get('name')) or f"{'Morning' if hour < 12 else 'Afternoon' if hour < 17 else 'Evening'} {w['sport'].lower()}"
 
 
 def summary(w, rider_name):

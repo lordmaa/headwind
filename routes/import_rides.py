@@ -368,6 +368,8 @@ def _process_strava_export(zf, names, rider_id=None):
             imported += 1
         except Exception as e:
             log.error('Insert failed for activity %s: %s', act.get('id'), e)
+            try: db.rollback()          # drop the half-finished item: the next item's commit must not keep it
+            except Exception: pass
             errors += 1
 
         yield _progress(i + 1, total, imported, skipped, errors)
@@ -416,6 +418,8 @@ def _process_generic_zip(zf, names, rider_id=None):
                 skipped += 1
         except Exception as e:
             log.error('Import error for %s: %s\n%s', name, e, traceback.format_exc())
+            try: db.rollback()          # drop the half-finished item: the next item's commit must not keep it
+            except Exception: pass
             errors += 1
 
         yield _progress(i + 1, total, imported, skipped, errors)

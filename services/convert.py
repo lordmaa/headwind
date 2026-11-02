@@ -33,7 +33,7 @@ def _ride_to_workout(db, row, sport):
     if kcal is None:                                     # no estimate possible: carry the ride's figure across (raw if it has one)
         kcal_raw = row['caloriesRaw']
         kcal = row['calories']
-    name = row['name'] if (row['name'] or '').strip().lower() not in _GENERIC_NAMES else None
+    name = row['name'] if (row['name'] or '').strip().lower() not in _GENERIC_NAMES | {'null', 'none'} else None
     db.execute('''INSERT OR REPLACE INTO Workout (id, riderId, sport, name, startDate, startDateLocal, distance, movingTime, elapsedTime, totalElevationGain,
                   averageSpeed, maxSpeed, averageHeartrate, calories, startLat, startLng, streams, weatherSummary, source, caloriesRaw) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
                [wid, row['riderId'], sport, name, row['startDate'], row['startDateLocal'], dist, secs, row['elapsedTime'], gain, row['averageSpeed'], row['maxSpeed'],
@@ -69,6 +69,7 @@ def _workout_to_ride(db, row, sport):
     from services import ride_extras
     ride_extras.move_extras(db, row['id'], aid)
     db.execute('DELETE FROM Workout WHERE id=?', [row['id']])
+    _wk.bury(db, row['id'], row['riderId'])               # a late phone retry of the original upload must not recreate the walk
     duplicates.rebuild_derived(db, aid)                 # best efforts + segment efforts, now that it is a ride
     gear.on_ride_added(db, aid)                         # the rider's default bike
     return {'kind': 'ride', 'id': aid, 'sport': sport}

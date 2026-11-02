@@ -3,6 +3,7 @@
 # support, keep every piece of state under the add-on's persistent /data, and wire MQTT + Home Assistant up automatically.
 set -e
 mkdir -p /data/avatars
+cp -n /app/default_avatars/* /data/avatars/ 2>/dev/null || true
 if [ -n "$SUPERVISOR_TOKEN" ]; then
   export HEADWIND_INGRESS=1
   mkdir -p /data/garmin_tokens

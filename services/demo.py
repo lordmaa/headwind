@@ -59,7 +59,7 @@ _STATIC = ('static', 'avatar_files')
 
 def decide(method, endpoint):
     """None if the request may proceed, otherwise a short reason."""
-    if endpoint in _STATIC or endpoint is None or endpoint in ('demo.counter', 'demo.health'):
+    if endpoint in _STATIC or endpoint is None or endpoint in ('demo.counter', 'demo.health', 'privacy.privacy'):
         return None
     if endpoint in DENIED_ENDPOINTS:
         return 'This is switched off in the demo.'

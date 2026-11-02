@@ -127,7 +127,7 @@ def reality_check(rider_id):
 # ── Goal weight and the date projection ─────────────────────────────
 
 def _settings_row():
-    return query_db('SELECT goalWeightKg, dietStartDate FROM Settings WHERE id=1', one=True)
+    return query_db('SELECT goalWeightKg, dietStartDate, milestoneLb, milestoneDate, milestoneLabel FROM Settings WHERE id=1', one=True)
 
 
 def projection(rider_id):
@@ -173,21 +173,45 @@ def projection(rider_id):
     out['eta_slow'] = eta(loss_lb_wk * 0.7) if loss_lb_wk and loss_lb_wk > 0 else None   # losses usually slow down
     out['eta_plan'] = eta(target)
     out['weeks_now'] = round(remaining_lb / loss_lb_wk, 1) if loss_lb_wk and loss_lb_wk > 0.05 else None
-    # a milestone every 10 lb on the way down, ending at the goal itself
+    # a milestone every 5 lb on the way down (the next few, so each is a short hop), ending at the goal itself,
+    # plus an optional dated target (Settings.milestoneLb / milestoneDate / milestoneLabel, e.g. "Christmas")
     ms = []
     cur_lb, goal_lb = current_kg * LB, goal_kg * LB
-    step = int(cur_lb // 10) * 10
+    step = int(cur_lb // 5) * 5
     marks = []
-    while step > goal_lb + 0.5 and len(marks) < 5:
+    while step > goal_lb + 0.5 and len(marks) < 4:
         if step < cur_lb - 0.5:
-            marks.append(float(step))
-        step -= 10
-    marks.append(round(goal_lb, 1))
-    for lb in marks:
+            marks.append((float(step), None, None))
+        step -= 5
+    marks.append((round(goal_lb, 1), None, None))
+    if s['milestoneLb'] and s['milestoneDate'] and s['milestoneDate'] >= today.isoformat() and goal_lb < s['milestoneLb'] < cur_lb:
+        marks = [m for m in marks if abs(m[0] - s['milestoneLb']) > 1.5]   # the dated target replaces a plain mark next to it
+        marks.append((float(s['milestoneLb']), s['milestoneLabel'] or 'Target', s['milestoneDate']))
+    marks.sort(key=lambda m: -m[0])
+    for lb, label, by in marks:
         rem = cur_lb - lb
-        ms.append({'label': f'{lb:g} lb', 'lb': lb,
-                   'eta': (today + timedelta(days=round(rem / loss_lb_wk * 7))).isoformat() if loss_lb_wk and loss_lb_wk > 0.05 else None})
-    out['milestones'] = ms
+        e = (today + timedelta(days=round(rem / loss_lb_wk * 7))).isoformat() if loss_lb_wk and loss_lb_wk > 0.05 else None
+        m = {'label': f'{label} · {lb:g} lb' if label else f'{lb:g} lb', 'lb': lb, 'eta': e}
+        if not by and target and target > 0.05:
+            by = (today + timedelta(days=round(rem / target * 7))).isoformat()   # when the plan rate would get you there
+        if by:
+            m['by'] = by
+            m['on_pace'] = bool(e and e <= by)
+        ms.append(m)
+    # marks already passed since the diet started: the first weigh-in at or below each, newest three, kept at the top with a tick
+    done = []
+    hist = [r for r in rows if r['logDate'] >= (s['dietStartDate'] or '')]
+    m5 = int(cur_lb // 5) * 5 + 5
+    while m5 < start_kg * LB and len(done) < 3:
+        hit = next((r for r in hist if r['weightKg'] * LB <= m5), None)
+        if hit and m5 > cur_lb + 0.5:
+            d = {'label': f'{m5:g} lb', 'lb': float(m5), 'achieved': hit['logDate'], 'achieved_lb': round(hit['weightKg'] * LB, 1)}
+            if target and target > 0.05 and hist:   # versus the plan rate from the first weigh-in of this diet
+                planned = date.fromisoformat(hist[0]['logDate']) + timedelta(days=round((hist[0]['weightKg'] * LB - m5) / target * 7))
+                d['days_early'] = (planned - date.fromisoformat(hit['logDate'])).days
+            done.append(d)
+        m5 += 5
+    out['milestones'] = sorted(done, key=lambda m: -m['lb']) + ms
     return out
 
 

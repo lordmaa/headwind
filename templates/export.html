@@ -1,0 +1,156 @@
+{% extends 'base.html' %}
+{% block title %}Export{% endblock %}
+{% block page_title %}Export{% endblock %}
+{% block head %}
+<style>
+  .ex-wrap { display:grid; grid-template-columns:minmax(300px,420px) 1fr; gap:1.2rem; align-items:start; }
+  @media (max-width: 860px) { .ex-wrap { grid-template-columns:1fr; } }
+  .ex-card { background:var(--card-bg); border:1px solid var(--border); border-radius:14px; padding:1rem; }
+  .ex-card h3 { margin:0 0 .6rem; font-size:.8rem; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); }
+  .cal-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:.5rem; }
+  .cal-head b { font-size:1rem; }
+  .cal-head button { background:none; border:1px solid var(--border); color:var(--text); border-radius:8px; padding:.3rem .7rem; cursor:pointer; font-size:1rem; }
+  .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:3px; }
+  .cal-dow { text-align:center; font-size:.7rem; color:var(--text-muted); padding:.2rem 0; }
+  .cal-day { position:relative; aspect-ratio:1; border:1px solid transparent; border-radius:8px; background:var(--bg,#0b0f12); color:var(--text); cursor:pointer; font:inherit; font-size:.85rem; padding:0; }
+  .cal-day:hover { border-color:var(--accent,#ff5a1f); }
+  .cal-day.blank { visibility:hidden; }
+  .cal-day.future { opacity:.35; }
+  .cal-day.in { background:rgba(255,90,31,.18); }
+  .cal-day.edge { background:var(--accent,#ff5a1f); color:#fff; font-weight:700; }
+  .cal-day .dots { position:absolute; bottom:3px; left:0; right:0; display:flex; justify-content:center; gap:3px; }
+  .cal-day .dots i { width:5px; height:5px; border-radius:50%; background:#22c55e; }
+  .cal-day .dots i.a { background:#38bdf8; }
+  .cal-day.edge .dots i { box-shadow:0 0 0 1px rgba(0,0,0,.35); }
+  .chips { display:flex; flex-wrap:wrap; gap:.4rem; margin:.8rem 0 0; }
+  .chip { background:var(--bg,#0b0f12); border:1px solid var(--border); color:var(--text-muted); border-radius:20px; padding:.25rem .7rem; font-size:.78rem; cursor:pointer; }
+  .chip:hover { color:var(--text); border-color:var(--accent,#ff5a1f); }
+  .legend { color:var(--text-muted); font-size:.75rem; margin-top:.7rem; display:flex; gap:1rem; }
+  .legend i { display:inline-block; width:7px; height:7px; border-radius:50%; background:#22c55e; margin-right:.3rem; }
+  .legend i.a { background:#38bdf8; }
+  .ex-range { font-size:1.05rem; font-weight:700; margin-bottom:.2rem; }
+  .ex-sub { color:var(--text-muted); font-size:.85rem; }
+  .ex-opts label { display:flex; align-items:center; gap:.5rem; margin:.45rem 0; cursor:pointer; }
+  .ex-opts input { accent-color:var(--accent,#ff5a1f); width:1.1rem; height:1.1rem; }
+  .ex-btns { display:flex; flex-wrap:wrap; gap:.5rem; margin-top:.9rem; }
+  .ex-btns .btn, .ex-btns button { border-radius:10px; padding:.55rem 1rem; font:inherit; cursor:pointer; border:1px solid var(--border); background:var(--bg,#0b0f12); color:var(--text); }
+  .ex-btns .primary { background:var(--accent,#ff5a1f); border-color:var(--accent,#ff5a1f); color:#fff; font-weight:700; }
+  .ex-btns button:disabled { opacity:.45; cursor:not-allowed; }
+  #pv { white-space:pre; overflow:auto; max-height:70vh; background:#06090b; border:1px solid var(--border); border-radius:10px; padding:.8rem; font:12px/1.45 ui-monospace,Menlo,Consolas,monospace; color:#d7dde3; margin:0; }
+  .pv-bar { display:flex; align-items:center; justify-content:space-between; margin-bottom:.5rem; gap:.5rem; flex-wrap:wrap; }
+  .err { color:#fecaca; }
+</style>
+{% endblock %}
+{% block content %}
+<p class="ex-sub" style="margin:0 0 1rem">Pick a date range, choose what to include, then copy the text or download a TXT or PDF to paste or upload into an AI chat. Food entries include the full macro breakdown; activities include distance, time, speed, climbing, heart rate, power and weather.</p>
+<div class="ex-wrap">
+  <div>
+    <div class="ex-card">
+      <div class="cal-head"><button id="prev" type="button" aria-label="Previous month">&lsaquo;</button><b id="mlabel"></b><button id="next" type="button" aria-label="Next month">&rsaquo;</button></div>
+      <div class="cal-grid" id="cal"></div>
+      <div class="chips" id="chips"></div>
+      <div class="legend"><span><i></i>food logged</span><span><i class="a"></i>activity</span></div>
+    </div>
+  </div>
+  <div>
+    <div class="ex-card">
+      <h3>Selected</h3>
+      <div class="ex-range" id="rng">Click a start day, then an end day</div>
+      <div class="ex-sub" id="rsub"></div>
+      <div class="ex-opts" style="margin-top:.8rem">
+        <label><input type="checkbox" id="wfood" checked> Food diary, with macros for every item, meal and day</label>
+        <label style="margin-left:1.6rem;color:var(--text-muted);font-size:.9rem"><input type="checkbox" id="wfull"> Extra item detail: values per 100 g, barcode, how it was logged, time logged</label>
+        <label><input type="checkbox" id="wact" checked> Activities (rides, runs, walks, hikes)</label>
+        <label><input type="checkbox" id="wbody" checked> Body and recovery (weight, body fat and other scale readings, resting HR, HRV, sleep, body battery, steps)</label>
+      </div>
+      <div class="ex-btns">
+        <button class="primary" id="bprev" type="button" disabled>Preview &amp; copy</button>
+        <button id="btxt" type="button" disabled>Download TXT</button>
+        <button id="bpdf" type="button" disabled>Download PDF</button>
+      </div>
+      <div class="ex-sub err" id="msg" style="margin-top:.6rem"></div>
+    </div>
+    <div class="ex-card" id="pvcard" style="margin-top:1rem; display:none">
+      <div class="pv-bar"><span class="ex-sub" id="pvinfo"></span><button class="btn primary" id="copy" type="button" style="border-radius:10px;padding:.45rem 1rem;border:0;background:var(--accent,#ff5a1f);color:#fff;font-weight:700;cursor:pointer">Copy all</button></div>
+      <pre id="pv"></pre>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  var TODAY = '{{ today }}', MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var cur = new Date(TODAY + 'T12:00:00'); cur.setDate(1);
+  var a = null, b = null, counts = {};
+  function iso(d){ return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+  function fmt(s){ var d = new Date(s + 'T12:00:00'); return d.toLocaleDateString('en-GB', {weekday:'short', day:'numeric', month:'short', year:'numeric'}); }
+  function $(id){ return document.getElementById(id); }
+  function load(){
+    fetch('/export/days?year=' + cur.getFullYear() + '&month=' + (cur.getMonth()+1)).then(function(r){return r.json();}).then(function(j){ counts = j.days || {}; draw(); }).catch(function(){ counts = {}; draw(); });
+  }
+  function draw(){
+    $('mlabel').textContent = MONTHS[cur.getMonth()] + ' ' + cur.getFullYear();
+    var h = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(function(d){ return '<div class="cal-dow">' + d + '</div>'; }).join('');
+    var first = new Date(cur.getFullYear(), cur.getMonth(), 1), lead = (first.getDay() + 6) % 7, n = new Date(cur.getFullYear(), cur.getMonth()+1, 0).getDate();
+    for (var i = 0; i < lead; i++) h += '<button class="cal-day blank" type="button" tabindex="-1"></button>';
+    for (var d = 1; d <= n; d++){
+      var s = cur.getFullYear() + '-' + String(cur.getMonth()+1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+      var c = counts[s] || {}, cls = 'cal-day';
+      if (s > TODAY) cls += ' future';
+      if (a && (s === a || s === b)) cls += ' edge'; else if (a && b && s > a && s < b) cls += ' in';
+      h += '<button class="' + cls + '" type="button" data-d="' + s + '">' + d + '<span class="dots">' + (c.food ? '<i></i>' : '') + (c.act ? '<i class="a"></i>' : '') + '</span></button>';
+    }
+    $('cal').innerHTML = h;
+    $('cal').querySelectorAll('[data-d]').forEach(function(el){ el.onclick = function(){ pick(el.dataset.d); }; });
+  }
+  function pick(s){
+    if (!a || (a && b)) { a = s; b = null; }
+    else if (s < a) { b = a; a = s; } else { b = s; }
+    sync();
+  }
+  function setRange(x, y){ a = x; b = y; var d = new Date(x + 'T12:00:00'); cur = new Date(d.getFullYear(), d.getMonth(), 1); sync(); load(); }
+  function sync(){
+    var ok = !!(a && b);
+    if (a && !b) { $('rng').textContent = fmt(a); $('rsub').textContent = 'Now click the last day (or the same day again for one day).'; ['bprev','btxt','bpdf'].forEach(function(i){ $(i).disabled = false; }); }
+    else if (ok) {
+      var days = Math.round((new Date(b) - new Date(a)) / 864e5) + 1;
+      $('rng').textContent = a === b ? fmt(a) : fmt(a) + '  to  ' + fmt(b); $('rsub').textContent = days + ' day' + (days === 1 ? '' : 's');
+      ['bprev','btxt','bpdf'].forEach(function(i){ $(i).disabled = false; });
+    } else { $('rng').textContent = 'Click a start day, then an end day'; $('rsub').textContent = ''; ['bprev','btxt','bpdf'].forEach(function(i){ $(i).disabled = true; }); }
+    draw();
+  }
+  function q(extra){
+    var what = []; if ($('wfood').checked) what.push('food'); if ($('wact').checked) what.push('activities'); if ($('wbody').checked) what.push('body');
+    var full = ($('wfood').checked && $('wfull').checked) ? '&full=1' : '';
+    if (!what.length) { $('msg').textContent = 'Tick at least one thing to include.'; return null; }
+    $('msg').textContent = '';
+    return '/export/download?start=' + (a || b) + '&end=' + (b || a) + '&what=' + what.join(',') + full + (extra || '');
+  }
+  $('btxt').onclick = function(){ var u = q('&fmt=txt'); if (u) location.href = u; };
+  $('bpdf').onclick = function(){ var u = q('&fmt=pdf'); if (u) location.href = u; };
+  $('bprev').onclick = function(){
+    var u = q('&fmt=txt&inline=1'); if (!u) return;
+    $('bprev').disabled = true; $('bprev').textContent = 'Building...';
+    fetch(u).then(function(r){ return r.text().then(function(t){ if (!r.ok) throw new Error(t); return t; }); }).then(function(t){
+      $('pv').textContent = t; $('pvcard').style.display = 'block';
+      $('pvinfo').textContent = t.length.toLocaleString() + ' characters, about ' + Math.round(t.length / 4).toLocaleString() + ' tokens';
+      $('pvcard').scrollIntoView({behavior:'smooth', block:'start'});
+    }).catch(function(e){ $('msg').textContent = e.message || 'Could not build the export'; }).finally(function(){ $('bprev').disabled = false; $('bprev').textContent = 'Preview & copy'; });
+  };
+  $('copy').onclick = function(){
+    var t = $('pv').textContent;
+    function done(){ $('copy').textContent = 'Copied'; setTimeout(function(){ $('copy').textContent = 'Copy all'; }, 1800); }
+    if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(t).then(done);
+    else { var r = document.createRange(); r.selectNodeContents($('pv')); var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); try { document.execCommand('copy'); done(); } catch(e){ $('msg').textContent = 'Select the text and copy it by hand.'; } }
+  };
+  $('prev').onclick = function(){ cur = new Date(cur.getFullYear(), cur.getMonth()-1, 1); load(); };
+  $('next').onclick = function(){ cur = new Date(cur.getFullYear(), cur.getMonth()+1, 1); load(); };
+  function addDays(s, n){ var d = new Date(s + 'T12:00:00'); d.setDate(d.getDate() + n); return iso(d); }
+  var chips = [['Yesterday', function(){ var y = addDays(TODAY, -1); setRange(y, y); }], ['Last 7 days', function(){ setRange(addDays(TODAY, -6), TODAY); }], ['Last 14 days', function(){ setRange(addDays(TODAY, -13), TODAY); }],
+    ['Last 30 days', function(){ setRange(addDays(TODAY, -29), TODAY); }], ['This month', function(){ var d = new Date(TODAY + 'T12:00:00'); setRange(iso(new Date(d.getFullYear(), d.getMonth(), 1)), TODAY); }],
+    ['Last month', function(){ var d = new Date(TODAY + 'T12:00:00'); setRange(iso(new Date(d.getFullYear(), d.getMonth()-1, 1)), iso(new Date(d.getFullYear(), d.getMonth(), 0))); }]];
+  $('chips').innerHTML = chips.map(function(c, i){ return '<button class="chip" type="button" data-i="' + i + '">' + c[0] + '</button>'; }).join('');
+  $('chips').querySelectorAll('.chip').forEach(function(el){ el.onclick = function(){ chips[+el.dataset.i][1](); }; });
+  load();
+})();
+</script>
+{% endblock %}

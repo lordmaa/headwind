@@ -334,6 +334,25 @@ def sync_garmin(email, password, days=7):
     return synced
 
 
+def sync_steps_today(email, password):
+    """Cheap one-call refresh of today's step count (the full 14-day sync is ~80 calls, too heavy to run every few
+    minutes). Only ever raises today's number, so a half-empty Garmin response cannot lower it. Returns the new
+    total if it changed, else None."""
+    from database import get_db, query_db
+
+    steps = _parse_steps(_client(email, password).get_steps_data(date.today().isoformat()))
+    if not steps:
+        return None
+    d = date.today().isoformat()
+    row = query_db('SELECT steps FROM GarminDaily WHERE date=?', [d], one=True)
+    if row and (row['steps'] or 0) >= steps:
+        return None
+    db = get_db()
+    db.execute('INSERT INTO GarminDaily (date, steps) VALUES (?,?) ON CONFLICT(date) DO UPDATE SET steps=excluded.steps', [d, steps])
+    db.commit()
+    return steps
+
+
 def sync_garmin_activities(email, password, rider_id):
     """
     Generator: pull activities from Garmin Connect, download FIT files, parse and insert.
