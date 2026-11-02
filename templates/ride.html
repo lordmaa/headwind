@@ -701,7 +701,7 @@ function typeChanged(sel) {
   var map = window._rideMap;
   var coords = window._rideCoords;
   if (!map || !coords || !coords.length) return;
-  var windDir = {{ activity.weatherWindDir }};
+  var windDir = Number({{ activity.weatherWindDir | tojson }}) || 0;
   var windKph = {{ activity.weatherWindKph }};
   var arrowDeg = (windDir + 180) % 360;
   var color = windKph < 15 ? '#64b5f6' : windKph < 30 ? '#ffb74d' : '#ef5350';

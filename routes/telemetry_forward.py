@@ -13,7 +13,11 @@ def ping():
     target = os.environ.get('TELEMETRY_FORWARD_URL')
     if not target:
         abort(404)
-    body = request.get_data(cache=False)[:4096]
+    if (request.content_length or 0) > 4096:                       # refuse before reading: the global request limit is 2 GB
+        return jsonify(error='too large'), 413
+    body = request.stream.read(4097)
+    if len(body) > 4096:
+        return jsonify(error='too large'), 413
     try:
         r = requests.post(target, data=body, timeout=3, headers={
             'Content-Type': 'application/json',

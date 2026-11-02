@@ -22,6 +22,25 @@ bp = Blueprint('friends', __name__)
 BATCH = 50
 
 
+def _peer_num(v):
+    """A number from a friend's instance, or None. Peer data goes into REAL columns and later into templates/JS, so a string (or NaN/inf) is dropped."""
+    import math
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or (isinstance(v, float) and not math.isfinite(v)):
+        return None
+    return v
+
+
+_PEER_ID_RX = __import__('re').compile(r'^[A-Za-z0-9_.:-]{1,80}$')
+
+
+def _peer_id(v):
+    """A friend's activity id, restricted to a safe alphabet (it ends up in URLs and inline handlers)."""
+    v = str(v)
+    if not _PEER_ID_RX.match(v):
+        raise ValueError('unsafe activity id from peer')
+    return v
+
+
 @bp.route('/api/riders')
 def riders_list():
     """Token-authenticated rider list — lets a friend's instance discover who's here."""
@@ -346,7 +365,7 @@ def _do_ride_sync(friend_id):
 
             elif t == 'segment':
                 from services.segments import clean_polyline, valid_coord
-                _sc = valid_coord(obj.get('startLat'), obj.get('startLng'))
+                _sc = valid_coord(_peer_num(obj.get('startLat')), _peer_num(obj.get('startLng')))
                 _ec = valid_coord(obj.get('endLat'), obj.get('endLng'))
                 if not _sc or not _ec:
                     continue                       # a friend's segment with impossible coordinates is ignored
@@ -381,14 +400,14 @@ def _do_ride_sync(friend_id):
                                          averageSpeed, maxSpeed, averageHeartrate, calories, steps, startLat, startLng, streams, weatherSummary, source)
                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'friend')
                     ON CONFLICT(id) DO UPDATE SET name=excluded.name, streams=excluded.streams, weatherSummary=excluded.weatherSummary
-                ''', [f"f{friend_id}_{obj['id']}", rider_id, obj.get('sport') or 'Walk', obj.get('name'), obj.get('startDate'), obj.get('startDateLocal'),
+                ''', [f"f{friend_id}_{_peer_id(obj['id'])}", rider_id, obj.get('sport') or 'Walk', obj.get('name'), obj.get('startDate'), obj.get('startDateLocal'),
                       obj.get('distance') or 0, obj.get('movingTime') or 0, obj.get('elapsedTime') or 0, obj.get('totalElevationGain') or 0,
                       obj.get('averageSpeed') or 0, obj.get('maxSpeed') or 0, obj.get('averageHeartrate'), obj.get('calories'), obj.get('steps'),
-                      obj.get('startLat'), obj.get('startLng'), obj.get('streams'), obj.get('weatherSummary')])
+                      _peer_num(obj.get('startLat')), _peer_num(obj.get('startLng')), obj.get('streams'), obj.get('weatherSummary')])
                 synced += 1
 
             elif t == 'ride':
-                remote_id = f"f{friend_id}_{obj['id']}"
+                remote_id = f"f{friend_id}_{_peer_id(obj['id'])}"
                 db.execute('''
                     INSERT INTO Activity (
                         id, name, type, sportType, startDate, startDateLocal, distance, movingTime,
@@ -418,12 +437,12 @@ def _do_ride_sync(friend_id):
                     obj.get('averageHeartrate'),  obj.get('maxHeartrate'),
                     obj.get('averageWatts'),      obj.get('weightedAvgWatts'),
                     obj.get('averageCadence'),    obj.get('calories'),
-                    obj.get('startLat'),          obj.get('startLng'),
+                    _peer_num(obj.get('startLat')),          _peer_num(obj.get('startLng')),
                     obj.get('streams'),           '{}', rider_id,
-                    obj.get('weatherTempC'),      obj.get('weatherWindKph'),
-                    obj.get('weatherGustKph'),    obj.get('weatherWindDir'),
-                    obj.get('weatherHumidity'),   obj.get('weatherRainMm'),
-                    obj.get('weatherCode'),       obj.get('weatherSummary'),
+                    _peer_num(obj.get('weatherTempC')),      _peer_num(obj.get('weatherWindKph')),
+                    _peer_num(obj.get('weatherGustKph')),    _peer_num(obj.get('weatherWindDir')),
+                    _peer_num(obj.get('weatherHumidity')),   _peer_num(obj.get('weatherRainMm')),
+                    _peer_num(obj.get('weatherCode')),       obj.get('weatherSummary'),
                     obj.get('weatherWindRel'),
                 ])
                 new_ride_ids.append(remote_id)

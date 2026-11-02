@@ -905,6 +905,8 @@ def log_food():
     d = request.get_json(silent=True) or {}
     if not _valid_date(d.get('date')) or not str(d.get('name') or '').strip():
         return jsonify({'error': 'a valid date (YYYY-MM-DD) and food name are required'}), 400
+    if date.fromisoformat(d['date']) > _london_today() + __import__('datetime').timedelta(days=MAX_PLAN_AHEAD_DAYS):
+        return jsonify({'error': f'you can plan at most {MAX_PLAN_AHEAD_DAYS} days ahead'}), 400
     bad = _bad_numbers(d, ('calories', 'protein', 'carbs', 'fat', 'fibre', 'sugar', 'alcohol_units', 'abv', 'serving_g', 'quantity'))
     if bad:
         return jsonify({'error': f'{bad} must be a number between 0 and 100000'}), 400
@@ -939,8 +941,11 @@ def log_food():
             UPDATE FoodLog SET
                 logDate=?, barcode=?, foodName=?, calories=?, protein=?, carbs=?, fat=?,
                 servingG=?, quantity=?, mealType=?, source=?, brand=?, imageUrl=?, nutriScoreGrade=?, fibre=?, sugar=?, alcoholUnits=?
-            WHERE id=?
-        ''', values + [d['id']])
+            WHERE id=? AND riderId=?
+        ''', values + [d['id'], rider_id])
+        if not db.execute('SELECT changes()').fetchone()[0]:           # not this rider's entry (or gone): change nothing
+            db.rollback()
+            return jsonify({'error': 'entry not found'}), 404
         entry_id = d['id']
     else:
         db.execute('''
@@ -1136,7 +1141,7 @@ def import_screenshot():
 @bp.route('/api/log/<int:entry_id>', methods=['DELETE'])
 def delete_log(entry_id):
     db = get_db()
-    db.execute('DELETE FROM FoodLog WHERE id=?', [entry_id])
+    db.execute('DELETE FROM FoodLog WHERE id=? AND riderId=?', [entry_id, _default_rider_id()])
     db.commit()
     _mqtt_nutrition()
     return jsonify({'ok': True})
@@ -1172,7 +1177,7 @@ def add_water():
 @bp.route('/api/water/<int:entry_id>', methods=['DELETE'])
 def delete_water(entry_id):
     db = get_db()
-    db.execute('DELETE FROM HydrationLog WHERE id=?', [entry_id])
+    db.execute('DELETE FROM HydrationLog WHERE id=? AND riderId=?', [entry_id, _default_rider_id()])
     db.commit()
     _mqtt_nutrition()
     return jsonify({'ok': True})
@@ -1639,6 +1644,80 @@ def copy_day():
     return jsonify({'ok': True, 'count': len(entries)})
 
 
+MAX_PLAN_AHEAD_DAYS = 15        # the apps offer 14; one spare day covers a phone whose date is ahead of London
+
+
+def _diary_date_ok(v):
+    """A real date from 120 days back up to MAX_PLAN_AHEAD_DAYS ahead (you can plan meals for the coming fortnight)."""
+    if not _valid_date(v):
+        return False
+    from datetime import timedelta
+    day, today = date.fromisoformat(str(v)), _london_today()
+    return today - timedelta(days=120) <= day <= today + timedelta(days=MAX_PLAN_AHEAD_DAYS)
+
+
+@bp.route('/api/repeat', methods=['POST'])
+def repeat_entries():
+    """Copy a whole day (or one meal) from `from_date` onto several other dates, e.g. the same lunch for the next 7 days.
+    Body: {from_date, meal_type?, dates: [YYYY-MM-DD, ...], client_id?}. Returns the new ids so the caller can offer Undo.
+    Idempotent per client_id. Planned (future) days only count in the totals once that day arrives."""
+    d = request.get_json(silent=True) or {}
+    dates = d.get('dates')
+    if not _valid_date(d.get('from_date')) or not isinstance(dates, list) or not dates:
+        return jsonify({'error': 'from_date and a list of dates are required'}), 400
+    dates = sorted({x for x in dates if isinstance(x, str)})
+    if len(dates) > 31 or not all(_diary_date_ok(x) for x in dates):
+        return jsonify({'error': f'dates must be real days from the last 120 days to {MAX_PLAN_AHEAD_DAYS} days ahead (at most 31 at once)'}), 400
+    dates = [x for x in dates if x != d['from_date']]
+    rider_id = _default_rider_id()
+    cid = d.get('client_id')
+    op_key = None
+    if cid:
+        op_key, prev = _claim_client_op('repeat', rider_id, cid)
+        if prev:
+            return jsonify({'ok': True, 'duplicate': True, 'count': 0, 'ids': []})
+    meal = d.get('meal_type')
+    entries = query_db('SELECT * FROM FoodLog WHERE riderId=? AND logDate=?' + (' AND mealType=?' if meal else ''),
+                       [rider_id, d['from_date']] + ([meal] if meal else []))
+    if not entries or not dates:
+        get_db().rollback()
+        return jsonify({'ok': True, 'count': 0, 'ids': []})
+    if len(entries) * len(dates) > 1000:
+        get_db().rollback()
+        return jsonify({'error': 'that is too many entries at once: pick fewer days or one meal'}), 400
+    db = get_db()
+    ids = []
+    for day in dates:
+        for e in entries:
+            db.execute('''INSERT INTO FoodLog (riderId, logDate, barcode, foodName, calories, protein, carbs, fat, fibre, sugar, alcoholUnits,
+                          servingG, quantity, mealType, source, brand, imageUrl, nutriScoreGrade)
+                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'copied', ?, ?, ?)''',
+                       [rider_id, day, e['barcode'], e['foodName'], e['calories'], e['protein'], e['carbs'], e['fat'], e['fibre'], e['sugar'], e['alcoholUnits'],
+                        e['servingG'], e['quantity'], e['mealType'] or 'uncategorised', e['brand'], e['imageUrl'], e['nutriScoreGrade']])
+            ids.append(db.execute('SELECT last_insert_rowid()').fetchone()[0])
+    if cid:
+        db.execute("INSERT OR IGNORE INTO ClientOp (clientId, kind, entryId) VALUES (?, 'repeat', ?)", [op_key, ids[0]])
+    db.commit()
+    _mqtt_nutrition()
+    return jsonify({'ok': True, 'count': len(ids), 'days': len(dates), 'ids': ids})
+
+
+@bp.route('/api/repeat/undo', methods=['POST'])
+def repeat_undo():
+    """Remove entries made by /api/repeat (only this rider's, only ones marked 'copied')."""
+    ids = [i for i in ((request.get_json(silent=True) or {}).get('ids') or []) if isinstance(i, int)][:2000]
+    if not ids:
+        return jsonify({'ok': True, 'count': 0})
+    db = get_db()
+    n = 0
+    for i in range(0, len(ids), 400):                               # chunked: SQLite caps the number of ? parameters
+        chunk = ids[i:i + 400]
+        n += db.execute(f"DELETE FROM FoodLog WHERE riderId=? AND source='copied' AND id IN ({','.join('?' * len(chunk))})", [_default_rider_id()] + chunk).rowcount
+    db.commit()
+    _mqtt_nutrition()
+    return jsonify({'ok': True, 'count': n})
+
+
 # ── Food overrides ────────────────────────────────────────────────────
 
 @bp.route('/api/override', methods=['POST'])
@@ -1883,7 +1962,7 @@ def log_weight():
 @bp.route('/api/weight/<int:entry_id>', methods=['DELETE'])
 def delete_weight(entry_id):
     db = get_db()
-    db.execute('DELETE FROM WeightLog WHERE id=?', [entry_id])
+    db.execute('DELETE FROM WeightLog WHERE id=? AND riderId=?', [entry_id, _default_rider_id()])
     db.commit()
     _mqtt_nutrition()
     return jsonify({'ok': True})

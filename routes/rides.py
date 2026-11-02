@@ -435,7 +435,7 @@ def bulk_sport():
     sport = request.form.get('sport')
     ids = [i for i in (request.form.get('ids') or '').split(',') if i][:5000]
     back = request.form.get('back') or '/dashboard'
-    if not back.startswith('/') or back.startswith('//'):
+    if not back.startswith('/') or back.startswith('//') or '\\' in back or any(ord(c) < 33 for c in back):
         back = '/dashboard'
     if sport not in convert.SPORTS or not ids:
         return redirect(back)

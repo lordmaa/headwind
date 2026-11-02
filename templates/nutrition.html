@@ -442,7 +442,10 @@
     <span id="dateLabel" style="font-size:0.9rem; font-weight:600; min-width:6rem; text-align:center;"></span>
     <button class="btn btn-secondary" style="padding:0.3rem 0.6rem;" id="nextDay">&#8594;</button>
   </div>
-  <button class="btn btn-secondary" style="padding:0.3rem 0.7rem; font-size:0.85rem;" id="btnCopyYd">Copy yd</button>
+  <div style="display:flex; gap:0.4rem;">
+    <button class="btn btn-secondary" style="padding:0.3rem 0.7rem; font-size:0.85rem;" id="btnRepeat">Repeat</button>
+    <button class="btn btn-secondary" style="padding:0.3rem 0.7rem; font-size:0.85rem;" id="btnCopyYd">Copy yd</button>
+  </div>
 </div>
 
 <!-- Calories card -->
@@ -1096,6 +1099,30 @@
   </div>
 </div>
 
+<!-- ── Repeat across days modal ─────────────────────────── -->
+<div class="modal-backdrop" id="repeatModal">
+  <div class="modal-panel">
+    <div class="modal-header">
+      <h2>Repeat onto other days</h2>
+      <button class="btn-close" id="closeRepeat">&times;</button>
+    </div>
+    <p style="font-size:0.85rem; color:var(--text-muted); margin:0 0 0.6rem;">Copies what is logged on <strong id="repeatFrom"></strong> onto the days you pick. Planned days only count once that day arrives.</p>
+    <label style="font-size:0.8rem; color:var(--text-muted);">What to repeat</label>
+    <select id="repeatMeal" class="form-control" style="margin-bottom:0.7rem;">
+      <option value="">The whole day</option><option value="breakfast">Breakfast</option><option value="lunch">Lunch</option>
+      <option value="dinner">Tea / Dinner</option><option value="snacks">Snacks</option><option value="drinks">Drinks</option>
+    </select>
+    <label style="font-size:0.8rem; color:var(--text-muted);">Which days</label>
+    <div style="display:flex; gap:0.4rem; margin:0.3rem 0;">
+      <button class="btn btn-secondary" type="button" id="repeatAll" style="padding:0.25rem 0.6rem; font-size:0.8rem;">All 7</button>
+      <button class="btn btn-secondary" type="button" id="repeatWeekdays" style="padding:0.25rem 0.6rem; font-size:0.8rem;">Weekdays</button>
+      <button class="btn btn-secondary" type="button" id="repeatNone" style="padding:0.25rem 0.6rem; font-size:0.8rem;">None</button>
+    </div>
+    <div id="repeatDays" style="display:flex; flex-direction:column; gap:0.2rem; margin-bottom:0.8rem;"></div>
+    <button class="btn btn-primary" id="repeatGo" style="width:100%;">Repeat</button>
+  </div>
+</div>
+
 <!-- ── Copy yesterday modal ─────────────────────────────── -->
 <div class="modal-backdrop" id="copyModal">
   <div class="modal-panel">
@@ -1177,15 +1204,18 @@ function fmtDateLabel(d) {
   if (ds === today) return 'Today';
   const yd = new Date(); yd.setDate(yd.getDate()-1);
   if (ds === isoDate(yd)) return 'Yesterday';
+  const tm = new Date(); tm.setDate(tm.getDate()+1);
+  if (ds === isoDate(tm)) return 'Tomorrow (planned)';
+  if (ds > today) return 'Planned ' + d.toLocaleDateString('en-GB', {weekday:'short', day:'numeric', month:'short'});
   return d.toLocaleDateString('en-GB', {day:'numeric',month:'short'});
 }
-function escHtml(s) { const d=document.createElement('div'); d.appendChild(document.createTextNode(s||'')); return d.innerHTML; }
+function escHtml(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }      // quotes too: it is also used inside attributes
 
 // ── Date nav ──────────────────────────────────────────────────────────
 document.getElementById('prevDay').addEventListener('click', () => { currentDate.setDate(currentDate.getDate()-1); loadDay(); });
 document.getElementById('nextDay').addEventListener('click', () => {
-  const tom=new Date(); tom.setDate(tom.getDate()+1); tom.setHours(12,0,0,0);
-  if (currentDate < tom) { currentDate.setDate(currentDate.getDate()+1); loadDay(); }
+  const lim=new Date(); lim.setDate(lim.getDate()+14); lim.setHours(12,0,0,0);     // you can plan up to two weeks ahead
+  if (currentDate < lim) { currentDate.setDate(currentDate.getDate()+1); loadDay(); }
 });
 
 // ── Load day ──────────────────────────────────────────────────────────
@@ -1451,7 +1481,7 @@ function showUndo(msg, action) {
   document.getElementById('nuSnackMsg').textContent = msg;
   document.getElementById('nuSnack').classList.add('show');
   clearTimeout(snackTimer);
-  snackTimer = setTimeout(() => document.getElementById('nuSnack').classList.remove('show'), 6000);
+  snackTimer = setTimeout(() => document.getElementById("nuSnack").classList.remove("show"), 12000);
 }
 document.getElementById('nuSnackUndo').addEventListener('click', async () => {
   document.getElementById('nuSnack').classList.remove('show');
@@ -1706,6 +1736,45 @@ document.getElementById('smSaveConfirm').addEventListener('click', async () => {
 
 document.getElementById('closeSavedMeals').addEventListener('click', () => {
   document.getElementById('savedMealsModal').classList.remove('open');
+});
+
+
+// ── Repeat onto other days (plan a week of a meal) ───────────────────
+function repeatDayList() {
+  const out = [];
+  for (let i = 1; i <= 7; i++) { const d = new Date(currentDate); d.setDate(d.getDate()+i); out.push(d); }
+  return out;
+}
+document.getElementById('btnRepeat').addEventListener('click', () => {
+  document.getElementById('repeatFrom').textContent = fmtDateLabel(currentDate);
+  const box = document.getElementById('repeatDays'); box.innerHTML = '';
+  repeatDayList().forEach(d => {
+    const iso = isoDate(d), over = (d - new Date()) / 86400000 > 14.5;
+    box.insertAdjacentHTML('beforeend', `<label style="display:flex; gap:0.5rem; align-items:center; min-height:36px; opacity:${over?0.4:1}"><input type="checkbox" value="${iso}" data-dow="${d.getDay()}" ${over?'disabled':'checked'}> ${d.toLocaleDateString('en-GB',{weekday:'long', day:'numeric', month:'short'})}${over?' (too far ahead)':''}</label>`);
+  });
+  document.getElementById('repeatModal').classList.add('open');
+});
+document.getElementById('closeRepeat').addEventListener('click', () => document.getElementById('repeatModal').classList.remove('open'));
+const repeatBoxes = () => [...document.querySelectorAll('#repeatDays input:not(:disabled)')];
+document.getElementById('repeatAll').addEventListener('click', () => repeatBoxes().forEach(b => b.checked = true));
+document.getElementById('repeatNone').addEventListener('click', () => repeatBoxes().forEach(b => b.checked = false));
+document.getElementById('repeatWeekdays').addEventListener('click', () => repeatBoxes().forEach(b => b.checked = ![0,6].includes(+b.dataset.dow)));
+document.getElementById('repeatGo').addEventListener('click', async () => {
+  const dates = repeatBoxes().filter(b => b.checked).map(b => b.value);
+  if (!dates.length) { alert('Pick at least one day.'); return; }
+  const btn = document.getElementById('repeatGo'); btn.disabled = true;
+  try {
+    const r = await fetch('/nutrition/api/repeat', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({from_date: isoDate(currentDate), meal_type: document.getElementById('repeatMeal').value || null, dates, client_id: 'rp' + Date.now() + Math.random().toString(36).slice(2,8)})});
+    const d = await r.json();
+    if (!r.ok) { alert(d.error || 'Could not repeat that.'); return; }
+    document.getElementById('repeatModal').classList.remove('open');
+    if (!d.count) { alert('Nothing is logged there to repeat.'); return; }
+    showUndo(`Added to ${d.days} day${d.days===1?'':'s'}`, async () => {
+      await fetch('/nutrition/api/repeat/undo', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ids: d.ids})}); loadDay();
+    });
+    loadDay();
+  } finally { btn.disabled = false; }
 });
 
 // ── Copy yesterday ────────────────────────────────────────────────────

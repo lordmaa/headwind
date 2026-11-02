@@ -46,7 +46,7 @@ def login_page():
             _fails.pop(ip, None)
             nxt = request.args.get('next') or ''
             # same-origin relative paths only — no //host or scheme-qualified redirects
-            if not nxt.startswith('/') or nxt.startswith('//') or '\\' in nxt:
+            if not nxt.startswith('/') or nxt.startswith('//') or '\\' in nxt or any(ord(c) < 33 for c in nxt):      # control characters (a tab turns /\t/host into //host)
                 nxt = url_for('dashboard.dashboard')
             return redirect(nxt)
         _fails[ip].append(time.monotonic())
